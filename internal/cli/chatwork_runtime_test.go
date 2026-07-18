@@ -80,7 +80,7 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	}
 	// The flat presentation must preserve both exact references and project the
 	// typed resolved relation through the provider-sequence edge.
-	for _, want := range []string{"message-ref=10", "message-ref=11", "reply=#1"} {
+	for _, want := range []string{"#1 10 ", "#2 11 ", "reply=#1"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, stdout.String())
 		}

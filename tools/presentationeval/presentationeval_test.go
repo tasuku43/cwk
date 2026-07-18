@@ -46,7 +46,7 @@ func TestSimulatorUsesPublicHelpAndExactFixtureReferences(t *testing.T) {
 	if err != nil || messages.ExitCode != 0 ||
 		!bytes.Contains(messages.Stdout, []byte("messages room-ref=4101")) ||
 		!bytes.Contains(messages.Stdout, []byte("external-text=untrusted escaped")) ||
-		!bytes.Contains(messages.Stdout, []byte("message-ref=9003")) ||
+		!bytes.Contains(messages.Stdout, []byte("#3 9003 ")) ||
 		!bytes.Contains(messages.Stdout, []byte("reply=#1")) ||
 		bytes.Contains(messages.Stdout, []byte("state=resolved")) {
 		t.Fatalf("messages = %#v, err = %v", messages, err)

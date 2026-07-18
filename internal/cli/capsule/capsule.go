@@ -178,13 +178,13 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	}
 	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
 	line(output, "external-text=untrusted escaped")
-	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] body")
+	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"")
 	line(output, "actors")
 	for index, actor := range actors {
 		line(output, "  a%d account-ref=%s name=%s", index+1, ref(actor.Ref), quoted(actor.Name))
 	}
 	for index, message := range messages {
-		fmt.Fprintf(output, "#%d message-ref=%s %s sent=%d", index+1, ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
+		fmt.Fprintf(output, "#%d %s %s %d", index+1, ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
 		if message.Reply != nil {
 			value, relationErr := messageReply(*message.Reply, sequenceByRef)
 			if relationErr != nil {
@@ -202,7 +202,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 			}
 			fmt.Fprintf(output, " quote=%s", compactValues(values))
 		}
-		line(output, " body=%s", quoted(message.Body))
+		line(output, " %s", quoted(message.Body))
 	}
 	return nil
 }

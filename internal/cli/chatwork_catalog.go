@@ -81,7 +81,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			fields(integerField("administrators", "Resulting administrator count."), integerField("members", "Resulting member count."), integerField("readonly", "Resulting read-only count.")), chatwork.TaskMembersReplace, confirmAccessChange, "members list",
 			writeMutation(room, "--room", "", operation.CardinalityMany, yes, yes, yes)),
 		chatworkRead("messages list", "Get a bounded message window from one room", "--room <room-ref> [--window changes|recent]", RoleAct,
-			"chatwork.messages.manage", "Get this room's bounded message window with sender, To, reply, quote, and coverage semantics",
+			"chatwork.messages.manage", "Get this room's bounded provider-order message window through one fixed schema with canonical references and typed To, reply, quote, and coverage semantics",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose messages are read."), enumFlag("--window", false, "Choose provider differential changes or the latest bounded window.", "changes", "recent")}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
 		chatworkMutation("messages send", "Send a message to one exact room", "--room <room-ref> --body <text> [--self-unread]", RoleAct,
 			"chatwork.messages.manage", "Send one exact message body to the selected room",
@@ -336,7 +336,15 @@ func roomFields(room string, collection bool) []OutputField {
 	return result
 }
 func messageFields(room, message, account string, collection bool) []OutputField {
-	result := fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."})
+	messageDescription := "Canonical message reference."
+	bodyDescription := "Message body as structurally framed untrusted text."
+	sendDescription := "Unix send time."
+	if collection {
+		messageDescription = "Canonical message reference in the second positional record field; pass it unchanged to message actions."
+		sendDescription = "Unix send time in the fourth positional record field."
+		bodyDescription = "Terminal-safe quoted message body in the final positional record field."
+	}
+	result := fields(refField("message_ref", message, messageDescription), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", bodyDescription), integerField("send_time", sendDescription), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."})
 	if collection {
 		result = append(result,
 			integerField("sequence", "One-based position in the provider-returned message window."),

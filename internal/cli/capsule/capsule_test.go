@@ -116,9 +116,9 @@ func TestRenderMessageListHoistsScopeTrustAndActorsOnce(t *testing.T) {
 	for label, count := range map[string]int{
 		"room-ref=42":                     1,
 		"external-text=untrusted escaped": 1,
-		"schema: #sequence message-ref actor sent [reply] [to] [quote] body": 1,
-		"a1 account-ref=7 name=\"Aki\"":                                      1,
-		"a2 account-ref=8 name=\"Bo\"":                                       1,
+		"schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"": 1,
+		"a1 account-ref=7 name=\"Aki\"":                                          1,
+		"a2 account-ref=8 name=\"Bo\"":                                           1,
 	} {
 		if actual := strings.Count(got, label); actual != count {
 			t.Errorf("count(%q) = %d, want %d:\n%s", label, actual, count, got)
@@ -153,11 +153,11 @@ func TestRenderMessageListPreservesProviderOrderAndTypedAdjacency(t *testing.T) 
 		t.Fatal(err)
 	}
 	wants := []string{
-		`#1 message-ref=100 a1 sent=1 body="root"`,
-		`#2 message-ref=101 a2 sent=2 to=a1 body="interleaved"`,
-		`#3 message-ref=102 a1 sent=3 reply=#1 to=a2 body="branch"`,
-		`#4 message-ref=103 a2 sent=4 reply=#1 body="second branch"`,
-		`#5 message-ref=104 a1 sent=5 reply=#3 body="nested"`,
+		`#1 100 a1 1 "root"`,
+		`#2 101 a2 2 to=a1 "interleaved"`,
+		`#3 102 a1 3 reply=#1 to=a2 "branch"`,
+		`#4 103 a2 4 reply=#1 "second branch"`,
+		`#5 104 a1 5 reply=#3 "nested"`,
 	}
 	previous := -1
 	for _, want := range wants {
@@ -172,6 +172,13 @@ func TestRenderMessageListPreservesProviderOrderAndTypedAdjacency(t *testing.T) 
 	}
 	if strings.Contains(got, "state=resolved") || strings.Contains(got, "relations=none") || strings.Contains(got, "depth=") || strings.Contains(got, "thread=") {
 		t.Fatalf("flat adjacency output contains redundant or tree-derived state:\n%s", got)
+	}
+	for _, removed := range []string{"message-ref=", "sent=", "body="} {
+		for _, outputLine := range strings.Split(got, "\n") {
+			if strings.HasPrefix(outputLine, "#") && strings.Contains(outputLine, removed) {
+				t.Fatalf("message record repeats schema label %q: %s", removed, outputLine)
+			}
+		}
 	}
 	if !strings.Contains(got, `a1 account-ref=7 name="Same"`) || !strings.Contains(got, `a2 account-ref=8 name="Same"`) {
 		t.Fatalf("same display names collapsed distinct accounts:\n%s", got)
@@ -197,12 +204,12 @@ func TestRenderMessageListKeepsUnresolvedTargetsWithoutGuessing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"#2 message-ref=101 a2 sent=0 reply=?100", "#3 message-ref=102 a3 sent=0 reply=?"} {
+	for _, want := range []string{"#2 101 a2 0 reply=?100", "#3 102 a3 0 reply=?"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output does not contain %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "#2 message-ref=101 a2 sent=0 reply=#1") {
+	if strings.Contains(got, "#2 101 a2 0 reply=#1") {
 		t.Fatalf("unresolved target was guessed from an in-window identity:\n%s", got)
 	}
 }
@@ -264,7 +271,7 @@ func TestRenderMessageListHandlesEmptySingleAndDeepFlatWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(singleOutput, "\n#") != 1 || !strings.Contains(singleOutput, "#1 message-ref=100") {
+	if strings.Count(singleOutput, "\n#") != 1 || !strings.Contains(singleOutput, "#1 100 a1 0") {
 		t.Fatalf("single message output was wrong:\n%s", singleOutput)
 	}
 
@@ -282,7 +289,7 @@ func TestRenderMessageListHandlesEmptySingleAndDeepFlatWindows(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(deepOutput, "\n#") != 50 || strings.Contains(deepOutput, "  #") || !strings.Contains(deepOutput, "#50 message-ref=1049 a1 sent=49 reply=#49") {
+	if strings.Count(deepOutput, "\n#") != 50 || strings.Contains(deepOutput, "  #") || !strings.Contains(deepOutput, "#50 1049 a1 49 reply=#49") {
 		t.Fatalf("deep chain was not a flat linear list:\n%s", deepOutput)
 	}
 	if strings.Contains(deepOutput, "\n\n") {
@@ -340,17 +347,16 @@ func TestRenderMessageListCanonicalReferencesRemainDirectlyReusable(t *testing.T
 		if !strings.HasPrefix(outputLine, "#") {
 			continue
 		}
-		for _, field := range strings.Fields(outputLine) {
-			if !strings.HasPrefix(field, "message-ref=") {
-				continue
-			}
-			value := strings.TrimPrefix(field, "message-ref=")
-			parsed, parseErr := chatwork.NewReference(chatwork.ReferenceMessage, value)
-			if parseErr != nil {
-				t.Fatalf("displayed reference %q is not accepted unchanged: %v", value, parseErr)
-			}
-			seen = append(seen, parsed)
+		fields := strings.Fields(outputLine)
+		if len(fields) < 5 {
+			t.Fatalf("message record does not conform to fixed schema: %q", outputLine)
 		}
+		value := fields[1]
+		parsed, parseErr := chatwork.NewReference(chatwork.ReferenceMessage, value)
+		if parseErr != nil {
+			t.Fatalf("displayed reference %q is not accepted unchanged: %v", value, parseErr)
+		}
+		seen = append(seen, parsed)
 	}
 	if len(seen) != len(references) {
 		t.Fatalf("displayed canonical references = %v, want %v", seen, references)
@@ -562,8 +568,7 @@ func TestRenderFramesHostileTextAndDoesNotInferRelations(t *testing.T) {
 		`[To:8]`,
 		`[rp aid=9 to=101]`,
 		`actual:\\n literal:\\\\n\\tline\\u2028paragraph\\u2029`,
-		`#1 message-ref=100 a1 sent=0 body=`,
-		`message-ref=100`,
+		`#1 100 a1 0 "`,
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("projection does not contain %q:\n%s", want, got)

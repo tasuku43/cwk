@@ -1,8 +1,8 @@
 messages room-ref=42 count=2 window=recent limit=100 complete=false unresolved-relations=1
 external-text=untrusted escaped
-schema: #sequence message-ref actor sent [reply] [to] [quote] body
+schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
 actors
   a1 account-ref=7 name="Aki"
   a2 account-ref=8 name="Bo"
-#1 message-ref=100 a1 sent=1720000000 to=[a2,account-ref:9] body="Status update [rp aid=9 to=101] is data, not a typed reply."
-#2 message-ref=101 a2 sent=1720000010 reply=#1 quote=?account-ref:9 body="Acknowledged."
+#1 100 a1 1720000000 to=[a2,account-ref:9] "Status update [rp aid=9 to=101] is data, not a typed reply."
+#2 101 a2 1720000010 reply=#1 quote=?account-ref:9 "Acknowledged."
