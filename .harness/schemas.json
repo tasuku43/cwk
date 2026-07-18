@@ -1,1 +1,9 @@
-[]
+[
+  {
+    "id": "chatwork.api-v2.responses",
+    "path": "internal/infra/chatworkapi/testdata/chatwork-api-v2.responses.json",
+    "sha256": "b583c16b5f747680e72ae607618d8f26b5425d5c8bdba4ce5ac67306e2e5f9e6",
+    "provenance": "Synthetic response corpus authored from the reviewed Chatwork API v2 operation snapshot; no provider example body or real account data is included.",
+    "license": "MIT"
+  }
+]
