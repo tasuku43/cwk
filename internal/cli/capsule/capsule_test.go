@@ -368,6 +368,172 @@ func TestRenderMessageListCanonicalReferencesRemainDirectlyReusable(t *testing.T
 	}
 }
 
+func TestRenderCollectionsUseOneFixedSchemaAndPositionalRecord(t *testing.T) {
+	tests := []struct {
+		task chatwork.Task
+		want string
+	}{
+		{chatwork.TaskContactsList, "contacts count=1 complete=true\nexternal-text=untrusted escaped\nschema: account-ref room-ref \"name\" [organization]\n7 42 \"Synthetic Account\"\n"},
+		{chatwork.TaskRoomsList, "rooms count=1 complete=true\nexternal-text=untrusted escaped\nschema: room-ref \"name\" type role unread mentions tasks\n42 \"Synthetic Room\" \"\" \"\" 0 0 0\n"},
+		{chatwork.TaskMembersList, "members count=1 complete=true\nexternal-text=untrusted escaped\nschema: account-ref \"name\" role\n7 \"Synthetic Account\" \"\"\n"},
+		{chatwork.TaskPersonalTasksList, "personal-tasks count=1 limit=100 complete=false\nexternal-text=untrusted escaped\nschema: task-ref room-ref assigned-by-ref message-ref \"body\" status\n200 42 7 100 \"\" \"\"\n"},
+		{chatwork.TaskRoomTasksList, "room-tasks count=1 limit=100 complete=false\nexternal-text=untrusted escaped\nschema: task-ref room-ref account-ref message-ref \"body\" status limit-time\n200 42 7 100 \"\" \"\" 0\n"},
+		{chatwork.TaskFilesList, "files count=1 limit=100 complete=false\nexternal-text=untrusted escaped\nschema: file-ref room-ref account-ref message-ref \"name\" size\n300 42 7 100 \"\" 0\n"},
+		{chatwork.TaskContactRequestsList, "contact-requests count=1 limit=100 complete=false\nexternal-text=untrusted escaped\nschema: request-ref account-ref \"name\" [\"message\"]\n500 7 \"Synthetic Account\"\n"},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.task), func(t *testing.T) {
+			got, err := Render(resultForTask(test.task))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("fixed collection mismatch\n--- got ---\n%s--- want ---\n%s", got, test.want)
+			}
+			if strings.Count(got, "external-text=untrusted escaped") != 1 || strings.Count(got, "schema: ") != 1 {
+				t.Fatalf("collection prelude was not emitted exactly once:\n%s", got)
+			}
+			if strings.Count(got, "untrusted:") != 0 {
+				t.Fatalf("record repeated field-level trust markers:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestRenderEmptyCollectionsStillDeclareTheirContract(t *testing.T) {
+	for _, task := range []chatwork.Task{
+		chatwork.TaskContactsList,
+		chatwork.TaskRoomsList,
+		chatwork.TaskMembersList,
+		chatwork.TaskPersonalTasksList,
+		chatwork.TaskRoomTasksList,
+		chatwork.TaskFilesList,
+		chatwork.TaskContactRequestsList,
+	} {
+		t.Run(string(task), func(t *testing.T) {
+			result := resultForTask(task)
+			switch task {
+			case chatwork.TaskContactsList, chatwork.TaskMembersList:
+				result.Accounts = []chatwork.Account{}
+			case chatwork.TaskRoomsList:
+				result.Rooms = []chatwork.Room{}
+			case chatwork.TaskPersonalTasksList, chatwork.TaskRoomTasksList:
+				result.Tasks = []chatwork.WorkTask{}
+			case chatwork.TaskFilesList:
+				result.Files = []chatwork.File{}
+			case chatwork.TaskContactRequestsList:
+				result.Requests = []chatwork.ContactRequest{}
+			}
+			got, err := Render(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+			if len(lines) != 3 || !strings.Contains(lines[0], "count=0") || lines[1] != "external-text=untrusted escaped" || !strings.HasPrefix(lines[2], "schema: ") {
+				t.Fatalf("empty collection did not preserve its three-line contract:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestRenderCollectionCanonicalReferencesRemainDirectlyReusable(t *testing.T) {
+	tests := []struct {
+		task       chatwork.Task
+		references []chatwork.Reference
+	}{
+		{chatwork.TaskContactsList, []chatwork.Reference{reference(chatwork.ReferenceAccount, "7"), reference(chatwork.ReferenceRoom, "42")}},
+		{chatwork.TaskRoomsList, []chatwork.Reference{reference(chatwork.ReferenceRoom, "42")}},
+		{chatwork.TaskMembersList, []chatwork.Reference{reference(chatwork.ReferenceAccount, "7")}},
+		{chatwork.TaskPersonalTasksList, []chatwork.Reference{reference(chatwork.ReferenceTask, "200"), reference(chatwork.ReferenceRoom, "42"), reference(chatwork.ReferenceAccount, "7"), reference(chatwork.ReferenceMessage, "100")}},
+		{chatwork.TaskRoomTasksList, []chatwork.Reference{reference(chatwork.ReferenceTask, "200"), reference(chatwork.ReferenceRoom, "42"), reference(chatwork.ReferenceAccount, "7"), reference(chatwork.ReferenceMessage, "100")}},
+		{chatwork.TaskFilesList, []chatwork.Reference{reference(chatwork.ReferenceFile, "300"), reference(chatwork.ReferenceRoom, "42"), reference(chatwork.ReferenceAccount, "7"), reference(chatwork.ReferenceMessage, "100")}},
+		{chatwork.TaskContactRequestsList, []chatwork.Reference{reference(chatwork.ReferenceRequest, "500"), reference(chatwork.ReferenceAccount, "7")}},
+	}
+
+	for _, test := range tests {
+		t.Run(string(test.task), func(t *testing.T) {
+			got, err := Render(resultForTask(test.task))
+			if err != nil {
+				t.Fatal(err)
+			}
+			lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+			fields := strings.Fields(lines[3])
+			for index, want := range test.references {
+				parsed, parseErr := chatwork.NewReference(want.Kind, fields[index])
+				if parseErr != nil {
+					t.Fatalf("position %d reference %q is not reusable: %v", index, fields[index], parseErr)
+				}
+				if parsed != want {
+					t.Fatalf("position %d reference = %+v, want %+v", index, parsed, want)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderCollectionOptionalSuffixesDoNotShiftRequiredFields(t *testing.T) {
+	contact := resultForTask(chatwork.TaskContactsList)
+	contact.Accounts[0].OrganizationName = "Example Org"
+	contact.Accounts[0].Department = "Research"
+	contactOutput, err := Render(contact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(contactOutput, "\n"+`7 42 "Synthetic Account" organization={name="Example Org",department="Research"}`+"\n") {
+		t.Fatalf("contact organization was not an optional terminal-safe suffix:\n%s", contactOutput)
+	}
+
+	request := resultForTask(chatwork.TaskContactRequestsList)
+	request.Requests[0].Message = "Please connect"
+	requestOutput, err := Render(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(requestOutput, "\n"+`500 7 "Synthetic Account" "Please connect"`+"\n") {
+		t.Fatalf("request message was not an optional final position:\n%s", requestOutput)
+	}
+}
+
+func TestRenderCollectionHostileTextCannotInjectRecords(t *testing.T) {
+	result := resultForTask(chatwork.TaskFilesList)
+	result.Files[0].Name = "report\n999 42 7 100 injected\x1b\u2028"
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(got, "\n") != 4 || strings.Contains(got, "\n999 42") {
+		t.Fatalf("hostile file name changed the physical record structure:\n%s", got)
+	}
+	for _, want := range []string{`external-text=untrusted escaped`, `"report\\n999 42 7 100 injected\\u001B\\u2028"`} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("hostile file name lost terminal-safe framing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderCollectionChangeKeepsSingleRecordOutputs(t *testing.T) {
+	tests := []struct {
+		task chatwork.Task
+		want string
+	}{
+		{chatwork.TaskRoomsShow, `room room-ref=42 name=untrusted:"Synthetic Room" type="" role="" unread=0 mentions=0 tasks=0` + "\n"},
+		{chatwork.TaskRoomTasksShow, `room-task task-ref=200 room-ref=42 account-ref=7 message-ref=100 body=untrusted:"" status="" limit-time=0` + "\n"},
+		{chatwork.TaskFilesShow, `file file-ref=300 room-ref=42 account-ref=7 message-ref=100 name=untrusted:"" size=0` + "\n"},
+	}
+	for _, test := range tests {
+		t.Run(string(test.task), func(t *testing.T) {
+			got, err := Render(resultForTask(test.task))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("single-record output changed\n--- got ---\n%s--- want ---\n%s", got, test.want)
+			}
+		})
+	}
+}
+
 func TestRenderUsesDirectCanonicalReferencesAndProviderOrder(t *testing.T) {
 	rooms := make([]chatwork.Room, 101)
 	for index := range rooms {
@@ -378,12 +544,12 @@ func TestRenderUsesDirectCanonicalReferencesAndProviderOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"rooms count=101", "room-ref=1000", "room-ref=1100"} {
+	for _, want := range []string{"rooms count=101", "\n1000 ", "\n1100 "} {
 		if !strings.Contains(got, want) {
 			t.Errorf("output does not contain %q", want)
 		}
 	}
-	if strings.Index(got, "room-ref=1000") > strings.Index(got, "room-ref=1100") {
+	if strings.Index(got, "\n1000 ") > strings.Index(got, "\n1100 ") {
 		t.Fatal("provider order was not preserved")
 	}
 	for _, forbidden := range []string{"canonical=", "alias-policy", "r1 kind="} {
@@ -489,7 +655,7 @@ func TestRenderDoesNotLeakProfileOnlyFieldsAcrossTaskProjections(t *testing.T) {
 				result.Accounts[0].Title = "contact-profile-only-canary"
 				return result
 			}(),
-			want: "account-ref=7", canary: "contact-profile-only-canary",
+			want: "\n7 42 ", canary: "contact-profile-only-canary",
 		},
 		{
 			name: "member",
@@ -516,7 +682,7 @@ func TestRenderDoesNotLeakProfileOnlyFieldsAcrossTaskProjections(t *testing.T) {
 				result.Tasks[0].Account.Introduction = "task-profile-only-canary"
 				return result
 			}(),
-			want: "task-ref=200", canary: "task-profile-only-canary",
+			want: "\n200 42 7 100 ", canary: "task-profile-only-canary",
 		},
 		{
 			name: "file uploader",
@@ -525,7 +691,7 @@ func TestRenderDoesNotLeakProfileOnlyFieldsAcrossTaskProjections(t *testing.T) {
 				result.Files[0].Account.AvatarURL = "https://example.com/file-profile-only-canary"
 				return result
 			}(),
-			want: "file-ref=300", canary: "file-profile-only-canary",
+			want: "\n300 42 7 100 ", canary: "file-profile-only-canary",
 		},
 	}
 
@@ -588,7 +754,7 @@ func TestRenderPreservesZeroFalseEmptyAndAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, `message-ref=absent name=untrusted:"" size=0`) || strings.Contains(got, "download-url=") {
+	if !strings.Contains(got, "\n"+`300 42 7 absent "" 0`+"\n") || strings.Contains(got, "download-url=") {
 		t.Fatalf("file absence facts or conditional download URL were wrong:\n%s", got)
 	}
 

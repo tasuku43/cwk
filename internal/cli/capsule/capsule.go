@@ -1,9 +1,10 @@
 // Package capsule renders the selected task-oriented text projection.
 //
 // The projection is deliberately presentation-only. It selects a fixed set of
-// fields for each typed task result. The messages.list route adds only
-// document-local aliases and sequence links while preserving provider order;
-// it never derives relationships from external text.
+// fields for each typed task result. Homogeneous list routes declare one fixed
+// schema and trust boundary before positional records. The messages.list route
+// additionally uses document-local aliases and sequence links while preserving
+// provider order; it never derives relationships from external text.
 package capsule
 
 import (
@@ -116,6 +117,12 @@ func renderCollectionHeader(output *strings.Builder, noun string, count int, cov
 	fmt.Fprintf(output, " complete=%t\n", coverage.Complete)
 }
 
+func renderCollectionPrelude(output *strings.Builder, noun string, count int, coverage chatwork.Coverage, schema string) {
+	renderCollectionHeader(output, noun, count, coverage)
+	line(output, "external-text=untrusted escaped")
+	line(output, "schema: %s", schema)
+}
+
 func renderOwnAccount(output *strings.Builder, account chatwork.Account) {
 	fmt.Fprintf(output, "account account-ref=%s name=untrusted:%s", ref(account.Ref), quoted(account.Name))
 	renderOrganization(output, account)
@@ -127,26 +134,27 @@ func renderStatus(output *strings.Builder, status chatwork.Status) {
 }
 
 func renderContacts(output *strings.Builder, accounts []chatwork.Account, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "contacts", len(accounts), coverage)
+	renderCollectionPrelude(output, "contacts", len(accounts), coverage, `account-ref room-ref "name" [organization]`)
 	for _, account := range accounts {
-		fmt.Fprintf(output, "  account-ref=%s room-ref=%s name=untrusted:%s", ref(account.Ref), ref(account.Room), quoted(account.Name))
-		renderOrganization(output, account)
+		fmt.Fprintf(output, "%s %s %s", ref(account.Ref), ref(account.Room), quoted(account.Name))
+		renderCollectionOrganization(output, account)
 		output.WriteByte('\n')
 	}
 }
 
 func renderMembers(output *strings.Builder, accounts []chatwork.Account, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "members", len(accounts), coverage)
+	renderCollectionPrelude(output, "members", len(accounts), coverage, `account-ref "name" role`)
 	for _, account := range accounts {
-		line(output, "  account-ref=%s name=untrusted:%s role=%s",
+		line(output, "%s %s %s",
 			ref(account.Ref), quoted(account.Name), atom(account.Role))
 	}
 }
 
 func renderRooms(output *strings.Builder, rooms []chatwork.Room, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "rooms", len(rooms), coverage)
+	renderCollectionPrelude(output, "rooms", len(rooms), coverage, `room-ref "name" type role unread mentions tasks`)
 	for _, room := range rooms {
-		renderRoomLine(output, "  ", room)
+		line(output, "%s %s %s %s %d %d %d",
+			ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 	}
 }
 
@@ -320,17 +328,18 @@ func relation(kind string, value chatwork.Relation) string {
 }
 
 func renderPersonalTasks(output *strings.Builder, tasks []chatwork.WorkTask, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "personal-tasks", len(tasks), coverage)
+	renderCollectionPrelude(output, "personal-tasks", len(tasks), coverage, `task-ref room-ref assigned-by-ref message-ref "body" status`)
 	for _, task := range tasks {
-		line(output, "  task-ref=%s room-ref=%s assigned-by-ref=%s message-ref=%s body=untrusted:%s status=%s",
+		line(output, "%s %s %s %s %s %s",
 			ref(task.Ref), ref(task.Room.Ref), ref(task.AssignedBy.Ref), ref(task.Message), quoted(task.Body), atom(task.Status))
 	}
 }
 
 func renderRoomTasks(output *strings.Builder, tasks []chatwork.WorkTask, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "room-tasks", len(tasks), coverage)
+	renderCollectionPrelude(output, "room-tasks", len(tasks), coverage, `task-ref room-ref account-ref message-ref "body" status limit-time`)
 	for _, task := range tasks {
-		renderRoomTaskLine(output, "  ", task)
+		line(output, "%s %s %s %s %s %s %d",
+			ref(task.Ref), ref(task.Room.Ref), ref(task.Account.Ref), ref(task.Message), quoted(task.Body), atom(task.Status), task.LimitTime)
 	}
 }
 
@@ -351,9 +360,10 @@ func renderCreatedTasks(output *strings.Builder, creation chatwork.RoomScopedCre
 }
 
 func renderFiles(output *strings.Builder, files []chatwork.File, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "files", len(files), coverage)
+	renderCollectionPrelude(output, "files", len(files), coverage, `file-ref room-ref account-ref message-ref "name" size`)
 	for _, file := range files {
-		renderFile(output, file, false)
+		line(output, "%s %s %s %s %s %d",
+			ref(file.Ref), ref(file.Room), ref(file.Account.Ref), ref(file.Message), quoted(file.Name), file.Size)
 	}
 }
 
@@ -385,11 +395,11 @@ func renderInviteLink(output *strings.Builder, label string, invite chatwork.Inv
 }
 
 func renderContactRequests(output *strings.Builder, requests []chatwork.ContactRequest, coverage chatwork.Coverage) {
-	renderCollectionHeader(output, "contact-requests", len(requests), coverage)
+	renderCollectionPrelude(output, "contact-requests", len(requests), coverage, `request-ref account-ref "name" ["message"]`)
 	for _, request := range requests {
-		fmt.Fprintf(output, "  request-ref=%s account-ref=%s name=untrusted:%s", ref(request.Ref), ref(request.Account.Ref), quoted(request.Account.Name))
+		fmt.Fprintf(output, "%s %s %s", ref(request.Ref), ref(request.Account.Ref), quoted(request.Account.Name))
 		if request.Message != "" {
-			fmt.Fprintf(output, " message=untrusted:%s", quoted(request.Message))
+			fmt.Fprintf(output, " %s", quoted(request.Message))
 		}
 		output.WriteByte('\n')
 	}
@@ -412,6 +422,22 @@ func renderOrganization(output *strings.Builder, account chatwork.Account) {
 	}
 	if account.Department != "" {
 		fmt.Fprintf(output, "%sdepartment=untrusted:%s", separator, quoted(account.Department))
+	}
+	output.WriteByte('}')
+}
+
+func renderCollectionOrganization(output *strings.Builder, account chatwork.Account) {
+	if account.OrganizationName == "" && account.Department == "" {
+		return
+	}
+	output.WriteString(" organization={")
+	separator := ""
+	if account.OrganizationName != "" {
+		fmt.Fprintf(output, "name=%s", quoted(account.OrganizationName))
+		separator = ","
+	}
+	if account.Department != "" {
+		fmt.Fprintf(output, "%sdepartment=%s", separator, quoted(account.Department))
 	}
 	output.WriteByte('}')
 }
