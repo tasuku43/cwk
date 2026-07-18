@@ -28,9 +28,14 @@ func TestChatworkCatalogContainsEveryTypedTaskOnce(t *testing.T) {
 	}
 }
 
-func TestMessagePresentationChangeKeepsSuccessFormatsTextOnly(t *testing.T) {
+func TestPresentationChangesKeepSuccessFormatsTextOnly(t *testing.T) {
+	changed := map[string]bool{
+		"contacts list": true, "rooms list": true, "members list": true,
+		"personal-tasks list": true, "room-tasks list": true, "files list": true,
+		"contact-requests list": true, "messages list": true, "messages show": true,
+	}
 	for _, command := range chatworkCommandSpecs() {
-		if command.Path != "messages list" && command.Path != "messages show" {
+		if !changed[command.Path] {
 			continue
 		}
 		if !reflect.DeepEqual(command.Agent.Output.Formats, []OutputFormat{OutputFormatText}) ||

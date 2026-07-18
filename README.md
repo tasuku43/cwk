@@ -100,15 +100,17 @@ input fails before a Chatwork request and scoped help identifies
 Chatwork success output starts directly with the task result. Its text contract
 is versioned by the `cwk` release and enforced by catalog fields and goldens. It
 prints canonical references directly and keeps only the facts declared for that
-task, plus applicable bounds/completeness and explicit trust framing. Most
-commands do not repeat a schema or command name; `messages list` uses one local
-schema line because its compact actor and reply-edge notation is positional.
-For example, a synthetic room collection is shaped as:
+task, plus applicable bounds/completeness and explicit trust framing. Reviewed
+homogeneous collections declare their trust boundary and fixed schema once,
+then emit one provider-order positional record per item. For example, a
+synthetic room collection is shaped as:
 
 ```text
 rooms count=2 complete=true
-  room-ref=4101 name=untrusted:"Synthetic Lab" type="group" role="admin" unread=0 mentions=1 tasks=0
-  room-ref=4102 name=untrusted:"Synthetic Archive" type="group" role="member" unread=0 mentions=0 tasks=0
+external-text=untrusted escaped
+schema: room-ref "name" type role unread mentions tasks
+4101 "Synthetic Lab" "group" "admin" 0 1 0
+4102 "Synthetic Archive" "group" "member" 0 0 0
 ```
 
 Pass a value such as `4101` unchanged to a declared `--room` input. Provider
@@ -136,6 +138,21 @@ The fixed schema gives meaning to the positional values without repeating
 `message-ref=`, `sent=`, or `body=` on every record. `reply=#1` is a
 document-local edge. Use the second field (`9001` or `9002`), not `#1` or an
 actor alias, when a later command requires `--message`.
+
+File discovery follows the same rule and keeps an absent source-message
+position explicit:
+
+```text
+files count=2 limit=100 complete=false
+external-text=untrusted escaped
+schema: file-ref room-ref account-ref message-ref "name" size
+6302 4101 7001 9001 "release.txt" 0
+6301 4101 7002 absent "notes.txt" 4096
+```
+
+To inspect the first file, pass position one and position two unchanged:
+`cwk files show --room 4101 --file 6302`. The literal `absent` is state, not a
+canonical reference, and must not be passed to a command input.
 
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 

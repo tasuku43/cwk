@@ -16,6 +16,9 @@
 - Contact-request message is an optional final quoted position; omission cannot
   shift another field.
 - Existing terminal-safe `quoted` and `atom` helpers are reusable unchanged.
+- The active six-file fixture measures 218 tokens for the preceding labeled
+  output and 146 for the fixed positional output under `tiktoken==0.13.0`
+  `o200k_base`, while preserving the same typed semantic answer.
 
 ## Fixed schemas
 

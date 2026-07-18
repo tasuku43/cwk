@@ -94,6 +94,13 @@ duplicated coverage prose, derived depth/thread/root/child facts, or helpful
 non-contract defaults. Declared message bodies remain visible as untrusted
 external text; they are not reparsed by presentation to invent semantics.
 
+The same fixed-schema rule applies to the reviewed homogeneous read
+collections for contacts, rooms, members, personal tasks, room tasks, files,
+and contact requests. Each declares external-text trust and its schema once,
+then emits one terminal-safe provider-order record per item. Canonical
+references remain literal reusable positions, and optional terminal suffixes
+never shift required positions. Only the message projection uses aliases.
+
 ### Optimization objectives
 
 Among eligible candidates, prefer the Pareto frontier across:
@@ -122,7 +129,7 @@ The historical context capsule, the current task projection, and any future pres
 
 ### Enforcement
 
-- Candidate C retains its status and evidence as the deterministic first stable baseline; the current headerless task projection, including the flat message adjacency list, receives the active golden, semantic-answer, hostile-output, canonical-reference, order, and subtractive-field tests.
+- Candidate C retains its status and evidence as the deterministic first stable baseline; the current headerless task projection, including flat message adjacency and the reviewed positional collections, receives active golden, semantic-answer, empty-result, hostile-output, canonical-reference, order, optional-suffix, and subtractive-field tests.
 - A future presentation-competition work packet defines candidates and measurement before experimental implementations begin.
 - Comparison reports identify each worktree/commit and record raw results, benchmark defects, and audit findings, not only a winner summary. Later compatibility decisions must not relabel inconclusive evidence as a win.
 

@@ -153,7 +153,7 @@ Every strong statement should identify its enforcement path.
 | Layer dependency | Go-aware architecture lint and import-boundary tests |
 | Finite domain state | Types, constructors, and table-driven negative tests |
 | Catalog completeness | Whole-catalog contract tests |
-| Discover-to-act composition | Reachable reference-graph validation, required act references, and byte-preserving round-trip tests |
+| Discover-to-act composition | Reachable reference-graph validation, required act references, and byte-preserving round-trip tests, including positional `files list` file/room values passed unchanged to `files show` while `absent` is rejected as identity |
 | Command-bound singleton action | Fixed-target catalog kind/ID/scope validation, no-reference exclusivity tests, and matching mutation-target tests |
 | Side-effect ordering | Fake adapter counters and failure-before-I/O tests |
 | Mutation outcome classification | Structured-fault-first/cause-stripping tests, non-retryable unclassified outcome fallback, and read-only recovery validation |
@@ -174,7 +174,7 @@ Every strong statement should identify its enforcement path.
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
 | Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
-| Current success text | All-route and golden tests require the headerless task projection; `messages list` additionally requires one room/trust/fixed-schema header, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
+| Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. Message actor aliases are allowed only as document-local compression with canonical dictionary entries; semantic raw-notation records, wire extras, derived thread metadata, and non-contract defaults fail |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |

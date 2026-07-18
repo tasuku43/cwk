@@ -54,10 +54,15 @@ canonical references, task-relevant bounds/completeness/uncertainty, and
 external-text trust framing. The accepted `messages list` specialization emits
 one fixed positional schema, one document-local actor dictionary, and flat
 provider-order records; the second record field remains the exact canonical
-message reference. Do not add a global schema/task preamble, standalone provider
-coverage record, aliases outside that reviewed message dictionary, raw provider
-notation as semantic structure, wire extras, empty optional shells, or
-non-contract defaults. Record a repeated external pipeline as thesis evidence.
+message reference. The reviewed contacts, rooms, members, personal-task,
+room-task, file, and contact-request lists likewise emit one trust/schema
+prelude and positional provider-order records, but no aliases. Required
+canonical positions do not shift; optional suffixes are final, and an absent
+file-message reference remains the literal `absent`. Do not add a global
+schema/task preamble, standalone provider coverage record, aliases outside the
+reviewed message dictionary, raw provider notation as semantic structure, wire
+extras, empty optional shells, or non-contract defaults. Record a repeated
+external pipeline as thesis evidence.
 Compare materially different future presentation candidates in
 isolated worktrees under the protocol in
 `docs/09_agent_readiness_validation.md` before replacing the current default,
@@ -274,6 +279,9 @@ Add the smallest set that proves the capability:
   proximity, and indentation-looking text do not fabricate reply edges;
 - canonical-reference round trips that reject presentation-derived shorthand
   unless a separate typed contract explicitly defines it;
+- reviewed collection tests for schema/trust on empty results, provider order,
+  one physical line per item, hostile quoted text, stable required positions,
+  final optional suffixes, and the `files list` to `files show` round trip;
 - a no-post-processing agent transcript, the historical candidate-C baseline,
   and the current headerless task-projection contract, including its fixed
   positional message schema and subtractive-field rules; any future replacement

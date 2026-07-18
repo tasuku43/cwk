@@ -70,7 +70,13 @@ Competition 1 was inconclusive: benchmark/oracle defects and recovery-prompt amb
 
 After that experiment, the project owner made a separate compatibility decision to select a P-derived task projection as the default. Frozen candidate P supplied the implementation seed; the integrated projection added semantic hardening and subtraction that were not part of its ineligible score. A later owner review made a second pre-1.0 compatibility decision to remove the repeated `cwk-task-projection/1 task=...` preamble and standalone provider-oriented coverage record. The latest owner decision refines `messages list` into a flat chronological adjacency list with one actor dictionary; it explicitly superseded an indented-tree proposal before implementation. Historical grammars are not preserved as selectable alternatives. The semantic answer, exact canonical-reference identity, bounds/completeness/uncertainty, and external-text trust classification remain required.
 
-The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per provider item in unchanged order. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. Other commands do not gain alias dictionaries. No presentation derives semantic records from raw Chatwork notation, and declared message bodies remain visible untrusted data that cannot inject CLI-authored structure.
+The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. Seven reviewed homogeneous collections declare one fixed schema and trust boundary, then emit provider-order positional records without aliases. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per provider item in unchanged order. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. No presentation derives semantic records from raw Chatwork notation, and declared external text remains visible untrusted data that cannot inject CLI-authored structure.
+
+The active file-collection probe uses one synthetic `files list` result. An
+agent selects a named file without external processing, passes position one to
+`files show --file` and position two to `files show --room`, preserves provider
+order, and recognizes the fourth-position `absent` atom as missing state rather
+than a command reference.
 
 For a future replacement, before experimental implementation the competition work packet pins:
 
@@ -150,10 +156,12 @@ Use the public Chatwork catalog and synthetic authentication/adapter fixtures:
 go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
+go run ./cmd/cwk help files list --format agent
 go test ./internal/cli -run 'TestChatwork|TestAgent'
+go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency)'
 ```
 
-These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. Candidate-C evidence validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input.
+These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. Candidate-C evidence validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input. The active file-collection scenario proves the fixed six-position schema, canonical file/room reuse, explicit missing-message state, hostile filename containment, and zero external post-processing.
 
 ## Review record
 

@@ -73,6 +73,25 @@ The current default is the headerless task projection, a further reviewed subtra
 
 It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] "body"` once, then an actor dictionary and one physical record per provider-returned message in unchanged order. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. `#N` is the one-based provider sequence; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
+Seven homogeneous read collections also declare `external-text=untrusted
+escaped` and one fixed schema before their provider-order records:
+
+```text
+contacts: account-ref room-ref "name" [organization]
+rooms: room-ref "name" type role unread mentions tasks
+members: account-ref "name" role
+personal-tasks: task-ref room-ref assigned-by-ref message-ref "body" status
+room-tasks: task-ref room-ref account-ref message-ref "body" status limit-time
+files: file-ref room-ref account-ref message-ref "name" size
+contact-requests: request-ref account-ref "name" ["message"]
+```
+
+The schema line is presentation metadata, not a semantic record. Required
+positions never shift. Contact organization is an optional final labeled
+suffix, and a contact-request message is an optional final quoted position. A
+file's fourth position is its canonical message reference when present or the
+literal `absent`; only a canonical value may be reused as command input.
+
 ## Future presentation-selection lifecycle
 
 Candidate C was selected for the first complete implementation by explicit product decision. Competition 1 later compared C with alternative projections but was inconclusive because benchmark/oracle and recovery-prompt defects made its promotion result non-authoritative. The owner separately chose a P-derived projection as the new default and explicitly accepted a breaking text-schema migration; the integrated projection adds hardening and subtraction beyond frozen candidate P. The current default is therefore an owner compatibility decision after the competition, not the benchmark winner.
@@ -161,7 +180,7 @@ Every provider operation has one transport attempt. An uncertain mutation result
 
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
-Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the headerless projection made a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. The flat chronological `messages list` adjacency contract is a third explicit pre-1.0 refinement and superseded an unimplemented indented-tree proposal. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
+Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the headerless projection made a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. The flat chronological `messages list` adjacency contract is a third explicit pre-1.0 refinement and superseded an unimplemented indented-tree proposal. Applying fixed positional records to the seven reviewed homogeneous collections is a fourth explicit refinement. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
 
 ## Explicit non-goals
 
