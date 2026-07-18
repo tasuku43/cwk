@@ -106,8 +106,8 @@ PAT and OAuth are alternate credential sources behind one secret-free gate;
 they are not a fallback chain.
 
 ```text
-CWK_AUTH_METHOD=pat|oauth2
-  -> CLI composition selects exactly one infrastructure authenticator
+explicit CWK_AUTH_METHOD=pat|oauth2, otherwise stored oauth2 selection
+  -> CLI composition resolves exactly one infrastructure authenticator
   -> application authentication gate receives a secret-free requirement
   -> infrastructure issues one process-local binding for the selected record
   -> application passes that binding unchanged to the Chatwork task port
@@ -117,21 +117,23 @@ CWK_AUTH_METHOD=pat|oauth2
 ```
 
 A missing, unknown, or unavailable selected method fails before a provider task
-request. The composition root never probes both sources, prefers a credential
-because it happens to exist, or falls back from a failed OAuth refresh or store
-read to PAT. This keeps account choice explicit even when both sources are
-available.
+request. An explicit environment selector is authoritative; otherwise only the
+selection deliberately persisted by OAuth login is eligible. The composition
+root never probes both sources, prefers a credential because it happens to
+exist, or falls back from a failed OAuth refresh or store read to PAT. This
+keeps account choice explicit even when both sources are available.
 
-The OAuth surface is one fixed public-client profile. `auth profiles` is its
-reference producer; login, status, and logout accept that exact opaque value
-unchanged. The profile reference does not encode a token, account identifier,
-credential-store service/account key, or other bearer capability. Login uses a
-fresh state and PKCE S256 verifier, writes the consent URL only to stderr, reads
-one complete custom-scheme callback URL from stdin, verifies the exact
-registered redirect and state, exchanges the code, verifies the account through
-the fixed Chatwork API identity endpoint, and only then persists the credential.
-Status reads the stored expiry projection without refresh or network I/O.
-Logout removes the exact local entry and makes no provider-revocation claim.
+The OAuth surface is one command-bound `tool_local` authentication singleton;
+there is no public profile collection or selector. First login accepts one
+non-secret public client ID, fixes `cwk://oauth/callback`, opens the consent URL
+through the bounded platform opener when possible, and reads one complete
+custom-scheme callback URL from stdin. It first persists the validated public
+registration/selection, then verifies the exact registered redirect and state,
+exchanges the code, verifies the account through the fixed Chatwork API identity
+endpoint, and persists tokens in the OS credential store. A failed consent may
+therefore leave only reusable public configuration. Status reads the credential
+state and expiry projection without refresh or network I/O. Logout removes the
+exact local credential entry and makes no provider-revocation claim.
 
 OAuth refresh is serialized around the selected stored record. Immediately
 before a Chatwork API request, infrastructure resolves the exact ephemeral
@@ -166,7 +168,10 @@ At minimum, catalog validation rejects:
 - argv input metadata whose `Required` value or ordered `AllowedValues` disagree with the small bracket/`a|b` usage grammar; non-argv sources are excluded from this syntax check;
 - missing or inconsistent common runtime failures (`operation_canceled`, output `output_write_failed`, standard authentication-gate failures, and standard mutation-invoker contract/policy/unknown-outcome failures), or an unknown-outcome recovery that points to another mutation;
 - recovery commands that are only catalog prefixes, contain unchecked argv, use an unknown help selector, or otherwise fall outside the exact-path/`help <path-or-namespace>` grammar;
-- read commands with mutation metadata, creates without exactly one required CLI parent binding, writes without a matching required CLI existing-target binding, unbound or extra target inputs, and mutations without complete impact;
+- read commands with mutation metadata; reference-bound creates without exactly
+  one required CLI parent binding; reference-bound writes without a matching
+  required CLI existing-target binding; fixed-target mutations with inputs or
+  a mismatched target; and mutations without complete impact;
 - a root agent-index entry larger than 512 encoded bytes, which would let selection prose crowd detailed scoped contracts as the catalog grows;
 - command metadata that cannot produce consistent help and routing.
 
@@ -178,10 +183,10 @@ At minimum, catalog validation rejects:
 |---|---|
 | `RoleUtility` | Repository or runtime operation that is neither candidate discovery nor unique-target action |
 | `RoleDiscover` | Owns ambiguity and may emit opaque references with candidates |
-| `RoleAct` | Requires and operates on at least one declared opaque reference without choosing among candidates |
+| `RoleAct` | Operates on required declared opaque references, or on one exact catalog-declared fixed `tool_local` singleton when no selection exists |
 | `RoleUnknown` | Invalid for a public command |
 
-Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. The catalog derives the reference graph, scoped workflows, and next actions from those fields. A shared kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Human help may stay concise; scoped agent help exposes the exact graph, pagination binding, and field meanings.
+Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. A fixed target instead declares a stable kind, ID, description, and `tool_local` scope directly on the agent contract; it cannot coexist with produced or consumed target references. The catalog derives the reference graph, scoped workflows, next actions, and fixed-target facts from those fields. A shared reference kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every reference kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Human help may stay concise; scoped agent help exposes the exact graph, fixed target, pagination binding, and field meanings.
 
 Agent-help schema version 3 separates selection from invocation detail. Root `help --format agent` is an `index` view containing only each command's path, top-level namespace, summary, capability ID, outcome, effect, and role. Each encoded command entry has a 512-byte catalog budget. Its `scope_request` names `commands[].path` and `commands[].namespace` as selectors and supplies the exact invocation template. `help <selector> --format agent` is a `scope` view containing global I/O/error contracts, complete selected `AgentContract` values, and reference workflows touching the selection. Its I/O contract marks external text as untrusted data, declares visible structural projection, and distinguishes validated exact opaque references. A known path therefore needs one help invocation; an unknown outcome needs the root index and one scoped invocation. Root size still grows with the number of outcomes, but detailed inputs, outputs, authentication, failures, mutations, and workflows do not multiply there.
 
@@ -247,7 +252,17 @@ Effect answers **what class of action occurs**:
 
 Intent answers **what this invocation is allowed to affect**. A mutation intent includes a `TargetRef` and an `Impact`. Cardinality and the notification, access-change, and destructive dimensions must all be explicit; their zero values fail closed. Derived projects extend this base with domain-owned detail such as recipients, visibility changes, publication destinations, or workflow triggers.
 
-`MutationContract` connects required public argument or flag inputs to that runtime intent. For `Create`, `parent_input` names the single opaque parent or scope reference and `target_id_input` is absent because the object does not exist yet. For `Write`, `target_id_input` names an opaque reference whose kind equals `TargetKind`; an optional, distinct `parent_input` can bind additional scope. `target_inputs` must contain exactly these named roles. A free-form, optional, non-CLI, duplicated, non-reference, or mismatched binding fails catalog validation rather than being treated as a safe mutation.
+`MutationContract` connects the public target declaration to runtime intent. For
+a reference-bound `Create`, `parent_input` names the single opaque parent or
+scope reference and `target_id_input` is absent because the object does not
+exist yet. For a reference-bound `Write`, `target_id_input` names an opaque
+reference whose kind equals `TargetKind`; an optional, distinct `parent_input`
+can bind additional scope. `target_inputs` contains exactly these named roles.
+A command-bound singleton instead requires one matching fixed target, an
+explicitly empty `target_inputs`, and no input role; the effect determines
+whether it is the create scope or existing write target. A free-form, optional,
+non-CLI, duplicated, non-reference, remote-as-fixed, or mismatched binding fails
+catalog validation rather than being treated as safe.
 
 The catalog binding and runtime `TargetRef` are complementary checks: the former proves that an agent can supply an unambiguous target from the command contract, while the latter proves that the concrete invocation presented to policy and infrastructure has the declared target and impact. Neither replaces the other.
 

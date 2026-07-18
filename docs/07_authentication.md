@@ -185,11 +185,12 @@ Do not accept a PAT as a normal command-line flag: argv commonly reaches shell h
 
 ### Chatwork first implementation
 
-Chatwork CLI supports one account through PAT and OAuth 2.0. Every provider API
-task requires `CWK_AUTH_METHOD` to be exactly `pat` or `oauth2`. The selector is
-secret-free but mandatory: missing, unknown, or unavailable selection fails
-before a task request, and infrastructure never tries the other method as a
-fallback.
+Chatwork CLI supports one account through PAT and OAuth 2.0. A present
+`CWK_AUTH_METHOD` must be exactly `pat` or `oauth2`; when absent, the exact
+`oauth2` selection persisted by the first login attempt is used. The selector is
+secret-free and deterministic: missing, unknown, corrupt, or unavailable
+selection fails before a task request, and infrastructure never tries the other
+method as a fallback.
 
 For `pat`, infrastructure reads `CWK_API_TOKEN` from the command-process
 environment, creates one ephemeral binding record, and sends the token only as
@@ -199,17 +200,25 @@ automation trade-off with environment-inspection and parent-process risks;
 documentation recommends setting it only for the command process and clearing
 inherited values.
 
-For `oauth2`, the fixed profile is one public OAuth client using Authorization
-Code Grant, exact state validation, and PKCE S256. The authorization endpoint is
+For `oauth2`, the command-bound local authentication singleton uses one public
+OAuth client with Authorization Code Grant, exact state validation, and PKCE
+S256. The authorization endpoint is
 `https://www.chatwork.com/packages/oauth2/login.php`; the token endpoint is
 `https://oauth.chatwork.com/token`. The exact registered redirect URI must not
 use `http` or `https`; the CLI does not start a loopback listener. The login task
-shows one transient consent URL on stderr, then reads one complete redirected
-URL from stdin. It rejects a changed redirect, missing/duplicate callback
-field, state mismatch, authorization denial, or invalid code before persistence.
+uses the fixed `cwk://oauth/callback`, opens one transient consent URL through a
+bounded platform opener when available, prints it as fallback, then reads one
+complete redirected URL from stdin. It rejects a changed redirect,
+missing/duplicate callback field, state mismatch, authorization denial, or
+invalid code before credential persistence.
 
-The OAuth public registration uses non-secret `CWK_OAUTH_CLIENT_ID` and
-`CWK_OAUTH_REDIRECT_URI`; there is no client-secret input. The reviewed scope
+First login accepts the non-secret client ID through `--client-id`; there is no
+client-secret or public redirect input. The platform user configuration stores
+only a schema version, exact `oauth2` selection, client ID, and fixed redirect.
+It is written before consent; cancellation or denial leaves this reusable
+public configuration but no credential. macOS and Linux use
+`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`, while Windows uses
+`%AppData%\cwk\config.json`. The reviewed scope
 set is `users.all:read rooms.all:read_write contacts.all:read_write`, the finite
 set needed by the fixed API coverage goal. `offline_access` is not requested
 because Chatwork reserves it for confidential clients. Infrastructure stores
@@ -222,21 +231,24 @@ requests and never falls back to PAT.
 
 The public authentication workflow is:
 
-1. `auth profiles` discovers the one fixed `chatwork-oauth-profile` reference.
-2. `auth login --profile <ref>` consumes it unchanged, refuses to overwrite an
-   existing credential, and stores a validated OAuth credential.
-3. `auth status --profile <ref>` performs no refresh or provider API call and
-   returns only method, `unconfigured|ready|expired`, and advertised expiry.
-4. `auth logout --profile <ref>` removes the exact local credential-store entry
+1. `auth login --client-id <public-client-id>` configures the one local target,
+   persists its non-secret public configuration before consent, refuses to
+   overwrite an existing credential, and stores a validated OAuth credential
+   only after exchange and identity verification. Later login omits the already
+   stored client ID, including after canceled consent.
+2. `auth status` performs no refresh or provider API call and returns only
+   method, credential state, and advertised expiry.
+3. `auth logout` removes the exact local credential-store entry
    and reports `remote_revocation: false`; it does not claim remote revocation.
 
-Login is a create within the discovered profile and logout is a destructive,
-access-changing write to that exact profile. Their explicit task invocation is
-sufficient; the Chatwork provider-mutation confirmation flags do not apply.
-Both declare read-only `auth status` reconciliation for an unclassified local
-mutation outcome. Authorization codes, state, PKCE verifiers, tokens, store
-keys, and credential-bearing causes never enter argv, stdout, logs, snapshots,
-fixtures, domain values, or application values.
+Login is a create within the catalog-declared fixed `tool_local` authentication
+scope and logout is a destructive, access-changing write to that same target.
+Their explicit task invocation is sufficient; the Chatwork provider-mutation
+confirmation flags do not apply. Both declare read-only `auth status`
+reconciliation for an unclassified local mutation outcome. The client ID is
+public argv data. The platform opener may briefly carry the authorization URL's
+state and public PKCE challenge in argv; callback URLs, authorization codes,
+PKCE verifiers, tokens, store keys, and credential-bearing causes never do.
 
 ## Decisions left to a derived project
 
@@ -245,12 +257,12 @@ The template intentionally does not fix these choices:
 | Decision | Where to decide it |
 |---|---|
 | OAuth grant, browser/device behavior, redirect listener, callback URI, state, nonce, and PKCE policy | Selected above for the Chatwork first implementation; revise through a superseding product/security decision |
-| Provider endpoints and client registration | Infrastructure configuration and security model |
+| Provider endpoints and client registration | Selected above: fixed endpoints/redirect plus first-login public client ID stored in platform user configuration |
 | PAT input mechanism | Selected above: command-process environment only |
 | Credential store and operating-system integration | Selected above for OAuth; exact dependency remains an infrastructure ADR and security review |
-| Refresh, reuse, cache lifetime, logout, and revocation | Selected above for the fixed public profile; numeric refresh headroom remains in the infrastructure ADR |
+| Refresh, reuse, cache lifetime, logout, and revocation | Selected above for the fixed local authentication singleton; numeric refresh headroom remains in the infrastructure ADR |
 | Concrete scopes, PAT permissions, and capability names | Selected above for the fixed API coverage goal |
-| Account discovery and selection | One account and one OAuth profile in the first implementation |
+| Account discovery and selection | Exactly one account and no public profile collection; multiple accounts remain unsupported |
 | Whether a write requires human approval, reauthentication, or dry-run | Thesis, security model, and mutation policy |
 | Authentication commands and recovery command names | Selected above and enforced by the command catalog |
 

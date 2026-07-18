@@ -2,6 +2,7 @@
 
 - Status: Accepted
 - Date: 2026-07-18
+- Amended: 2026-07-18, single-account command-bound login and public configuration
 - Deciders: Chatwork CLI maintainers
 - Scope: Chatwork authentication, infrastructure dependencies, credential storage, and harness
 - Supersedes: None
@@ -62,12 +63,13 @@ condition rather than a reason to downgrade storage.
 Choose the fixed public-client adapter and OS credential-store abstraction.
 
 The public flow is Authorization Code Grant with a fresh unpredictable state
-and PKCE S256 verifier for every login. The registered redirect is one exact
-non-HTTP, non-HTTPS custom URI. The CLI starts no listener: it writes one
-transient consent URL to stderr and reads the complete redirected URI from
-stdin. It validates the exact redirect components and state before exchanging
-one code. The public registration provides a non-secret client ID and has no
-client secret. The fixed scopes are `users.all:read`,
+and PKCE S256 verifier for every login. The registered redirect is the exact
+non-HTTP, non-HTTPS `cwk://oauth/callback` URI. The CLI starts no listener: it
+opens the transient consent URL through a bounded shell-free platform opener,
+prints the URL only when opening fails, and reads the complete redirected URI
+from stdin. It validates the exact redirect components and state before
+exchanging one code. First login provides a non-secret client ID in argv and
+has no client secret. The fixed scopes are `users.all:read`,
 `rooms.all:read_write`, and `contacts.all:read_write`; `offline_access` is not
 requested. Authorization, token, identity, and API destinations are fixed in
 production, and credential-bearing redirects are disabled.
@@ -93,17 +95,30 @@ Chatwork adapter imports only the root OAuth package and does not use cloud
 metadata discovery.
 
 The keyring service/account identifiers are fixed private infrastructure
-constants and are not the public OAuth profile reference. The store contains
+constants and are not public target identity. The store contains
 the access token, optional refresh token, token type, provider-advertised
 expiry, exact granted scope set, and verified Chatwork account ID as one bounded
 credential record. No plaintext store or alternate secret source is attempted
 when the selected OS backend is missing, locked, denied, or returns an error.
 
-Every Chatwork API task requires the exact secret-free selector
-`CWK_AUTH_METHOD=pat|oauth2`. Missing or unknown selection fails before
-credential access. Selecting one method never probes, prefers, or falls back to
-the other, including after OAuth login, store, expiry, refresh, identity, or
-permission failure.
+An explicitly present `CWK_AUTH_METHOD=pat|oauth2` is authoritative. Otherwise
+the exact `oauth2` selection persisted by the first login attempt is used. Missing,
+unknown, corrupt, or unavailable selection fails before credential access.
+Selecting one method never probes, prefers, or falls back to the other,
+including after OAuth login, store, expiry, refresh, identity, or permission
+failure.
+
+The platform user configuration is a separate bounded, schema-versioned,
+atomically replaced record containing only the exact method, public client ID,
+and fixed redirect. It never stores token, callback, code, state, verifier,
+account identity, or credential-store key material. It is written before
+consent, so a canceled or rejected attempt leaves reusable public configuration
+but no credential, while a usable token can never exist without its exact
+public configuration. macOS and Linux use
+`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`; Windows uses
+`%AppData%\cwk\config.json`. Login, status, and logout
+bind one catalog-declared fixed `tool_local` authentication target; the former
+public fixed-profile reference and its discovery command are removed.
 
 At login and after every token refresh, the adapter calls the fixed Chatwork
 identity endpoint with the candidate access token, validates the required
@@ -144,6 +159,8 @@ review.
 - OAuth protocol and native credential storage stay replaceable behind one
   infrastructure boundary.
 - Agents and users choose authentication deterministically.
+- First login needs one command, browser consent, and one callback paste;
+  subsequent OAuth commands and API tasks need no registration exports.
 - Token refresh cannot silently change the account used by an admitted task.
 - Native stores protect persisted credentials without adding a product-owned
   plaintext format.
@@ -153,6 +170,9 @@ review.
 - OAuth is unavailable when the platform credential service is unavailable.
 - The macOS backend invokes a fixed system program; Linux/BSD depends on a
   user-session D-Bus service; platform behavior needs dedicated test coverage.
+- Browser launch has platform/headless failure modes and its subprocess may
+  briefly expose state and the public PKCE challenge in an authorization-URL
+  argument; it exposes no callback code, verifier, token, or client secret.
 - Public-client refresh lifetime is provider-limited because `offline_access`
   is not available; re-login remains an expected recovery.
 - Two pre-v1 dependencies and their transitive modules require ongoing review.
@@ -162,9 +182,13 @@ review.
 - Architecture lint keeps both third-party imports out of domain, application,
   CLI, and command packages; dependency review rejects moving credential types
   across the infrastructure boundary.
-- Catalog and CLI tests require one explicit method selector and prove missing,
-  unknown, unavailable, and failed selected methods make zero task calls with
-  no fallback.
+- Catalog and CLI tests require an authoritative environment selection or the
+  exact login-persisted OAuth selection and prove missing, unknown, unavailable,
+  and failed selected methods make zero task calls with no fallback.
+- Catalog tests constrain the reference-free auth lifecycle to one explicit
+  command-bound `tool_local` target and leave every remote reference rule intact.
+- Public-configuration and opener tests cover schema/bounds/symlinks/atomicity,
+  exact authorization origin, shell-free invocation, fallback, and redaction.
 - OAuth adapter tests prove state and exact redirect rejection before exchange,
   PKCE S256 verifier/challenge agreement, public-client token exchange without
   a client secret, fixed scopes without `offline_access`, and fixed production
@@ -186,9 +210,11 @@ review.
 
 ## Compatibility and migration
 
-This decision adds the OAuth profile workflow but does not change Chatwork task
-results. PAT and OAuth converge on the same secret-free session and ephemeral
-binding. Replacing either dependency, adding another profile/account, adding a
+This decision adds the single-account OAuth workflow but does not change
+Chatwork task results. PAT and OAuth converge on the same secret-free session
+and ephemeral binding. Adding another profile/account necessarily invalidates
+the fixed target and requires an opaque-reference discovery flow. Replacing
+either dependency, adding a
 confidential or device client, changing callback delivery, or adding a
 plaintext/non-native store requires a superseding ADR and product/security
 migration plan.

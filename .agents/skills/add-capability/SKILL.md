@@ -85,8 +85,9 @@ For every external action, specify:
 
 - effect: read, create, or write; unknown is never executable;
 - target, scope, and all generic impact dimensions (cardinality, notification, access change, destructive);
-- for create, exactly one required argument/flag opaque `parent_input`, no `target_id_input`, and no other `target_inputs`;
-- for write, one required argument/flag opaque `target_id_input` whose reference kind equals `TargetKind`, plus an optional distinct opaque parent role whose input is required when present; `target_inputs` contains only those bound roles;
+- for a reference-bound create, exactly one required argument/flag opaque `parent_input`, no `target_id_input`, and no other `target_inputs`;
+- for a reference-bound write, one required argument/flag opaque `target_id_input` whose reference kind equals `TargetKind`, plus an optional distinct opaque parent role whose input is required when present; `target_inputs` contains only those bound roles;
+- for the exceptional command-bound target, one catalog-declared fixed `tool_local` singleton with a stable kind/ID/description, an explicitly empty `target_inputs`, and no `parent_input` or `target_id_input`; never use this for a remote, provider-owned, user-selected, or potentially multiple target;
 - validation performed before the external boundary;
 - finite timeout, pagination/completeness, maximum attempts, and upstream idempotency behavior;
 - which derived policy applies at `app/execution.Invoker`; do not make the template assume approval, confirmation, OS authentication, or dry-run;
@@ -138,7 +139,9 @@ adapter.
 
 Do not hand-maintain `ProducedRef` or `ConsumedRef`. Reference compatibility,
 workflows, and next actions derive from structured input/output reference kinds.
-An act command must require at least one opaque reference. Give semantically
+An act command must require at least one opaque reference unless its exact path
+declares the one fixed `tool_local` singleton described above. A fixed-target
+act command produces and consumes no target references. Give semantically
 different references different kinds; sharing a kind declares them
 interchangeable across every matching field/input edge. Ensure required
 reference chains lead back to a command that can run without an unresolved
@@ -211,8 +214,10 @@ external API capability.
   fixed public-client Authorization Code flow with state, PKCE S256, an exact
   non-HTTP custom redirect read from stdin, and no client secret or
   `offline_access`; persist credentials only in the OS store.
-- Require exact `CWK_AUTH_METHOD=pat|oauth2` for Chatwork API tasks. Never probe,
-  prefer, or fall back to the other source. OAuth store, expiry, refresh,
+- Require an exact selected method for Chatwork API tasks. An explicit
+  `CWK_AUTH_METHOD` may select PAT; otherwise a successful single-account OAuth
+  login supplies the persisted exact `oauth2` selection. Never probe, prefer,
+  or fall back to the other source. OAuth store, expiry, refresh,
   identity, scope, and persistence failures make zero provider task requests.
 - Resolve the exact OAuth binding immediately before I/O. Serialize refresh,
   revalidate required scopes and the exact Chatwork account, and persist the

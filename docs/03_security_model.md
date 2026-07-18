@@ -87,6 +87,12 @@ Discovery output may contain labels controlled by an external system, but action
 - Keep remote labels out of authorization identity and sanitize them separately for display.
 - Reject control/format runes and Unicode line or paragraph separators at opaque transport boundaries where they have no valid protocol role. Validation rejects; it never silently rewrites an ID, cursor, target part, or idempotency key.
 
+The only reference-free action target is a catalog-declared fixed
+`tool_local` singleton with a stable kind, ID, and description. It cannot be a
+provider object, cannot be selected from credential presence, and cannot be
+used once multiple possible instances exist. Catalog tests keep this path
+disjoint from opaque-reference flows and bind its mutation target explicitly.
+
 The internal sample test fixture accepts only `smp_` followed by twelve lowercase hexadecimal characters. Its negative tests remain as generic boundary evidence, but the fixture is not a public capability. Public Chatwork commands apply the same exact-byte rule to their typed canonical references.
 
 ### Presentation-derived identity
@@ -151,9 +157,12 @@ The base template contains a secret-free authentication contract, an ephemeral n
 Secrets must not cross from infrastructure into domain or application values and must not be accepted through command-line arguments when a safer channel is available. Do not persist tokens in plaintext configuration or test real credentials in CI. Read [Authentication](07_authentication.md) and [ADR 0001](decisions/0001-oauth-library-boundary.md) before implementing OAuth or PAT support.
 
 The first Chatwork implementation supports one account through two explicitly
-selected methods. `CWK_AUTH_METHOD` must be exactly `pat` or `oauth2` for every
-API task; missing or unknown selection fails before credential access, and the
-adapter never silently prefers one available credential.
+selected methods. A present `CWK_AUTH_METHOD` must be exactly `pat` or `oauth2`;
+when absent, only the exact `oauth2` choice deliberately stored by the first
+login attempt is
+eligible. Missing, unknown, corrupt, or unavailable selection fails before
+credential access, and the adapter never silently prefers one available
+credential.
 
 PAT selects one API token from the `CWK_API_TOKEN` command-process environment.
 This is an explicit non-persistent automation trade-off, not a claim that
@@ -166,17 +175,25 @@ OAuth selects Chatwork's Authorization Code Grant for one public client. State
 and a fresh PKCE S256 verifier are mandatory for every login. The exact
 registered redirect URI must use a non-HTTP custom scheme; loopback HTTP,
 confidential-client secrets, device flow, and `offline_access` are not
-supported. `CWK_OAUTH_CLIENT_ID` and `CWK_OAUTH_REDIRECT_URI` are non-secret
-registration configuration. Login writes one transient consent URL to stderr,
-accepts only the complete callback URL through stdin, compares its redirect and
-state exactly, and never places an authorization code, state, verifier, access
-token, refresh token, or credential-store key in argv, stdout, logs, structured
+supported. First login accepts the non-secret public client ID in argv and uses
+the fixed registered `cwk://oauth/callback` URI. The public client ID, redirect,
+schema, and exact `oauth2` selection may be stored in the platform user
+configuration; no credential may be stored there. It is written before consent
+so token persistence can never succeed without it; failed consent leaves no
+credential. Login sends the consent URL
+to an allowlisted shell-free platform opener when available and prints it as a
+fallback, accepts only the complete callback URL through stdin, and compares
+its redirect and state exactly. The opener may briefly expose the authorization
+URL's state and public PKCE challenge in its process arguments; that bounded
+residual contains no authorization code, verifier, access/refresh token, or
+client secret. Callback URLs, codes, verifiers, tokens, credential-store keys,
+and credential-bearing causes never enter argv, stdout, logs, structured
 errors, or fixtures.
 
 OAuth access and refresh material is persisted only through the selected
-operating-system credential store. A public profile reference emitted by
-`auth profiles` is workflow identity, not a credential-store key or bearer
-capability. Login refuses to overwrite an existing stored credential. Status
+operating-system credential store. Login/status/logout bind one declared local
+authentication singleton rather than a public profile reference. Login refuses
+to overwrite an existing stored credential. Status
 returns only method, `unconfigured|ready|expired`, and advertised expiry.
 Logout deletes only that exact local store entry and explicitly reports that it
 did not revoke a remote token. Store access failure (including platform denial),

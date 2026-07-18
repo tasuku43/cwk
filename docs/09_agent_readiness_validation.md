@@ -103,22 +103,24 @@ Mutation probes also require the agent to distinguish the three typed policies w
 
 Authentication probes require the agent to:
 
-1. discover the exact OAuth profile reference through `auth profiles` and pass
-   it unchanged to login, status, and logout;
-2. choose exact `CWK_AUTH_METHOD=pat|oauth2` without inferring a preference from
-   available credentials;
-3. keep PATs, callbacks, codes, state, PKCE verifiers, access/refresh tokens,
+1. select `auth login` directly for the declared single local authentication
+   target, supply a public client ID only on first login, and use no synthetic
+   profile discovery or selector;
+2. distinguish an authoritative environment method from the exact persisted
+   OAuth selection without inferring a preference from available credentials;
+3. keep PATs, callbacks, codes, PKCE verifiers, access/refresh tokens,
    and credential-store keys out of argv and successful output;
-4. distinguish an unconfigured/expired OAuth profile from insufficient API
+4. distinguish unconfigured/expired OAuth state from insufficient API
    scope and from a credential-store access fault;
 5. recover an uncertain login/logout store outcome through exact read-only
    `auth status`, not by repeating the mutation;
 6. understand that logout removes local credentials and does not prove remote
    token revocation.
 
-The synthetic OAuth transcript uses a fixed public client, non-HTTP custom
-redirect, state mismatch case, PKCE failure case, full callback supplied through
-stdin, fake OS credential store, expiry/refresh race, and secret canaries. It
+The synthetic OAuth transcript uses a fixed public client and redirect,
+successful/failing browser opener, state mismatch case, PKCE failure case, full
+callback supplied through stdin, strict fake user configuration, fake OS
+credential store, expiry/refresh race, and secret canaries. It
 records zero provider task calls for selection, callback, store, identity,
 scope, and refresh rejection. Live credentials and browser history are never
 evaluation inputs or retained evidence.

@@ -84,7 +84,14 @@ The governing rule is not “never use a query language”; it is “do not shif
 
 ## Discovery, action, and references
 
-Every public command declares `utility`, `discover`, or `act`. Discovery owns ambiguity and returns canonical opaque references. Actions require exact declared references and never perform hidden display-name searches. Presentation-derived shorthand is not command identity unless a future separately typed contract defines its scope and resolution.
+Every public command declares `utility`, `discover`, or `act`. Discovery owns
+ambiguity and returns canonical opaque references. Actions require exact
+declared references and never perform hidden display-name searches. The sole
+reference-free action form binds one catalog-declared fixed `tool_local` target
+when the product owns exactly one instance and offers no selection. It cannot
+identify a remote or potentially multiple object. Presentation-derived
+shorthand is not command identity unless a future separately typed contract
+defines its scope and resolution.
 
 ## Side effects
 
@@ -101,24 +108,31 @@ The room-discovery/message anchor lands as a read slice, but the first complete 
 ## Authentication and external-call decisions
 
 The first implementation supports one Chatwork account through either PAT or
-OAuth 2.0. Every API task requires the exact secret-free selector
-`CWK_AUTH_METHOD=pat|oauth2`; there is no implicit preference or fallback when
-both credentials exist.
+OAuth 2.0. An explicitly present `CWK_AUTH_METHOD=pat|oauth2` is authoritative;
+when it is absent, the platform user configuration may contain the exact
+`oauth2` selection deliberately established by the first login attempt. Missing or invalid
+selection fails, and no selected-method failure probes or falls back to the
+other credential.
 
 PAT reads `CWK_API_TOKEN` only from the command-process environment and never
 persists it. OAuth uses the provider's Authorization Code Grant for one public
-client with state and PKCE S256. `CWK_OAUTH_CLIENT_ID` and
-`CWK_OAUTH_REDIRECT_URI` are non-secret registration configuration; the
-redirect must be an exact registered non-HTTP custom URI. Login shows one
-transient authorization URL on stderr, reads the complete callback URL from
-stdin, validates the exact redirect/state before exchange, and stores access
-and refresh material only in the operating-system credential store. Codes,
-verifiers, tokens, credential-store keys, and credential-bearing errors never
-enter argv or stdout.
+client with state and PKCE S256. First login accepts the non-secret client ID as
+`--client-id`, fixes the registered redirect at `cwk://oauth/callback`, and
+stores those public values with the exact `oauth2` selection in the platform
+user configuration before consent. A canceled or rejected consent therefore
+leaves reusable non-secret configuration but no credential. On macOS and Linux
+the file is `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`; on Windows it
+is `%AppData%\cwk\config.json`. It opens the transient consent URL through a bounded
+platform opener when available, prints it only as fallback, then reads the
+complete callback URL from stdin and validates the exact redirect/state before
+exchange. Access and refresh material remains only in the operating-system
+credential store. Authorization codes, verifiers, tokens, credential-store
+keys, and credential-bearing errors never enter argv or stdout.
 
-`auth profiles` discovers the one opaque public-client profile reference.
-`auth login`, `auth status`, and `auth logout` consume that reference unchanged.
-Login refuses to replace an existing credential; status exposes only method,
+`auth login`, `auth status`, and `auth logout` bind the one fixed tool-owned
+authentication target and accept no profile reference. Login requires
+`--client-id` only while public configuration is absent and refuses to replace
+an existing credential; status exposes only method, credential
 state, and provider-advertised expiry; logout removes the local credential and
 does not claim provider-side revocation. API tasks using either method converge
 on the same secret-free session/binding contract before infrastructure sends a

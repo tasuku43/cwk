@@ -29,27 +29,31 @@ Authentication is a precondition, not a transport error to discover after a writ
 
 A non-nil catalog authentication requirement means the command uses the template application gate. The catalog must declare the gate's complete standard fault set with exact code, kind, retryability, and command-valid recovery actions; validation rejects omissions before dispatch. Provider-specific authentication, rate-limit, unavailable, or unsupported faults are additional derived-project declarations rather than replacements for that base set.
 
-### Chatwork method and OAuth profile contract
+### Chatwork method and single-account OAuth contract
 
 The fixed Chatwork implementation permits `pat` and `oauth2` in every API-task
-requirement but makes runtime selection explicit through exact
-`CWK_AUTH_METHOD=pat|oauth2`. An absent selector, unknown value, missing selected
-credential, or selected-method failure makes zero provider task requests. The
-adapter never probes one credential and falls back to the other.
+requirement. A present exact `CWK_AUTH_METHOD=pat|oauth2` is authoritative;
+otherwise only the `oauth2` selection deliberately stored by the first login
+attempt is eligible.
+An absent/invalid selection, missing selected credential, or selected-method
+failure makes zero provider task requests. The adapter never probes one
+credential and falls back to the other.
 
 OAuth lifecycle commands do not require an existing authentication session.
-`auth profiles` is the invocable discovery root and emits one exact opaque
-`chatwork-oauth-profile` reference. Login, status, and logout are act commands
-that require that value unchanged. Login is a create bound to that profile;
-logout is an access-changing destructive write bound to the existing profile;
-both reconcile an unknown local-store outcome only through read-only
-`auth status`. Login refuses an existing credential rather than silently
-replacing it. Logout removes local credential material and never reports remote
-revocation.
+Login, status, and logout are act commands bound to one catalog-declared fixed
+`tool_local` authentication target; no profile discovery or target argument is
+valid. Login is a create within that fixed scope; logout is an access-changing
+destructive write to it; both reconcile an unknown local-store outcome only
+through read-only `auth status`. Login refuses an existing credential rather
+than silently replacing it. Logout removes local credential material and never
+reports remote revocation.
 
 The OAuth adapter uses Authorization Code Grant with state and PKCE S256 for a
-public client, an exact registered non-HTTP custom redirect URI, and manual
-full-callback input through stdin. The consent URL is transient stderr guidance;
+public client, the exact registered `cwk://oauth/callback` URI, and manual
+full-callback input through stdin. First login accepts the public client ID and
+persists only non-secret client/selection metadata in the platform user
+configuration. The consent URL is opened through a bounded platform opener and
+becomes transient stderr guidance only when opening fails;
 the complete callback, code, state, verifier, access/refresh tokens, store keys,
 and provider token bodies are never successful output. Only infrastructure may
 import the reviewed OAuth and credential-store modules. Adapter tests pin the
@@ -114,7 +118,7 @@ Every command has an `operation.Effect`. A mutation also declares:
 
 Each impact dimension uses an explicit declaration; omitted values fail closed. Product-specific effects such as message recipients, visibility transitions, file sharing, or workflow triggers belong to a derived domain type and may make the policy stricter.
 
-The binding rules distinguish an object that does not exist yet from an existing object being changed. A `create` declares exactly one `parent_input`, consumes that input as an opaque parent or scope reference, and declares no `target_id_input`. A `write` declares `target_id_input` as an opaque reference whose kind equals `TargetKind`; it may also declare a distinct opaque `parent_input`. `target_inputs` contains exactly those named roles. Missing roles, extra or duplicate inputs, non-reference inputs, and target-kind mismatches fail catalog validation before any mutation policy or adapter call.
+The binding rules distinguish an object that does not exist yet from an existing object being changed. A reference-bound `create` declares exactly one `parent_input`, consumes that input as an opaque parent or scope reference, and declares no `target_id_input`. A reference-bound `write` declares `target_id_input` as an opaque reference whose kind equals `TargetKind`; it may also declare a distinct opaque `parent_input`. `target_inputs` contains exactly those named roles. A command-bound local singleton instead declares a fixed target with matching kind, explicit empty `target_inputs`, and no input roles; the effect determines create scope versus write target. Missing roles, extra or duplicate inputs, non-reference inputs, invalid fixed scope, and target-kind mismatches fail catalog validation before any mutation policy or adapter call.
 
 `app/execution.Invoker` snapshots and validates command, effect, target, and impact; applies an injected policy; checks cancellation; then calls one logical mutation action. It deliberately does not decide whether policy means human approval, dry-run, OS authentication, role authorization, or another mechanism.
 

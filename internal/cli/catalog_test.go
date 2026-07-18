@@ -111,6 +111,20 @@ func actSpec(path, kind string, inputs ...string) CommandSpec {
 	return spec
 }
 
+func fixedTargetActSpec(path string) CommandSpec {
+	spec := utilitySpec(path)
+	spec.Summary = "Inspect a fixed tool-local target"
+	spec.Role = RoleAct
+	spec.Agent.Outcome = "Inspect the exact tool-local singleton selected by this command"
+	spec.Agent.FixedTarget = &FixedTargetContract{
+		Scope:       FixedTargetScopeToolLocal,
+		Kind:        "tool-setting",
+		StableID:    "default_setting_v1",
+		Description: "The one tool-owned setting selected by this exact command path.",
+	}
+	return spec
+}
+
 func TestDefaultCatalogIsValidAndUnique(t *testing.T) {
 	catalog := DefaultCatalog()
 	if err := catalog.Validate(); err != nil {
@@ -385,6 +399,92 @@ func TestCatalogEnforcesRoleAndReferenceFlowContracts(t *testing.T) {
 	}
 }
 
+func TestFixedTargetActContractFailsClosed(t *testing.T) {
+	valid := fixedTargetActSpec("settings inspect")
+	if err := NewCatalog(valid).Validate(); err != nil {
+		t.Fatalf("valid fixed-target act contract: %v", err)
+	}
+
+	tests := map[string]func(*CommandSpec){
+		"missing scope": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.Scope = ""
+		},
+		"external scope": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.Scope = "external"
+		},
+		"missing kind": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.Kind = ""
+		},
+		"missing stable ID": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.StableID = ""
+		},
+		"stable ID with whitespace": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.StableID = "not stable"
+		},
+		"missing description": func(spec *CommandSpec) {
+			spec.Agent.FixedTarget.Description = ""
+		},
+		"utility role": func(spec *CommandSpec) {
+			spec.Role = RoleUtility
+		},
+		"discover role": func(spec *CommandSpec) {
+			spec.Role = RoleDiscover
+			spec.Agent.Output.Fields[0].ReferenceKind = "tool-setting"
+		},
+		"consumed reference": func(spec *CommandSpec) {
+			spec.Args = "--id <item-id>"
+			spec.Agent.Inputs = []CommandInput{{
+				Name: "--id", Source: InputSourceFlag, Required: true,
+				Description: "Opaque item ID.", AllowedValues: []string{}, ReferenceKind: "item",
+			}}
+		},
+		"produced reference": func(spec *CommandSpec) {
+			spec.Agent.Output.Fields[0].ReferenceKind = "item"
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := cloneCommandSpec(valid)
+			mutate(&spec)
+			if err := NewCatalog(spec).Validate(); err == nil {
+				t.Fatal("invalid fixed-target act contract passed validation")
+			}
+		})
+	}
+}
+
+func TestFixedTargetContractDeepCopiesAndEncodesJSON(t *testing.T) {
+	spec := fixedTargetActSpec("settings inspect")
+	catalog := NewCatalog(spec)
+	copy := catalog.Commands()
+	copy[0].Agent.FixedTarget.Scope = "changed"
+	copy[0].Agent.FixedTarget.StableID = "changed"
+	copy[0].Agent.FixedTarget.Description = "Changed."
+	stored, found := catalog.Lookup(spec.Path)
+	if !found {
+		t.Fatal("fixed-target command disappeared from catalog")
+	}
+	if stored.Agent.FixedTarget == nil || stored.Agent.FixedTarget.Scope != FixedTargetScopeToolLocal ||
+		stored.Agent.FixedTarget.StableID != "default_setting_v1" ||
+		stored.Agent.FixedTarget.Description != spec.Agent.FixedTarget.Description {
+		t.Fatalf("fixed target shares storage: %+v", stored.Agent.FixedTarget)
+	}
+
+	encoded, err := json.Marshal(stored.Agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var document struct {
+		FixedTarget *FixedTargetContract `json:"fixed_target"`
+	}
+	if err := json.Unmarshal(encoded, &document); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(document.FixedTarget, spec.Agent.FixedTarget) {
+		t.Fatalf("fixed_target JSON = %+v, want %+v; document=%s", document.FixedTarget, spec.Agent.FixedTarget, encoded)
+	}
+}
+
 func TestReferenceGraphRejectsClosedCyclesAndAcceptsReachableChains(t *testing.T) {
 	selfCycle := actSpec("items rotate", "item", "--id")
 	selfCycle.Agent.Output.Fields[0] = OutputField{
@@ -655,6 +755,95 @@ func TestCreateMutationBindsOpaqueParentOnly(t *testing.T) {
 	parentOutsideTargets.Agent.Mutation.TargetInputs = []string{"--missing"}
 	if err := validateAgentContract(parentOutsideTargets); err == nil {
 		t.Fatal("create mutation with unbound parent passed")
+	}
+}
+
+func TestFixedTargetMutationsRequireExactUnboundTargetAndCompleteImpact(t *testing.T) {
+	newMutation := func(path string, effect operation.Effect) CommandSpec {
+		spec := fixedTargetActSpec(path)
+		spec.Effect = effect
+		spec.Agent.Errors = append(spec.Agent.Errors, mutationRuntimeErrors(path)...)
+		spec.Agent.Mutation = &MutationContract{
+			TargetKind:   spec.Agent.FixedTarget.Kind,
+			TargetInputs: []string{},
+			Impact: operation.Impact{
+				Cardinality: operation.CardinalityOne, Notification: operation.DeclarationNo,
+				AccessChange: operation.DeclarationNo, Destructive: operation.DeclarationNo,
+			},
+		}
+		return spec
+	}
+
+	create := newMutation("settings create", operation.EffectCreate)
+	write := newMutation("settings reset", operation.EffectWrite)
+	for _, spec := range []CommandSpec{create, write} {
+		if err := validateAgentContract(spec); err != nil {
+			t.Fatalf("valid %s fixed-target mutation: %v", spec.Effect, err)
+		}
+		if err := validateCommandReferenceRole(spec); err != nil {
+			t.Fatalf("valid %s fixed-target role: %v", spec.Effect, err)
+		}
+	}
+	if err := NewCatalog(utilitySpec("settings list"), create, write).Validate(); err != nil {
+		t.Fatalf("valid fixed-target mutation catalog: %v", err)
+	}
+
+	tests := map[string]func(*CommandSpec){
+		"unknown target inputs": func(spec *CommandSpec) {
+			spec.Agent.Mutation.TargetInputs = nil
+		},
+		"bound target input": func(spec *CommandSpec) {
+			spec.Args = "--id <setting-id>"
+			spec.Agent.Inputs = []CommandInput{{
+				Name: "--id", Source: InputSourceFlag, Required: true,
+				Description: "Opaque setting ID.", AllowedValues: []string{}, ReferenceKind: "tool-setting",
+			}}
+			spec.Agent.Mutation.TargetInputs = []string{"--id"}
+		},
+		"parent binding": func(spec *CommandSpec) {
+			spec.Agent.Mutation.ParentInput = "--parent"
+		},
+		"target ID binding": func(spec *CommandSpec) {
+			spec.Agent.Mutation.TargetIDInput = "--id"
+		},
+		"mismatched target kind": func(spec *CommandSpec) {
+			spec.Agent.Mutation.TargetKind = "other-setting"
+		},
+		"incomplete impact": func(spec *CommandSpec) {
+			spec.Agent.Mutation.Impact.Destructive = operation.DeclarationUnknown
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			spec := cloneCommandSpec(write)
+			mutate(&spec)
+			if err := validateAgentContract(spec); err == nil {
+				t.Fatal("invalid fixed-target mutation passed validation")
+			}
+		})
+	}
+
+	encoded, err := json.Marshal(write.Agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`"fixed_target":{"scope":"tool_local","kind":"tool-setting","stable_id":"default_setting_v1"`,
+		`"target_kind":"tool-setting"`,
+		`"target_inputs":[]`,
+		`"cardinality":"one"`,
+		`"notification":"no"`,
+		`"access_change":"no"`,
+		`"destructive":"no"`,
+	} {
+		if !bytes.Contains(encoded, []byte(want)) {
+			t.Errorf("fixed-target mutation JSON lacks %s: %s", want, encoded)
+		}
+	}
+	for _, forbidden := range []string{`"parent_input"`, `"target_id_input"`} {
+		if bytes.Contains(encoded, []byte(forbidden)) {
+			t.Errorf("fixed-target mutation JSON contains %s: %s", forbidden, encoded)
+		}
 	}
 }
 

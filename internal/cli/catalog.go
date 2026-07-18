@@ -225,6 +225,20 @@ type MutationContract struct {
 	Impact        operation.Impact `json:"impact"`
 }
 
+// FixedTargetScopeToolLocal is the only supported ownership scope for a fixed
+// target. External targets must continue to use opaque-reference discovery.
+const FixedTargetScopeToolLocal = "tool_local"
+
+// FixedTargetContract identifies one tool-local singleton selected by the
+// exact command path instead of through the opaque-reference graph. StableID
+// is public workflow identity, not a credential or externally supplied value.
+type FixedTargetContract struct {
+	Scope       string `json:"scope"`
+	Kind        string `json:"kind"`
+	StableID    string `json:"stable_id"`
+	Description string `json:"description"`
+}
+
 // MarshalJSON projects policy-relevant impact enums as stable words rather
 // than implementation-specific integer values.
 func (m MutationContract) MarshalJSON() ([]byte, error) {
@@ -255,15 +269,16 @@ func (m MutationContract) MarshalJSON() ([]byte, error) {
 // interpret a command without exploratory calls. Nil slices mean unknown and
 // are invalid; non-nil empty slices explicitly mean none.
 type AgentContract struct {
-	CapabilityID   string              `json:"capability_id"`
-	Outcome        string              `json:"outcome"`
-	Inputs         []CommandInput      `json:"inputs"`
-	Output         CommandOutput       `json:"output"`
-	Pagination     *PaginationContract `json:"pagination,omitempty"`
-	Prerequisites  []string            `json:"prerequisites"`
-	Authentication *authn.Requirement  `json:"authentication,omitempty"`
-	Errors         []CommandError      `json:"errors"`
-	Mutation       *MutationContract   `json:"mutation,omitempty"`
+	CapabilityID   string               `json:"capability_id"`
+	Outcome        string               `json:"outcome"`
+	Inputs         []CommandInput       `json:"inputs"`
+	Output         CommandOutput        `json:"output"`
+	Pagination     *PaginationContract  `json:"pagination,omitempty"`
+	FixedTarget    *FixedTargetContract `json:"fixed_target,omitempty"`
+	Prerequisites  []string             `json:"prerequisites"`
+	Authentication *authn.Requirement   `json:"authentication,omitempty"`
+	Errors         []CommandError       `json:"errors"`
+	Mutation       *MutationContract    `json:"mutation,omitempty"`
 }
 
 // CommandSpec is the single source of truth for dispatch, human help, and the
@@ -561,6 +576,21 @@ func validateAgentContract(command CommandSpec) error {
 	if err := validateContractText("outcome", contract.Outcome); err != nil {
 		return err
 	}
+	if contract.FixedTarget != nil {
+		if contract.FixedTarget.Scope != FixedTargetScopeToolLocal {
+			return fmt.Errorf("fixed target scope must be %q", FixedTargetScopeToolLocal)
+		}
+		if err := validateReferenceName(contract.FixedTarget.Kind); err != nil {
+			return fmt.Errorf("fixed target kind: %w", err)
+		}
+		if err := validateContractText("fixed target stable ID", contract.FixedTarget.StableID); err != nil ||
+			strings.IndexFunc(contract.FixedTarget.StableID, unicode.IsSpace) >= 0 {
+			return fmt.Errorf("agent fixed target stable ID is missing or invalid")
+		}
+		if err := validateContractText("fixed target description", contract.FixedTarget.Description); err != nil {
+			return err
+		}
+	}
 	if contract.Inputs == nil {
 		return fmt.Errorf("agent inputs are unknown; use an explicit empty list when there are none")
 	}
@@ -816,7 +846,10 @@ func validateAgentContract(command CommandSpec) error {
 	if err := validateReferenceName(mutation.TargetKind); err != nil {
 		return fmt.Errorf("mutation target kind: %w", err)
 	}
-	if mutation.TargetInputs == nil || len(mutation.TargetInputs) == 0 {
+	if mutation.TargetInputs == nil {
+		return fmt.Errorf("mutation target inputs are unknown")
+	}
+	if contract.FixedTarget == nil && len(mutation.TargetInputs) == 0 {
 		return fmt.Errorf("mutation target inputs are unknown")
 	}
 	seenTargets := make(map[string]struct{}, len(mutation.TargetInputs))
@@ -831,6 +864,18 @@ func validateAgentContract(command CommandSpec) error {
 	}
 	if err := mutation.Impact.Validate(); err != nil {
 		return fmt.Errorf("mutation impact: %w", err)
+	}
+	if contract.FixedTarget != nil {
+		if mutation.TargetKind != contract.FixedTarget.Kind {
+			return fmt.Errorf("fixed-target mutation target kind must match fixed target kind %q", contract.FixedTarget.Kind)
+		}
+		if len(mutation.TargetInputs) != 0 {
+			return fmt.Errorf("fixed-target mutation target_inputs must be explicitly empty")
+		}
+		if mutation.ParentInput != "" || mutation.TargetIDInput != "" {
+			return fmt.Errorf("fixed-target mutation must not declare parent_input or target_id_input")
+		}
+		return nil
 	}
 	if command.Effect == operation.EffectCreate {
 		if mutation.ParentInput == "" || mutation.TargetIDInput != "" {
@@ -1196,10 +1241,16 @@ func validateCommandReferenceRole(command CommandSpec) error {
 
 	switch command.Role {
 	case RoleUtility:
+		if command.Agent.FixedTarget != nil {
+			return fmt.Errorf("fixed targets may be declared only by act commands")
+		}
 		if len(produced) != 0 || len(consumed) != 0 {
 			return fmt.Errorf("utility commands must not produce or consume references")
 		}
 	case RoleDiscover:
+		if command.Agent.FixedTarget != nil {
+			return fmt.Errorf("fixed targets may be declared only by act commands")
+		}
 		if command.Effect != operation.EffectRead {
 			return fmt.Errorf("discover commands must have read effect")
 		}
@@ -1207,6 +1258,12 @@ func validateCommandReferenceRole(command CommandSpec) error {
 			return fmt.Errorf("discover commands must produce at least one reference")
 		}
 	case RoleAct:
+		if command.Agent.FixedTarget != nil {
+			if len(produced) != 0 || len(consumed) != 0 {
+				return fmt.Errorf("fixed-target act commands must not produce or consume opaque references")
+			}
+			return nil
+		}
 		if len(consumed) == 0 {
 			return fmt.Errorf("act commands must consume at least one reference")
 		}
@@ -1375,6 +1432,10 @@ func cloneAgentContract(contract AgentContract) AgentContract {
 	if contract.Pagination != nil {
 		pagination := *contract.Pagination
 		contract.Pagination = &pagination
+	}
+	if contract.FixedTarget != nil {
+		fixedTarget := *contract.FixedTarget
+		contract.FixedTarget = &fixedTarget
 	}
 	contract.Prerequisites = cloneSlice(contract.Prerequisites)
 	if contract.Authentication != nil {

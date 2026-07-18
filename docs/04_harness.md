@@ -154,13 +154,16 @@ Every strong statement should identify its enforcement path.
 | Finite domain state | Types, constructors, and table-driven negative tests |
 | Catalog completeness | Whole-catalog contract tests |
 | Discover-to-act composition | Reachable reference-graph validation, required act references, and byte-preserving round-trip tests |
+| Command-bound singleton action | Fixed-target catalog kind/ID/scope validation, no-reference exclusivity tests, and matching mutation-target tests |
 | Side-effect ordering | Fake adapter counters and failure-before-I/O tests |
 | Mutation outcome classification | Structured-fault-first/cause-stripping tests, non-retryable unclassified outcome fallback, and read-only recovery validation |
 | Authentication precondition | Secret-free session contract, zero-downstream-call tests, and catalog validation of every standard gate fault's code/kind/retryability |
 | Authentication binding | Opaque JSON-excluded/fmt-redacted binding type, infrastructure-only issuance lint, exact pass-through test, and derived two-account/stale-binding/refresh-race adapter fixtures |
-| Explicit Chatwork authentication selection | CLI/composition tests for exact `pat|oauth2`, deterministic selection when both sources exist, selected-source-only access, and zero-call/no-fallback failures |
+| Explicit Chatwork authentication selection | CLI/composition tests for authoritative environment `pat|oauth2` or stored login-selected `oauth2`, deterministic selection when both sources exist, selected-source-only access, and zero-call/no-fallback failures |
 | OAuth protocol boundary | Infrastructure-only dependency lint plus state, PKCE S256, exact redirect, public-client exchange, fixed-destination, redirect-denial, and cancellation adapter tests |
 | OAuth credential storage | Fake-store absence/denial/corruption/size/cancellation tests, no-plaintext-fallback assertion, and platform build matrix |
+| OAuth public configuration | Strict schema/bounds/symlink/permission/atomic-write tests proving that only non-secret client metadata and the selected method reach the platform user configuration |
+| OAuth browser handoff | Exact-origin bounded opener tests, shell-free argv inspection, failure fallback, cancellation, and secret-redacted errors |
 | OAuth refresh identity continuity | Serialized refresh-race fixtures, required-scope and exact-account revalidation, rotated-record persistence-before-authorization, stale-binding rejection, and zero unintended task requests |
 | Authentication secret exclusion | Provider/store/callback secret-canary scans across stdout, stderr, structured faults, logs, snapshots, fixtures, and test diagnostics |
 | Pagination completeness | Cursor loop/budget/cancellation tests, retryability/catalog agreement, and no-partial-result assertion |

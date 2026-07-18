@@ -112,20 +112,30 @@ The selected context capsule and any future presentation hypotheses consume the 
 - A future presentation-competition work packet defines candidates and measurement before experimental implementations begin.
 - Comparison reports identify each worktree/commit and record raw results, not only a winner summary.
 
-## Axiom 6: Discovery owns ambiguity; actions use exact references
+## Axiom 6: Discovery owns ambiguity; actions bind one exact target
 
-Room, account, and message discovery may return candidates. A read or mutation acts on declared opaque references passed unchanged from an invocable producer.
+Room, account, and message discovery may return candidates. A read or mutation
+acts on declared opaque references passed unchanged from an invocable producer.
+When the product deliberately owns exactly one local instance and exposes no
+selection, the exact command may instead bind one catalog-declared fixed
+`tool_local` target. That is an explicit singleton contract, not a default
+chosen from available remote or credential state.
 
 ### Consequences
 
 - Every public command is `utility`, `discover`, or `act`.
 - Display names, positions, browser URLs, and presentation-derived shorthand are not authorization identities.
 - An action never case-folds, decodes, trims, reconstructs, or substitutes a Chatwork identifier.
+- A fixed-target action declares a stable kind, ID, scope, and description,
+  produces/consumes no target reference, and becomes invalid when the product
+  admits multiple possible targets.
 - Required-reference chains lead back to an invocable producer.
 
 ### Enforcement
 
 - Reference kinds live on structured catalog inputs and outputs.
+- Fixed singleton targets live on a separate structured catalog field and are
+  mechanically excluded from provider-owned or reference-selected flows.
 - Whole-catalog graph tests prove producer/consumer reachability.
 - Round-trip and negative tests preserve exact identity and reject alternate forms before adapter access.
 
@@ -179,14 +189,19 @@ ordinary creates/updates; the reviewed access-changing and destructive sets
 add exact `--confirm=access-change` and `--confirm=destructive`, respectively.
 Uncertain mutation outcomes reconcile only through read-only tasks.
 
-Authentication selection is explicit rather than preferential. Every API task
-requires exact `CWK_AUTH_METHOD=pat|oauth2`; PAT reads `CWK_API_TOKEN` only from
-the command process, while OAuth uses Authorization Code Grant with state and
-PKCE S256 for one registered public client. The OAuth redirect is an exact
-non-HTTP custom URI, the complete callback is pasted through stdin, and tokens
-are stored only in the operating-system credential store. `auth profiles`
-produces the one opaque OAuth profile reference consumed unchanged by login,
-status, and logout. Login refuses to overwrite an existing credential, and
+Authentication selection is explicit rather than preferential. An exact
+`CWK_AUTH_METHOD` selects command-process PAT automation; otherwise the first
+single-account OAuth login attempt supplies the stored exact `oauth2` selection. PAT
+reads `CWK_API_TOKEN` only from the command process, while OAuth uses
+Authorization Code Grant with state and PKCE S256 for one registered public
+client. First login accepts the non-secret client ID, uses the fixed
+`cwk://oauth/callback` redirect, opens the consent URL when a bounded platform
+opener is available, and reads one complete callback from stdin. Public client
+configuration is stored before consent in the platform user configuration and
+tokens only after successful exchange in the operating-system credential store.
+Login/status/logout bind the one
+catalog-declared local authentication singleton and require no synthetic
+profile reference. Login refuses to overwrite an existing credential, and
 logout removes local credential material without claiming remote revocation.
 
 Future provider additions, confidential-client or device grants, multiple
