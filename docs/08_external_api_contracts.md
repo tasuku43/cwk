@@ -117,6 +117,30 @@ For every remotely decoded shape, commit the smallest legally publishable fixtur
 
 Record fixture provenance, schema/version, checksum, license, and whether it was synthesized. A generator is pinned, deterministic, and unable to register a public command or relax an effect automatically. Schema drift fails a contract test and becomes a reviewed product/security decision when it changes capability, output, or impact.
 
+## Chatwork semantic-output boundary
+
+Chatwork message responses cross two distinct compatibility boundaries:
+
+1. infrastructure validates the reviewed provider wire shape and parses supported Chatwork notation into typed semantic facts;
+2. a presentation candidate projects those facts without changing the semantic answer, canonical identity, bounds, or trust classification.
+
+Neither boundary exposes raw upstream JSON as the product model. A wire-field addition does not automatically become public output, and a notation parser update cannot silently create a new public relationship type.
+
+The first message-context semantic fixture must declare:
+
+- the exact room reference producer and consumer;
+- whether the upstream request returns a latest window, a differential window, or another bounded snapshot;
+- the maximum messages, bytes, and provider calls;
+- stable ordering and duplicate handling;
+- explicit To, reply, and quote mapping rules;
+- behavior when a reply parent is outside the returned window;
+- task-relevant completeness, coverage, uncertainty, and canonical references;
+- rate-limit, authentication, permission, malformed-notation, response-bound, and incomplete-context failures.
+
+An internally complete semantic result over a partial upstream window is still partial room context. Every eligible presentation must make that answer recoverable. A zero exit status means the declared bounded result was produced completely; it does not claim that all room history was retrieved.
+
+A supported evaluation outcome must consume each candidate directly. If its acceptance transcript uses `jq`, a custom join, Chatwork-tag parsing, or an undocumented follow-up request, that candidate is ineligible or the capability's stated outcome is too broad. Concrete schemas and grammars are decided by the later presentation competition, not this API contract.
+
 ## Capability and coverage discipline
 
 The command catalog is the only registry of public commands. Do not create a second dispatcher from an OpenAPI document, SDK, or capability ledger.

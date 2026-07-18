@@ -40,7 +40,7 @@ Policy that must be reviewed by both humans and tools belongs here when it is fi
 
 ### `tools/bootstrap`
 
-Bootstrap performs validated exact replacement of `github.com/tasuku43/agentic-cli-foundry`, `agentic-cli-foundry`, and `Agentic CLI Foundry`. It does not search-and-guess arbitrary names.
+Bootstrap performs validated exact replacement of `github.com/tasuku43/cwk`, `cwk`, and `Chatwork CLI`. It does not search-and-guess arbitrary names.
 
 Always preview first:
 
@@ -118,6 +118,11 @@ The test suite has complementary levels:
 - Opaque-ID round-trip tests pass discovery output unchanged into action input.
 - Negative tests prove rejection before side effects.
 - Release tests inspect actual artifacts and metadata, not only workflow text.
+- Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
+- Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
+- No-post-processing agent transcripts fail if a supported task requires `jq`, `grep`, a custom join, raw notation parsing, source inspection, or an exploratory provider call.
+- Presentation competitions pin fixtures, agent/model versions, prompts, repetitions, invocation budgets, answer scoring, token accounting, and latency measurement before candidate implementation.
+- Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, and maintenance evidence. A selected presentation receives golden and compatibility tests only after review accepts it.
 
 A global coverage percentage is not a substitute for these contracts. Add tests at the boundary where a future regression would otherwise pass unnoticed.
 
@@ -141,6 +146,12 @@ Every strong statement should identify its enforcement path.
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Bounded root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
+| Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |
+| Supported outcome completeness | Transcript assertion of zero external post-processing and declared provider/context coverage |
+| Context relationship truth | Presentation-independent typed fixtures and negative inference tests for To, quote, names, proximity, and missing references |
+| Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
+| Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
+| Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
 | External schema compatibility | Vendored fixture, generator, and drift test |
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures |

@@ -7,12 +7,12 @@ import (
 	"io"
 	"strings"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/app/doctorcmd"
-	"github.com/tasuku43/agentic-cli-foundry/internal/app/samplecmd"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/operation"
-	"github.com/tasuku43/agentic-cli-foundry/internal/infra/sampledata"
-	"github.com/tasuku43/agentic-cli-foundry/internal/infra/systemdoctor"
+	"github.com/tasuku43/cwk/internal/app/doctorcmd"
+	"github.com/tasuku43/cwk/internal/app/samplecmd"
+	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/infra/sampledata"
+	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
 )
 
 // CLI contains injected streams and application services.

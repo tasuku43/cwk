@@ -177,7 +177,6 @@ func ReadyProblems(project Project) []string {
 		{"name", project.Name, Defaults.Name},
 		{"binary_name", project.BinaryName, Defaults.BinaryName},
 		{"go_module", project.GoModule, Defaults.GoModule},
-		{"github_owner", project.GitHubOwner, Defaults.GitHubOwner},
 		{"github_repository", project.GitHubRepository, Defaults.GitHubRepository},
 		{"description", project.Description, Defaults.Description},
 		{"formula_class", project.FormulaClass, Defaults.FormulaClass},

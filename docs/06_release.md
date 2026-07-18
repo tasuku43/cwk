@@ -18,7 +18,7 @@ Examples are `v1.2.3` and `v1.2.3-rc.1`. Stable tags may update stable package-m
 The binary reports the embedded version and commit as:
 
 ```text
-agentic-cli-foundry <version> (<commit>)
+cwk <version> (<commit>)
 ```
 
 Release checks verify that the displayed values match the tag and source revision.

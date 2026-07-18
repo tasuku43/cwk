@@ -1,6 +1,6 @@
 # Authentication Foundation
 
-This document defines the reusable OAuth 2.0 and personal access token (PAT) boundary supplied by Agentic CLI Foundry. The template fixes secret-free contracts and fail-closed application behavior. A derived project chooses the actual provider flow, credential source, storage, scopes, and account policy in its thesis and security model.
+This document defines the reusable OAuth 2.0 and personal access token (PAT) boundary supplied by Chatwork CLI. The template fixes secret-free contracts and fail-closed application behavior. A derived project chooses the actual provider flow, credential source, storage, scopes, and account policy in its thesis and security model.
 
 The governing dependency decision is [ADR 0001](decisions/0001-oauth-library-boundary.md): do not implement OAuth protocol machinery from scratch, and do not add an unused OAuth dependency to the template core.
 

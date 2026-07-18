@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/app/pagination"
-	"github.com/tasuku43/agentic-cli-foundry/internal/app/portcheck"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/operation"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/page"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/sample"
+	"github.com/tasuku43/cwk/internal/app/pagination"
+	"github.com/tasuku43/cwk/internal/app/portcheck"
+	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/domain/page"
+	"github.com/tasuku43/cwk/internal/domain/sample"
 )
 
 // ErrNotFound indicates that a canonical sample ID has no matching item.

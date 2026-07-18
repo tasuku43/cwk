@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/operation"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/page"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/sample"
+	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/domain/page"
+	"github.com/tasuku43/cwk/internal/domain/sample"
 )
 
 type fakeRepository struct {

@@ -66,6 +66,7 @@ A thesis change is not complete when only `docs/00_theses.md` changed. Its conse
 10. **One gate decides completion.** Finish implementation work only when `task check` passes. Publication work also requires `task public:check`; release work requires `task release:check`.
 11. **External calls are bounded and secret-free above infrastructure.** Propagate one context, declare pagination/call policy, and keep OAuth tokens, PATs, and credential-bearing types inside infrastructure.
 12. **External text remains untrusted data.** Visible projection protects terminal and TSV/JSON structure by distinguishing backslashes, controls/formats, and Unicode line separators; it does not filter printable prompt-like meaning. Opaque references bypass display projection and retain their exact validated value.
+13. **Supported agent outcomes own their semantics; presentation is evidence-selected.** A supported task must not require `jq`, `grep`, a custom join/parser, raw Chatwork-notation interpretation, source inspection, or an exploratory API call. Typed results distinguish explicit resolved, explicit unresolved, and absent relations; To, quotes, names, proximity, and prose never fabricate reply edges. Do not promote JSON, dictionaries, aliases, indentation, or another presentation pattern into a product invariant before parallel candidates using the same semantic fixtures are compared on required understanding quality, canonical-reference use, token cost, tool steps, safety, and maintenance.
 
 ## Layer responsibilities
 
@@ -83,7 +84,7 @@ Application packages define the smallest port needed by their task. Infrastructu
 The default vertical slice is:
 
 ```text
-cmd/agentic-cli-foundry
+cmd/cwk
   -> internal/cli
   -> internal/app/doctorcmd
   -> internal/domain/doctor and internal/domain/operation
@@ -126,6 +127,7 @@ Observe runtime-only behavior before changing it. Add bounded diagnostics, repro
 8. Declare `Effect`, `Intent`, `TargetRef`, and `Impact`. Bind create scope through `MutationContract.parent_input`; bind a write's existing target through `target_id_input` and any distinct scope through optional `parent_input`. Make missing, unbound, mismatched, or inconsistent values fail before the side effect.
 9. For an external API, bind the secret-free authentication requirement, declare every standard `app/authn.Gate` fault plus any provider-specific fault in the catalog, issue `BindingID` only inside infrastructure, pass the validated session's non-serialized binding unchanged through each authenticated task port, resolve and revalidate that exact infrastructure authentication record immediately before I/O, and declare pagination/call policy, provider fault mapping, and publishable schema fixtures before enabling live I/O. Never pass credential-bearing clients or provider types into application code.
 10. Add unit, contract, opaque-reference round-trip, negative-path, hostile-output, recovery, and public-boundary tests in proportion to risk.
+    For a relationship-rich Chatwork read, first add presentation-independent semantic fixtures, answer keys, negative relationship-inference tests, canonical-reference tests, and a zero-external-post-processing agent transcript. Select presentation only through a worktree competition with pinned agents, prompts, repetitions, token accounting, quality floor, and comparable raw evidence; then add golden tests for the accepted output contract.
 11. Propagate any thesis change through product, architecture, security, Skill, and harness documents.
 12. Run `task check` and replay the relevant agent-readiness scenario.
 

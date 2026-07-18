@@ -1,4 +1,4 @@
-# Agentic CLI Foundry Design
+# Chatwork CLI Design
 
 - Status: Accepted and integrated
 - Date: 2026-07-18
@@ -48,9 +48,9 @@ This approach keeps a minimal vertical slice while including the durable reasoni
 
 The repository uses valid public defaults:
 
-- module `github.com/tasuku43/agentic-cli-foundry`;
-- binary `agentic-cli-foundry`;
-- display name `Agentic CLI Foundry`.
+- module `github.com/tasuku43/cwk`;
+- binary `cwk`;
+- display name `Chatwork CLI`.
 
 `.harness/project.json` stores validated derived identity and policy. `tools/bootstrap` previews and then performs exact replacement of those defaults. Exact runnable values are safer than placeholder syntax embedded in Go identifiers or filesystem paths.
 
@@ -92,7 +92,7 @@ The default `doctor` command crosses four layers as a utility task. The syntheti
 - `internal/infra/systemdoctor` provides a concrete system adapter.
 - `internal/domain/sample`, `internal/app/samplecmd`, and `internal/infra/sampledata` provide the offline discover/act example.
 - `internal/cli` owns `CommandSpec`, `Catalog`, routing, help, rendering, and wiring.
-- `cmd/agentic-cli-foundry` remains a thin executable.
+- `cmd/cwk` remains a thin executable.
 
 Domain has no outward dependency. Application depends on domain. Infrastructure depends on domain-facing contracts without importing application. CLI is the composition root and may wire all layers.
 
@@ -104,11 +104,11 @@ Each command owns an `AgentContract` with a stable capability ID, outcome, descr
 
 ## Public and agent contracts
 
-The default CLI provides human help and `agentic-cli-foundry help --format agent`. Schema v3 makes the root response a compact outcome/capability index with a machine-readable scope request. Exact-command and namespace selectors return complete catalog contracts and derived workflows; the scoped command entries retain path, summary, usage, effect, role, produced/consumed references, and structured invocation/recovery detail. This keeps an unknown-outcome journey to two discovery invocations and a known-path journey to one without multiplying full contracts in root help.
+The default CLI provides human help and `cwk help --format agent`. Schema v3 makes the root response a compact outcome/capability index with a machine-readable scope request. Exact-command and namespace selectors return complete catalog contracts and derived workflows; the scoped command entries retain path, summary, usage, effect, role, produced/consumed references, and structured invocation/recovery detail. This keeps an unknown-outcome journey to two discovery invocations and a known-path journey to one without multiplying full contracts in root help.
 
 Commands separate default human-readable TSV/text from declared JSON machine output. External text remains untrusted data: presentation visibly escapes backslashes, control/format runes, and Unicode line/paragraph separators while preserving printable JSON-looking and prompt-like content as data. This protects output structure but does not claim semantic prompt-injection prevention. Opaque references bypass display projection and preserve the exact validated value. Runtime failures use the same stable taxonomy declared in the catalog and can be rendered as structured JSON on stderr. Exit statuses distinguish input, authentication, permission, missing/ambiguous target, rate limit, temporary failure, rejection, cancellation, unsupported capability, contract failure, and internal failure.
 
-`agentic-cli-foundry sample list` emits lowercase `id<TAB>name` or its declared JSON equivalent; `agentic-cli-foundry sample read --id <sample-id>` emits `id<TAB>name<TAB>content` or JSON. The ID is canonical `smp_` plus twelve lowercase hexadecimal characters and is passed unchanged. List traversal uses the same opaque-page and complete-or-no-result contract required of a real API adapter.
+`cwk sample list` emits lowercase `id<TAB>name` or its declared JSON equivalent; `cwk sample read --id <sample-id>` emits `id<TAB>name<TAB>content` or JSON. The ID is canonical `smp_` plus twelve lowercase hexadecimal characters and is passed unchanged. List traversal uses the same opaque-page and complete-or-no-result contract required of a real API adapter.
 
 These contracts are deliberately small but must be tested as public behavior.
 

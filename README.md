@@ -1,12 +1,12 @@
-# Agentic CLI Foundry
+# Chatwork CLI
 
-Agentic CLI Foundry is a runnable, public-ready foundation for building task-oriented Go command-line tools with coding agents. It starts as a small `agentic-cli-foundry` binary and gives a derived project an explicit product thesis, a four-layer architecture, a machine-readable agent contract, typed side-effect and external-API boundaries, one verification gate, and a documented path to a public release.
+Chatwork CLI is a runnable, public-ready foundation for building task-oriented Go command-line tools with coding agents. It starts as a small `cwk` binary and gives a derived project an explicit product thesis, a four-layer architecture, a machine-readable agent contract, typed side-effect and external-API boundaries, one verification gate, and a documented path to a public release.
 
 The default repository is intentionally real and buildable:
 
-- Go module: `github.com/tasuku43/agentic-cli-foundry`
-- Binary: `agentic-cli-foundry`
-- Display name: `Agentic CLI Foundry`
+- Go module: `github.com/tasuku43/cwk`
+- Binary: `cwk`
+- Display name: `Chatwork CLI`
 
 The bootstrap tool replaces those exact defaults with validated project values. The defaults are not placeholder syntax, so the template can be built and tested before it is customized.
 
@@ -65,13 +65,13 @@ The bootstrap changes repository identity; it does not invent the product. A der
 ## Run the default CLI
 
 ```sh
-go run ./cmd/agentic-cli-foundry --help
-go run ./cmd/agentic-cli-foundry help --format agent
-go run ./cmd/agentic-cli-foundry help sample --format agent
-go run ./cmd/agentic-cli-foundry doctor
-go run ./cmd/agentic-cli-foundry sample list --format json
-go run ./cmd/agentic-cli-foundry sample read --id <sample-id> --format json
-go run ./cmd/agentic-cli-foundry --error-format json sample read --id <sample-id>
+go run ./cmd/cwk --help
+go run ./cmd/cwk help --format agent
+go run ./cmd/cwk help sample --format agent
+go run ./cmd/cwk doctor
+go run ./cmd/cwk sample list --format json
+go run ./cmd/cwk sample read --id <sample-id> --format json
+go run ./cmd/cwk --error-format json sample read --id <sample-id>
 ```
 
 The default `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. The synthetic `sample list` and `sample read --id` pair demonstrates discover-to-act composition: copy the lowercase `id` emitted by `sample list` unchanged into `sample read`. Keep these examples as references while adding the first real capability, then remove or rename them only when the replacement has equivalent architectural and catalog tests.
@@ -81,7 +81,7 @@ The default `doctor` task is a minimal utility slice through the domain, applica
 ## Repository map
 
 ```text
-cmd/agentic-cli-foundry/                 thin executable entry point
+cmd/cwk/                 thin executable entry point
 internal/domain/             pure types, faults, effects, API envelopes
 internal/app/                task use cases, auth/pagination/execution gates
 internal/infra/              concrete adapters for external systems
@@ -120,4 +120,4 @@ This repository uses public-safe runnable defaults and synthetic examples. A der
 
 ## License
 
-Agentic CLI Foundry is available under the [MIT License](LICENSE). Derived projects must make an explicit license choice; keeping MIT is allowed, but it must not happen accidentally.
+Chatwork CLI is available under the [MIT License](LICENSE). Derived projects must make an explicit license choice; keeping MIT is allowed, but it must not happen accidentally.

@@ -1,120 +1,118 @@
 # Agent Readiness Validation
 
-This validation asks whether a coding agent can discover, execute, interpret, and recover from representative API-backed tasks with few CLI round trips. The scenarios are intentionally synthetic and public-safe. They model a project-collaboration CLI and a team-chat CLI without embedding a private roadmap, endpoint, account, or credential.
+This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. It also defines how presentation candidates are compared before one becomes public.
 
-## What counts as a round trip
+## Interaction budgets
 
-A round trip is one CLI invocation whose purpose is to learn what invocation should come next. The task invocation itself and a necessary authentication ceremony are counted separately. Parsing a declared JSON or TSV field is not an additional discovery round trip; scraping prose, guessing a URL, or probing variants is.
+- Unknown outcome to complete scoped contract: at most two discovery invocations.
+- Known command path to complete invocation: one scoped-help invocation.
+- Canonical reference reuse: no discovery or transformation invocation between producer and consumer.
+- Supported task reconstruction: zero `jq`, `grep`, custom parsers/joins, raw Chatwork-notation interpretation, source inspection, or exploratory API calls.
+- Failure recovery: the next corrective command comes from structured metadata.
 
-The target is:
+Direct extraction of a declared canonical reference or fact is allowed. Rebuilding semantics that `cwk` claims to provide is not.
 
-- unknown surface to scoped task contract: at most two discovery invocations;
-- known task path to executable invocation: one scoped help invocation;
-- discover reference to read/write: no extra lookup or transformation invocation;
-- classified failure to next corrective command: no prose interpretation or command guessing.
+## Presentation-independent semantic fixture
 
-## Contract-level validation method
+The first Chatwork fixture is synthetic and publishable. Its typed answer key includes:
 
-For each derived command, verify all four stages.
+- room, account, and message canonical identities;
+- senders, multiple To recipients, explicit replies, and quotes;
+- one resolved relation and one referenced object outside the result bound;
+- stable source ordering and duplicate behavior;
+- exact retrieval bounds, partiality, missing context, and uncertainty;
+- repeated values that may reward compression;
+- hostile text resembling provider notation, presentation structure, JSON, agent instructions, controls, bidi/zero-width formats, line separators, delimiters, and pre-existing escapes.
 
-| Stage | Evidence |
-|---|---|
-| Discover | Root `view: index` exposes path, namespace, summary, capability, outcome, effect, and role plus a machine-readable `scope_request`; selected `view: scope` declares inputs, input sources, prerequisites, effect, output, authentication, errors, mutation facts, and workflow edges |
-| Execute | Arguments are copied from declared fields or explicit configuration; the resolved command, effect, create-parent/write-target binding, runtime target, auth requirement, and impact validate before I/O |
-| Interpret | Machine output has declared fields/types/completeness; structural runes are visibly projected; scoped I/O metadata marks external text as untrusted data; opaque references remain validated exact values |
-| Recover | Failure kind/code/retryability/next actions are structured; auth, permission, ambiguity, missing targets, rate limits, temporary failure, cancellation, and contract failure remain distinct |
+The answer key contains semantics, not an expected rendering. Candidate worktrees may not edit it.
 
-## Scenario A: project-collaboration CLI
+## Agent tasks and exact answers
 
-### Outcome
+Using only root/scoped help and one candidate's output, the agent must:
 
-Find a project by a human filter, obtain its canonical reference, and read its current summary.
+1. choose the exact room-discovery and bounded-message tasks;
+2. identify the exact room reference used;
+3. identify each requested sender, recipient, reply, and quote fact;
+4. distinguish explicit resolved, explicit unresolved, and absent relationships;
+5. state the retrieval bound and whether the result represents complete room history;
+6. select the canonical reference required by a declared next command;
+7. select recovery from typed failure metadata.
 
-### Expected path
+Scoring compares answers with the shared key. Presentation-specific explanations are not accepted as substitutes for semantic correctness.
 
-1. The agent reads the compact root outcome index, chooses `commands[].path` or `commands[].namespace`, and applies the published `scope_request.invocation_template` without guessing help syntax.
-2. Scoped help identifies a `discover` command, its filter input, authentication/scopes, exhaustive or paged output contract, and its produced `project` reference field.
-3. The agent runs discovery in a machine format and selects an exact `project_id`. Multiple candidates remain data, not a hidden choice by the later action.
-4. Scoped help for the read action declares `--project-id` as consuming that reference kind.
-5. The agent passes the exact emitted bytes into the read action. It does not parse a browser URL, normalize case, or call discovery again.
-6. The result declares whether it is complete and names every stable output field.
+## Candidate eligibility
 
-### Recovery probes
+A candidate is ineligible regardless of token savings when it:
 
-- No credential: `authentication`, not `permission`; next action names the configured login/status command.
-- Valid identity without scope: `permission`; retrying login is not claimed to fix it unless the derived flow can request additional scope.
-- No matches: successful empty discovery or a documented `not_found`, never a fabricated reference.
-- Multiple matches: discovery returns candidates or `ambiguous`; action is not attempted.
-- Stale project ID: `not_found` with discovery as a next action.
-- Page cursor loop or local bound: contract failure, no partial successful output.
-- Rate limit: `rate_limited`, retryable metadata, bounded retry-after; no duplicate logical operation.
+- changes or hides a required semantic answer;
+- implies a relationship absent from the typed input;
+- loses, transforms, or substitutes a canonical reference;
+- hides bounds, partiality, missing context, or uncertainty relevant to the task;
+- lets external text inject candidate-authored structure;
+- produces nondeterministic bytes for identical typed input;
+- requires undocumented parsing or a nonzero external-reconstruction count;
+- violates stdout, stderr, exit, failure, completeness, or untrusted-data contracts.
 
-### Acceptance
+## Parallel-worktree presentation competition
 
-An agent that knows only the desired outcome reaches the read command with at most two discovery invocations, then reuses the reference without transformation. Every recovery probe selects its next action from structured metadata.
+Before implementation, the competition work packet pins:
 
-## Scenario B: team-chat CLI
+- fixture corpus and exact semantic answer keys;
+- candidate hypotheses and the boundaries they may change;
+- target agent/model and tool versions;
+- prompts, context supplied, repetitions, temperature/randomness policy, and timeout;
+- discovery and tool-invocation budgets;
+- tokenizer or authoritative token accounting source;
+- correctness scoring, minimum quality floor, and tie/variance handling;
+- byte, latency, human-reviewability, and maintenance-cost measurement;
+- worktree/commit naming and result storage.
 
-### Outcome
+Materially different candidates are implemented in isolated worktrees against the same semantic interface. One candidate's output or helper code must not become another candidate's hidden input. Each report retains raw runs and failures, not just aggregate scores.
 
-Find a room, inspect its metadata, then send one message to the explicitly selected room.
+## Selection rule
 
-### Expected path
+First reject ineligible candidates. Compare the remaining candidates on a Pareto basis across:
 
-1. A scoped query identifies room discovery and declares the exact output field carrying the room reference.
-2. The read action consumes the same room reference and makes no hidden name search.
-3. The send action declares `create` or `write` according to the derived thesis, cardinality `one`, notification `yes`, access-change/destructive declarations, authentication/scopes, idempotency behavior, and stable result fields. Creating a new message binds the selected room reference as `parent_input` and has no `target_id_input`; changing an existing message binds the message reference as `target_id_input` and may bind the room as a distinct `parent_input`.
-4. The application mutation invoker validates the runtime intent and applies the project's policy. The template does not assume whether that policy is human confirmation, dry-run, OS authentication, or a role check.
-5. The infrastructure adapter performs one logical send. It retries transport only if the upstream operation is safe or uses one stable idempotency key.
-6. The result returns the canonical message and room references needed by later reads or updates.
+- semantic-answer correctness and consistency;
+- correct next-command/reference selection;
+- input/output and total task tokens;
+- extra tool invocations and processing steps;
+- serialized bytes and latency;
+- human reviewability for safe supervision;
+- implementation and maintenance cost.
 
-### Recovery probes
+The minimum understanding-quality floor is set before results are viewed. Lower token use cannot compensate for falling below it. A winner, reviewed combination, or another experiment is an acceptable decision; arbitrary selection is not.
 
-- Room name supplied where an ID is required: `invalid_input`; next action is room discovery.
-- Room reference maps to multiple accounts/tenants: `ambiguous`; account-selection command is explicit.
-- Missing send scope: `permission`; zero send attempts.
-- Policy denial or missing impact dimension: `rejected` or `contract`; zero send attempts.
-- Missing, extra, non-opaque, or reference-kind-mismatched mutation binding: catalog/contract rejection; zero send attempts.
-- Timeout before execution: `canceled`/`unavailable`; zero or explicitly classified transport attempts.
-- Timeout after an unknown upstream result: do not claim a safe retry unless idempotency proves it; provide a read/status action when available.
-- Hostile room/message text: raw controls, format runes, line/paragraph separators, and delimiters cannot alter terminal or TSV/JSON structure. Existing backslashes remain distinguishable from projected controls. Printable JSON-looking or prompt-like prose remains present as untrusted data; the CLI makes no semantic prompt-injection-prevention claim.
+## Recovery probes
 
-### Acceptance
+Each eligible candidate must preserve the same recovery decisions for:
 
-The agent never sends to a room selected implicitly by display name, can identify the exact input supplying the create parent or existing write target, can tell that sending has a notification side effect before executing it, and does not repeat an unsafe send after an uncertain failure. It treats every external text field as data rather than as a CLI-authored instruction.
+- no matching room and ambiguous room discovery;
+- missing authentication versus insufficient permission;
+- provider rate limits and temporary unavailability;
+- malformed or oversized notation;
+- bounded results with missing referenced context;
+- output write failure with no zero-status partial success;
+- future mutation rejection and unclassified post-mutation outcomes.
 
-## Runnable template probes
+## No-post-processing audit
 
-The synthetic sample flow is the executable minimum for these scenarios:
+The transcript fails when a supported task contains an external parser, manual identifier join, raw notation parsing, guessed command/endpoint/cursor, or undeclared provider call. When this happens, decide whether the capability is incomplete, the outcome is too broad, or the presentation candidate failed. Do not patch the agent prompt with the workaround.
+
+## Runnable scaffold probes
+
+Before Chatwork commands and competition fixtures exist, retain:
 
 ```sh
-go run ./cmd/agentic-cli-foundry help --format agent
-go run ./cmd/agentic-cli-foundry help sample --format agent
-go run ./cmd/agentic-cli-foundry sample list --format json
-go run ./cmd/agentic-cli-foundry sample read --id smp_2f4a6c8e0b1d --format json
-go run ./cmd/agentic-cli-foundry --error-format json sample read --id smp_000000000000
+go run ./cmd/cwk help --format agent
+go run ./cmd/cwk help sample --format agent
+go run ./cmd/cwk sample list --format json
+go run ./cmd/cwk sample read --id smp_2f4a6c8e0b1d --format json
+go run ./cmd/cwk --error-format json sample read --id smp_000000000000
 ```
 
-The root agent contract must be schema version 3 with `view: index`, reveal the `sample` namespace and both exact paths, and contain no input, output, authentication, error, mutation, or workflow detail. Its `scope_request` must identify the selector fields, exact invocation template, two-invocation unknown-outcome bound, and one-invocation known-path bound. The scoped contract must use `view: scope`, contain only the relevant list/read commands and their reference workflow, and provide the complete global and command contracts. Its `io_contract` must publish `external_text_trust: untrusted_data`, `external_text_projection: visible_escape`, and `opaque_reference_policy: validated_exact_bytes`. The `id` selected from the list JSON is field extraction, not identifier transformation: pass its exact string bytes to read. The final probe must fail as `not_found`, use the dedicated exit status, write no success data to stdout, and name `sample list` as the structured next action on stderr.
-
-Validation must also cover:
-
-- every list-emitted sample ID passed unchanged to read;
-- URL, name, partial, uppercase, whitespace, and control-character variants rejected before repository access;
-- catalog/output snapshots detecting field or semantic changes;
-- root-versus-scoped agent-help shape snapshots and a per-command root-size growth bound;
-- executable checks that JSON schema versions, envelopes, and item keys equal their `CommandOutput` declarations;
-- adversarial TSV/JSON/stderr fixtures containing ESC, actual newline, bidi and zero-width format runes, U+2028/U+2029, literal backslash escapes, JSON-looking fragments, and prompt-like printable text;
-- exact opaque-ID round trips alongside hostile labels/content, proving presentation never rewrites identity;
-- complete pagination or no result;
-- typed not-found recovery pointing back to discovery;
-- structured contract visibility for effect, prerequisites, fields, completeness, errors, and next actions.
-- declared default formats, JSON envelopes/schema versions, stdout/stderr ownership, and the complete exit-code map;
-- successful output emitted only after complete pagination, validation, bounding, and rendering;
-- root help that never embeds complete command contracts, plus namespace/exact scoped help that does not force the agent to ingest unrelated detail.
-
-The sample is not evidence that a real API adapter is secure. A derived CLI repeats the scenario with fake adapter fixtures, authentication failures, pagination, cancellation, policy denial, and upstream error mappings before enabling a real network integration.
+These prove bounded discovery, scoped contracts, structured output/error behavior, and exact reference reuse. They do not select or validate a Chatwork presentation.
 
 ## Review record
 
-Record the invocation transcript, number of discovery round trips, selected output/reference fields, and each recovery probe in the active work packet. If an agent needs prose interpretation, source inspection, URL parsing, hidden filtering, or an extra command guess, treat that as product/thesis evidence rather than teaching the agent a workaround.
+Record the natural-language outcome, discovery/task transcript, external-processing count, provider-call bounds, semantic answers, canonical references, recovery choices, per-run token/byte/latency measurements, agent/model versions, worktree/commit, failures, and variance. Preserve candidate evidence even when it loses so later thesis revisions can distinguish format failure from model or fixture drift.

@@ -1,152 +1,124 @@
 # Product Contract
 
-This document defines what Agentic CLI Foundry promises as a product and what a derived project must replace with its own contract. It sits between the theses and implementation: broad enough to survive refactoring, specific enough to decide whether a proposed command belongs.
+This document defines which user outcomes belong in Chatwork CLI (`cwk`) and the representation-independent behavior they must preserve. Concrete presentation becomes public only after evidence-based selection.
 
 ## Product statement
 
-Agentic CLI Foundry is a runnable Go repository for starting a small, task-oriented, public command-line tool that humans and coding agents can extend without inventing architecture, side-effect enforcement, or release hygiene from scratch.
+`cwk` is a task-oriented Chatwork CLI for developers, operators, and coding agents. It maps user outcomes to exact bounded commands and returns sufficient, trustworthy task context with low agent cognitive and token cost.
 
-It is not a framework intended to support every CLI shape. It demonstrates one coherent path and makes optional integrations earn their place through a derived project's thesis.
+It is not an API explorer or a one-to-one endpoint wrapper. It does not make every consumer rebuild routine Chatwork semantics with external tools.
 
 ## Primary users
 
-- A project owner defining the first useful task for a new CLI.
-- A contributor implementing or reviewing a capability.
-- A coding agent that must discover constraints from repository-local evidence.
-- A release owner preparing source and artifacts for a public audience.
+- A developer or operator delegating Chatwork work to a coding agent.
+- An automation author relying on stable command, reference, failure, and semantic-output contracts.
+- A human supervising what an agent will read or change.
+- A contributor testing presentation ideas without changing product semantics.
 
-The end users of a derived CLI are not known by this template. Naming them is the derived project's first product responsibility.
+## Supported-outcome promise
 
-## Default supported outcomes
+For every supported outcome, an agent can:
 
-The runnable template supports only the outcomes needed to demonstrate its shape:
+1. select the exact task from the root outcome index and at most one scoped contract;
+2. supply declared inputs without guessing endpoints, name matches, URLs, or hidden defaults;
+3. identify task-relevant facts, bounds, missing context, uncertainty, and canonical references;
+4. complete the outcome without routine `jq`, `grep`, custom joins/parsers, raw Chatwork-notation interpretation, source inspection, or exploratory API calls;
+5. distinguish success, declared bounded/partial context, and failure;
+6. recover through structured executable next actions.
 
-- Discover the available command surface with `agentic-cli-foundry --help`.
-- Retrieve a compact versioned outcome index with `agentic-cli-foundry help --format agent`, then request one exact command or namespace for its complete machine contract.
-- Inspect the local runtime with `agentic-cli-foundry doctor`.
-- Discover synthetic objects with `agentic-cli-foundry sample list`.
-- Read one synthetic object with `agentic-cli-foundry sample read --id <sample-id>` using the emitted ID unchanged.
-- Inspect build identity with `agentic-cli-foundry version` or `agentic-cli-foundry --version`.
-- Bootstrap a validated derived identity from `.harness/project.json`.
-- Verify source, security, release, and public-readiness contracts through named check profiles.
+Direct extraction of a declared field or canonical reference is allowed. Reconstructing product semantics from provider fields or multiple undocumented calls is not.
 
-The default `doctor` task is intentionally small. It proves the path from catalog and CLI input through an application use case to a concrete infrastructure adapter, then back to stable presentation.
+## Current runnable surface
 
-The default public output and exit contract is:
+Until the first Chatwork slice replaces scaffold examples, the repository exposes `help`, `doctor`, `sample list`, `sample read`, and `version`. These commands prove catalog, opaque-reference, output, error, and harness behavior. They do not prove a Chatwork outcome or settle its presentation.
 
-| Surface | Contract |
-|---|---|
-| `doctor` | Complete TSV headed `CHECK<TAB>STATUS<TAB>DETAIL`, or JSON schema version 1 under `report`; status is `pass`, `warn`, or `fail` |
-| sample list | Complete TSV headed `id<TAB>name`, or JSON schema version 1 under `items`; every emitted ID is an unchanged reusable reference |
-| sample read | Complete TSV headed `id<TAB>name<TAB>content`, or JSON schema version 1 under `item` |
-| agent help | JSON schema version 3: root `view: index` returns path/namespace/summary/capability/outcome/effect/role entries plus a machine-readable scope request; selected `view: scope` returns global I/O/error rules, complete command contracts, and applicable reference workflows |
-| structured failure | JSON schema version 1 on stderr under `error`, selected by placing `--error-format json` before the command; text is the default |
-| version | `agentic-cli-foundry <version> (<commit>)` when commit metadata is available |
-| exit `0` | Successful command |
-| exit `2` | Invalid command, option, or task input |
-| exit `3` | Unexpected internal failure |
-| exit `4` / `5` | Authentication required / authenticated but not permitted |
-| exit `6` / `7` | Target not found / target selection ambiguous |
-| exit `8` / `9` | Rate limited / temporarily unavailable |
-| exit `10` / `11` | Policy or diagnostic rejection / caller cancellation |
-| exit `12` / `13` | Unsupported task / violated declared contract |
+## Planned first semantic outcome
 
-Successful results are written to stdout; failures are written to stderr. A zero exit status requires a complete successful write, and a partial result is never reported as success. A failed diagnostic may emit its complete report before returning its structured nonzero failure so the caller receives the evidence needed to recover.
+The first read-only outcome is room discovery followed by one bounded recent-message result for an exact room reference. Before presentation selection, its provider-independent semantic model must make task-relevant instances of these facts available:
 
-## Public CLI vocabulary
+- room, account, and message identity;
+- sender and explicit To/reply/quote relationships;
+- stable ordering;
+- canonical references for declared next actions;
+- retrieval bounds, partiality, missing relationships, and uncertainty;
+- external text as untrusted data.
 
-`cli.Catalog` is the source of truth for public commands. Each `cli.CommandSpec` represents one user task and owns at least:
+Whether and how those facts appear in JSON, a compact text form, a structured transcript, dictionaries, indentation, or another representation is deliberately undecided.
 
-- a stable command path;
-- a concise task summary;
-- an explicit `operation.Effect`;
-- a `CommandRole` of utility, discover, or act;
-- structured inputs and output fields from which opaque-reference edges are derived;
-- a stable capability ID, output format/types/completeness, prerequisites, declared failures, and exact recovery commands;
-- a default output format and, when JSON is supported, a stable envelope and positive schema version;
-- argument and validation behavior;
-- a handler or use-case binding;
-- enough metadata to generate accurate help and contract tests.
+## Public vocabulary
 
-No command path may also be another command's word-boundary namespace prefix: `foo` and `foo bar` cannot coexist because exact selection would hide the namespace children. Within the template's intentionally small usage grammar, brackets define optional argv inputs, non-bracketed inputs are required, and a written `a|b` enumeration must match `AllowedValues` exactly and in order. Stdin, environment, and configuration inputs remain outside argv syntax matching.
+Public command names describe user outcomes. Provider endpoint names and raw notation tags remain infrastructure vocabulary. The semantic vocabulary includes room, participant, message, recipient, reply, quote, context bound, missing reference, and canonical action reference. Presentation candidates may not redefine these meanings.
 
-Every command declares the common runtime failures that its shared execution path can emit. `operation_canceled` is always present with its stable kind/retryability; commands with output also declare `output_write_failed`. A non-nil authentication requirement binds a command to the template `app/authn.Gate`, so the catalog additionally requires every standard gate fault with its exact kind and retryability; provider-specific faults remain explicit additions. Mutations similarly publish the standard invoker's contract and policy-rejection failures, including non-retryable `unclassified_mutation_outcome` with a read-only reconciliation action, so runtime normalization does not turn a predictable failure into `undeclared_fault_contract` or an unsafe retry.
+## Agent-output axioms
 
-`next_actions[].command` uses a deliberately small executable grammar: an exact catalog command path, or `help` followed by one exact path or canonical namespace. Prefix-only matches, unknown help selectors, non-canonical whitespace, and unchecked argv suffixes fail catalog validation. A derived project that needs fixed arguments in recovery must first add a typed argument contract and parser-aware validation; it must not append plausible-looking prose to the command string.
+Every eligible presentation must:
 
-The agent-help, success-output, and error-output schemas are versioned independently from prose help. A derived project must increment or deliberately evolve the affected schema when changing its machine-readable shape. The catalog declaration and executable JSON must agree on `schema_version`, envelope, and item fields; contract tests compare them in both directions.
+- derive from the same typed task result rather than reparsing another renderer;
+- preserve the outcome's semantic answer key and canonical references;
+- expose applicable bounds, partiality, missing context, and uncertainty;
+- deterministically separate CLI-authored structure from untrusted provider text;
+- preserve success/failure stream, status, completeness, and recovery contracts;
+- support the evaluated outcome without undocumented external processing.
 
-Command names describe outcomes. Package names, SDK methods, URL paths, database tables, and protocol verbs are not automatically public vocabulary.
+No concrete field layout, grammar, aliasing strategy, indentation scheme, or output mode is promised yet.
+
+## Presentation selection lifecycle
+
+Presentation becomes a public contract through a dedicated competition:
+
+1. define one typed semantic fixture corpus and exact answer key;
+2. define agent tasks, model/agent versions, prompts, repetitions, invocation budgets, token accounting, and scoring before implementation;
+3. implement materially different candidates in isolated worktrees;
+4. reject candidates that fail semantic, identity, coverage, trust, determinism, or output-boundary requirements;
+5. compare eligible candidates on understanding quality, correct next action/reference, tokens, tool steps, bytes, latency, reviewability, and maintenance cost;
+6. select a winner, combination, or another iteration through reviewed evidence;
+7. only then stabilize schema/grammar versions, defaults, compatibility promises, and golden tests.
+
+Candidate worktrees are experimental. Their output is not public merely because it runs.
+
+## Filtering and task composition
+
+The product owns deterministic filtering and joining needed by a supported outcome. Whether this is exposed through dedicated commands, finite typed filters, or another interface remains a later command-design decision.
+
+The governing rule is not “never use a query language”; it is “do not shift a recurring supported task back to the agent.” A generic expression facility must earn its place through the same outcome, discovery, safety, and evaluation evidence as any other public capability.
+
+## Discovery, action, and references
+
+Every public command declares `utility`, `discover`, or `act`. Discovery owns ambiguity and returns canonical opaque references. Actions require exact declared references and never perform hidden display-name searches. Presentation-derived shorthand is not command identity unless a future separately typed contract defines its scope and resolution.
+
+## Side effects
+
+Every command declares `read`, `create`, or `write`.
+
+- Reading messages is bounded and non-mutating.
+- Sending a message is `create`, binds one room parent, and declares notification impact.
+- Editing or deleting is `write`, binds the existing message, and declares notification/destructive impact.
+- Unknown or unauthorized mutation intent fails before Chatwork I/O.
+- Uncertain post-mutation outcomes are not automatically retried and use read-only reconciliation.
+
+The first Chatwork slice remains read-only.
+
+## Authentication and external-call decisions
+
+The project will initially evaluate a single Chatwork account and API token as the smallest authentication scope. Token acquisition/storage is undecided; normal argv and plaintext project configuration are excluded.
+
+Before live I/O, a capability work packet must decide credential lifecycle, allowed destinations, timeouts, attempts, rate limits, response bounds, cancellation, message-window semantics, and publishable schema fixtures. OAuth and multiple accounts remain deferred until justified by an outcome.
 
 ## Compatibility boundary
 
-Before version `1.0.0`, the template may refine its example surface, but every change must be intentional and tested. A derived project must decide when its own compatibility promise begins.
+Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
-Once declared stable, the following are public contracts unless explicitly documented otherwise:
+Presentation grammar, schemas, defaults, and ordering become compatibility promises only after the presentation competition selects and accepts them. Experimental worktree output carries no compatibility promise.
 
-- command paths and required arguments;
-- command roles and produced or consumed reference declarations;
-- effect classification;
-- machine-readable output fields and types;
-- exit-status meanings;
-- default side effects;
-- configuration and environment variable names;
-- filesystem locations and persisted formats;
-- release artifact names and supported platforms.
+## Explicit non-goals
 
-Internal package layout is not a public Go library API. The `internal/` boundary is deliberate.
+- Complete Chatwork API coverage or raw transport passthrough.
+- Choosing a concrete output syntax as a thesis.
+- Silent fuzzy matching, truncation, or relationship inference.
+- Default lossy/model-generated summaries.
+- Claiming structural escaping makes external text semantically trustworthy.
+- OAuth, multiple accounts, administration, deletion, upload, and other mutations in the first slice.
 
-## Product rules
+## Completion evidence for a Chatwork capability
 
-### Prefer outcomes over coverage
-
-Do not add a command merely because an external system exposes an operation. Record unsupported or deferred capabilities explicitly when a derived project maintains an upstream coverage ledger.
-
-### Separate discovery from action
-
-Each command is a `utility`, `discover`, or `act` task. A discovery command owns filters and ambiguity, returns candidates, and exposes an opaque ID. An action command consumes a declared opaque reference and never chooses among candidates. Do not hide a second search or candidate choice inside an action.
-
-The ID shown by discovery passes unchanged into action. Do not decode, normalize, reconstruct, or substitute a resource URL merely because an external system exposes those forms. Display labels are for people; opaque references are for stable composition.
-
-The default `sample list` and `sample read --id` pair exists to make this flow executable. A derived project replaces its synthetic sample domain with a real task while preserving or deliberately revising the role and reference contracts.
-
-The sample reference kind is `sample`. `sample list` produces field `id`; `sample read` consumes argument `--id`. A sample ID is `smp_` followed by exactly twelve lowercase hexadecimal characters. The CLI validates that shape without changing the bytes and rejects names, partial IDs, uppercase variants, URLs, resource paths, whitespace, and control characters before the adapter runs.
-
-### Compose deterministic workflows
-
-If a common result requires a deterministic series of adapter calls, implement one application use case. Do not make every user or agent rediscover the sequence.
-
-### Bound raw flexibility
-
-Arbitrary routes, opaque parameter maps, unrestricted scripts, and pass-through request bodies expand both the product and security surface. They are excluded unless a project's thesis explicitly makes raw transport the product.
-
-### Keep provider policy in the derived product
-
-The base template fixes fail-closed authentication, external-call, pagination, failure, output, and mutation enforcement boundaries. It does not select a provider, OAuth grant or library version, PAT source, credential store, account and refresh policy, retry/backoff values, or approval experience. Those choices depend on the real user outcome and trust boundary, so the derived product contract and security model must make them concrete before live I/O is enabled. See [Authentication](07_authentication.md) and [External API Contracts](08_external_api_contracts.md).
-
-## Explicit non-goals of the base template
-
-- Choosing a CLI parsing framework for every project.
-- Choosing a concrete OAuth flow, PAT source, credential store, telemetry system, updater, or vendor API by default.
-- Exposing this repository as a reusable Go library.
-- Supporting every operating system or package manager without a release decision.
-- Treating passing tests as a substitute for a product review.
-- Turning private source into public source through automated string replacement alone.
-
-## Derived-project completion checklist
-
-Before expanding implementation, replace this document's generic content with answers to:
-
-1. Who is the primary user?
-2. What high-value outcome does the CLI own?
-3. What is the canonical public vocabulary?
-4. What is deliberately unsupported?
-5. Which commands discover identifiers, and which commands act on them?
-6. Which reference kinds, producer fields, and consumer arguments connect them?
-7. Which output, exit, configuration, and side-effect behavior is stable?
-8. Which upstream capabilities remain internal or deferred?
-9. What compatibility and deprecation policy applies?
-10. Which authentication method, account model, credential source/storage, refresh/reuse behavior, and recovery workflow apply?
-11. Which timeout, retry/idempotency, pagination/completeness, schema-drift, and mutation-approval policies bound external I/O?
-
-Update catalog contract tests when the resulting public surface changes.
+A capability is complete only when its outcome, non-goals, command discovery, semantic model, exact references, bounds, failure behavior, authentication, external-call policy, hostile-data tests, and agent transcript are reviewed. Presentation-dependent completion additionally requires the accepted competition evidence and selected format contract. Required repository gates must pass.

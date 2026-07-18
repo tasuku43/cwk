@@ -34,10 +34,21 @@ Confirm:
 - input ambiguity has a deterministic resolution or is surfaced to the user;
 - stdout, stderr, exit status, and machine-readable output are predictable;
 - all side effects and external destinations are named.
+- a supported agent outcome can be completed without `jq`, `grep`, a custom
+  join/parser, raw provider-notation interpretation, source inspection, or an
+  exploratory external call;
 - the command's stable capability ID is `public` in `.harness/capabilities.json`, or the upstream capability remains explicitly `internal`, `deferred`, or `excluded` with a reason.
 
 If the thesis does not decide a design trade-off, update the thesis or an
 architecture decision before implementation.
+
+For relationship-rich Chatwork reads, define the outcome's typed semantic
+result and answer key before choosing presentation. Raw provider JSON plus
+documented post-processing does not complete the outcome, but neither does one
+unmeasured compact syntax become the product by default. Record a repeated
+external pipeline as thesis evidence. Compare materially different
+presentation candidates in isolated worktrees under the protocol in
+`docs/09_agent_readiness_validation.md` before stabilizing a format.
 
 Separate discovery from action. Discovery commands may accept ambiguity and
 must return stable, opaque IDs. Acting commands accept one opaque ID or another
@@ -60,6 +71,13 @@ contract from the module path reported by `go list`.
 Keep policy out of transport adapters and presentation code. Inject clocks,
 filesystems, environment reads, network clients, and side-effect executors at
 the narrowest useful boundary.
+
+For relationship-aware output, infrastructure parses reviewed provider
+notation into typed facts, domain owns relation and coverage invariants,
+application selects and assembles the bounded outcome result, and CLI owns only
+presentation. Do not let a renderer infer relations or let an adapter choose
+public output. Candidate-specific grammars and helpers must not leak into the
+shared semantic layers.
 
 ## 3. Declare the operation contract
 
@@ -207,6 +225,17 @@ Add the smallest set that proves the capability:
 - hostile-output tests for ESC/newline, bidi and zero-width format characters, U+2028/U+2029, pre-existing backslashes, JSON-looking and prompt-like printable data, oversized content, and writer failure;
 - tests proving structural escaping does not claim to filter semantic instructions and does not change an opaque reference;
 - regression fixtures for stable TSV/JSON output and structured error output.
+- presentation-independent semantic fixtures and exact answer keys for
+  To/reply/quote relations, missing references, coverage, canonical action
+  references, and hostile text;
+- negative relationship tests proving that To, quotes, display names, time
+  proximity, and indentation-looking text do not fabricate reply edges;
+- canonical-reference round trips that reject presentation-derived shorthand
+  unless a separate typed contract explicitly defines it;
+- a no-post-processing agent transcript and a presentation competition that
+  pins candidates, agent/model versions, prompts, repetitions, answer scoring,
+  token accounting, quality floor, latency, and raw result retention;
+- golden fixtures only for the presentation selected through reviewed evidence.
 
 Tests must use temporary directories, fixed clocks, fake credentials, and local
 test servers. They must not require a developer account or live network.
@@ -236,6 +265,12 @@ Record how many invocations were needed to discover the task, where each input
 came from, whether output passed unchanged into the next task, and whether each
 failure selected a next command without prose interpretation. Extra command
 guesses are thesis/product evidence, not an agent workaround to document.
+Also record the external post-processing count, provider-call count and bounds,
+semantic answer accuracy, canonical references, candidate worktree/commit,
+agent/model versions, repetitions, and per-run byte, token, tool-step, and
+latency measurements. A supported scenario with a nonzero external
+post-processing count is incomplete, claims an outcome that is too broad, or
+has an ineligible presentation candidate.
 
 ## 9. Feed implementation learning back into the thesis
 

@@ -1,6 +1,6 @@
 # Security Model
 
-This document defines the minimum security reasoning expected from Agentic CLI Foundry and every derived project. It does not claim that the base scaffold makes project-specific integrations secure. Its purpose is to make assets, effects, trust boundaries, and enforcement visible before implementation spreads them across commands.
+This document defines the minimum security reasoning expected from Chatwork CLI and every derived project. It does not claim that the base scaffold makes project-specific integrations secure. Its purpose is to make assets, effects, trust boundaries, and enforcement visible before implementation spreads them across commands.
 
 ## Security objective
 
@@ -89,6 +89,23 @@ Discovery output may contain labels controlled by an external system, but action
 
 The sample contract accepts only `smp_` followed by twelve lowercase hexadecimal characters. Its negative tests reject alternate forms before the sample adapter runs.
 
+### Presentation-derived identity
+
+A presentation candidate may introduce shorthand, positions, labels, grouping, or other derived display values. None is authorization identity by default. Public action inputs, policy, logs, and infrastructure use validated canonical references. If a later presentation proposes reusable shorthand, it requires a separate typed contract defining scope, lifetime, collision handling, and exact resolution; the presentation experiment itself cannot grant that meaning.
+
+## Chatwork notation and relationship trust
+
+Chatwork notation is untrusted provider data with a documented syntax, not executable instruction. Infrastructure parses only reviewed bounded forms into typed facts.
+
+- To establishes recipient identity but not a reply edge.
+- Reply notation establishes a provider-declared room/message relation only after identifier validation.
+- Quote metadata remains a quote relation; missing message identity is not reconstructed from author, timestamp, or text.
+- Malformed, nested, oversized, contradictory, or unsupported notation is rejected or surfaced as bounded unparsed content according to the command contract; it is never partially interpreted into a stronger relation.
+- Display names embedded beside tags cannot override account identifiers.
+- Proximity, layout-looking text, prompt-like prose, and copied tags inside quoted/code-like content do not create authorization or mutation targets.
+
+The typed task result distinguishes explicit resolved, explicit unresolved, and absent relations before presentation. Every candidate must preserve that answer; a clearer or smaller display is not allowed to strengthen a relation.
+
 ## Controlled execution boundary
 
 All filesystem writes, subprocess execution, credential access, network calls, and platform services must have a bounded construction path. A command or use case must not receive an unrestricted client merely because it is convenient.
@@ -163,6 +180,8 @@ A derived project must decide:
 - which stream carries errors versus data.
 
 Do not let presentation sanitization change the identity used for authorization. Authorization uses validated domain values; display labels/content use a visible projection. Opaque references bypass that projection and retain the exact validated value.
+
+For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the `external_text_trust: untrusted_data` meaning already published by scoped agent help. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
 
 ## Supply-chain boundary
 

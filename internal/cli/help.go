@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
 )
 
 type helpFormat uint8
@@ -237,7 +237,7 @@ func (c Catalog) Select(selector string) ([]CommandSpec, bool) {
 
 func (c *CLI) renderRootHelp() []byte {
 	var output bytes.Buffer
-	fmt.Fprintln(&output, "Agentic CLI Foundry")
+	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "Usage:")
 	fmt.Fprintf(&output, "  %s [--error-format text|json] <command> [arguments]\n", ProgramName)

@@ -22,7 +22,7 @@ func TestLoadRejectsUnknownFields(t *testing.T) {
 }
 
 func TestReadyProblemsRequireProjectSpecificIdentity(t *testing.T) {
-	if got := ReadyProblems(Defaults); len(got) != 8 {
+	if got := ReadyProblems(Defaults); len(got) != 7 {
 		t.Fatalf("problems = %v", got)
 	}
 	project := Defaults
@@ -36,6 +36,11 @@ func TestReadyProblemsRequireProjectSpecificIdentity(t *testing.T) {
 	project.SecurityContact = "security@acme.example"
 	if got := ReadyProblems(project); len(got) != 0 {
 		t.Fatalf("problems = %v", got)
+	}
+
+	project.GitHubOwner = Defaults.GitHubOwner
+	if got := ReadyProblems(project); len(got) != 0 {
+		t.Fatalf("same-owner derived project problems = %v", got)
 	}
 }
 

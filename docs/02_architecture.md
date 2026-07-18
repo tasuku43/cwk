@@ -1,6 +1,6 @@
 # Architecture
 
-Agentic CLI Foundry uses four layers, a task-oriented command catalog, typed operation intent, and one composition root. The purpose is to keep product decisions separate from external-system details while giving side effects a narrow, testable path.
+Chatwork CLI uses four layers, a task-oriented command catalog, typed operation intent, and one composition root. The purpose is to keep product decisions separate from external-system details while giving side effects a narrow, testable path.
 
 ## Dependency direction
 
@@ -70,7 +70,14 @@ Infrastructure owns protocol-specific validation and conversion. Raw OAuth token
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
 
-`cmd/agentic-cli-foundry/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
+For relationship-aware Chatwork output, the layers divide responsibility further:
+
+- Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
+- Infrastructure decodes Chatwork wire DTOs and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity.
+- Application use cases select the bounded data required by one outcome, resolve only explicit relationships available within that bound, and return a typed task result with coverage and unresolved facts.
+- CLI presentation implementations project that same typed result for users or agents. Candidate renderers may reorganize or encode facts but do not define relationship truth, completeness, identity, or task policy.
+
+`cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
 Production Go packages stay within `cmd/` and the four `internal/` layers. The `cmd/` entrypoint imports only context, operating-system signal handling, and `internal/cli`; process execution, network, filesystem, and third-party dependencies belong behind infrastructure ports. Repository-only programs live under `tools/` and cannot be imported by production packages.
 
@@ -113,6 +120,31 @@ Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, a
 Agent-help schema version 3 separates selection from invocation detail. Root `help --format agent` is an `index` view containing only each command's path, top-level namespace, summary, capability ID, outcome, effect, and role. Each encoded command entry has a 512-byte catalog budget. Its `scope_request` names `commands[].path` and `commands[].namespace` as selectors and supplies the exact invocation template. `help <selector> --format agent` is a `scope` view containing global I/O/error contracts, complete selected `AgentContract` values, and reference workflows touching the selection. Its I/O contract marks external text as untrusted data, declares visible structural projection, and distinguishes validated exact opaque references. A known path therefore needs one help invocation; an unknown outcome needs the root index and one scoped invocation. Root size still grows with the number of outcomes, but detailed inputs, outputs, authentication, failures, mutations, and workflows do not multiply there.
 
 Catalog `CommandOutput` metadata is executable compatibility data, not descriptive decoration. Generic CLI contract tests run each built-in JSON renderer and compare its `schema_version`, declared envelope, and every item key with the corresponding catalog declaration. Agent-help shape snapshots separately fix the intentionally different root and scoped views.
+
+## Semantic and presentation boundary
+
+Every presentation candidate consumes one typed semantic result; candidates do not parse one another's rendered output.
+
+```text
+Chatwork response
+  -> infrastructure validates wire bounds and parses explicit notation
+  -> domain values represent participants, messages, and typed relations
+  -> application selects one bounded outcome context and declares coverage
+  -> interchangeable CLI presentation candidates render the same facts
+  -> evaluation compares agent understanding and resource cost
+```
+
+Relationship truth has three states:
+
+| State | Meaning | Presentation requirement |
+|---|---|---|
+| explicit and resolved | Provider notation identifies a relation and the referenced object is available | Preserve it so the evaluation answer remains recoverable |
+| explicit and unresolved | Provider notation identifies a relation but the referenced object is outside the bound or unavailable | Preserve the relation and unresolved/coverage state without fabricating the object |
+| absent or unsupported | No provider fact establishes the relation | Do not imply that the relation exists |
+
+Filtering and context selection are application outcome concerns. Provider pagination and notation parsing remain infrastructure concerns. Presentation owns only representation.
+
+Before a presentation is public, materially different implementations may be developed in isolated worktrees. They share the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code. The reviewed winner receives the public compatibility contract and golden tests after selection.
 
 The default graph is:
 

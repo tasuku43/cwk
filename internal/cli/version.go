@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/domain/operation"
 )
 
 func runVersion(ctx context.Context, c *CLI, command CommandSpec, _ operation.Intent, args []string) int {

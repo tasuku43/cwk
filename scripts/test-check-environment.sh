@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-fixture_root=$(mktemp -d "${TMPDIR:-/tmp}/agentic-cli-foundry-go-environment.XXXXXXXX")
+fixture_root=$(mktemp -d "${TMPDIR:-/tmp}/cwk-go-environment.XXXXXXXX")
 cleanup() { rm -rf -- "$fixture_root"; }
 trap cleanup EXIT
 cp scripts/testdata/fake-go-gate-environment.sh "$fixture_root/go"

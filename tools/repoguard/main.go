@@ -16,7 +16,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/tasuku43/agentic-cli-foundry/tools/internal/projectconfig"
+	"github.com/tasuku43/cwk/tools/internal/projectconfig"
 )
 
 type issue struct {
@@ -189,6 +189,11 @@ func repositoryPaths(root string) ([]string, error) {
 				relative := string(raw)
 				if !filepath.IsLocal(relative) {
 					return nil, fmt.Errorf("git returned a non-local path %q", relative)
+				}
+				if _, statErr := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); os.IsNotExist(statErr) {
+					continue
+				} else if statErr != nil {
+					return nil, fmt.Errorf("inspect git path %q: %w", relative, statErr)
 				}
 				paths = append(paths, filepath.ToSlash(relative))
 			}

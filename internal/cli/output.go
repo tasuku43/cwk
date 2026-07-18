@@ -3,7 +3,7 @@ package cli
 import (
 	"context"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
 // emit performs exactly one checked write after a command has rendered and

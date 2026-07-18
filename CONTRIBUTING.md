@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for improving Agentic CLI Foundry. Contributions are welcome when they keep the repository runnable, understandable by a new contributor or coding agent, and safe to publish.
+Thank you for improving Chatwork CLI. Contributions are welcome when they keep the repository runnable, understandable by a new contributor or coding agent, and safe to publish.
 
 ## Before you begin
 
@@ -19,7 +19,7 @@ Install the Go version declared by `go.mod` and [Task](https://taskfile.dev/). T
 task check:fast
 ```
 
-The default repository must remain runnable as `github.com/tasuku43/agentic-cli-foundry` with the `agentic-cli-foundry` binary. Identity changes belong in a derived repository through the bootstrap workflow, not in a contribution to the reusable template.
+The default repository must remain runnable as `github.com/tasuku43/cwk` with the `cwk` binary. Identity changes belong in a derived repository through the bootstrap workflow, not in a contribution to the reusable template.
 
 ## Propose the outcome first
 

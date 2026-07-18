@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tasuku43/agentic-cli-foundry/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
 func TestRootHelpIsDerivedFromCatalog(t *testing.T) {
@@ -34,7 +34,7 @@ func TestCommandHelpUsesCatalogMetadataAndDerivedReferences(t *testing.T) {
 	}
 	output := stdout.String()
 	for _, want := range []string{
-		"Usage:\n  agentic-cli-foundry sample read --id <sample-id> [--format tsv|json]",
+		"Usage:\n  cwk sample read --id <sample-id> [--format tsv|json]",
 		"Read exactly one offline sample by opaque ID.",
 		"Effect: read",
 		"Role: act",
@@ -60,7 +60,7 @@ func TestRootAgentHelpIsACompactProjectionOfTheCatalog(t *testing.T) {
 	if document.SchemaVersion != agentHelpSchemaVersion || document.View != "index" || document.Program != ProgramName {
 		t.Fatalf("agent document header = %+v", document)
 	}
-	if document.ScopeRequest.InvocationTemplate != "agentic-cli-foundry help <command-or-namespace> --format agent" ||
+	if document.ScopeRequest.InvocationTemplate != "cwk help <command-or-namespace> --format agent" ||
 		!reflect.DeepEqual(document.ScopeRequest.SelectorFields, []string{"commands[].path", "commands[].namespace"}) ||
 		document.ScopeRequest.UnknownOutcomeMaxInvocations != 2 || document.ScopeRequest.KnownPathMaxInvocations != 1 {
 		t.Fatalf("scope request = %+v", document.ScopeRequest)
