@@ -100,7 +100,30 @@ The room-discovery/message anchor lands as a read slice, but the first complete 
 
 ## Authentication and external-call decisions
 
-The first implementation uses one Chatwork account and one API token supplied through the selected process environment variable. `cwk` does not accept it in argv or persist it. Infrastructure alone reads, binds, stores in memory, and transmits it to the compile-time production origin `https://api.chatwork.com/v2`; public base-URL overrides are forbidden.
+The first implementation supports one Chatwork account through either PAT or
+OAuth 2.0. Every API task requires the exact secret-free selector
+`CWK_AUTH_METHOD=pat|oauth2`; there is no implicit preference or fallback when
+both credentials exist.
+
+PAT reads `CWK_API_TOKEN` only from the command-process environment and never
+persists it. OAuth uses the provider's Authorization Code Grant for one public
+client with state and PKCE S256. `CWK_OAUTH_CLIENT_ID` and
+`CWK_OAUTH_REDIRECT_URI` are non-secret registration configuration; the
+redirect must be an exact registered non-HTTP custom URI. Login shows one
+transient authorization URL on stderr, reads the complete callback URL from
+stdin, validates the exact redirect/state before exchange, and stores access
+and refresh material only in the operating-system credential store. Codes,
+verifiers, tokens, credential-store keys, and credential-bearing errors never
+enter argv or stdout.
+
+`auth profiles` discovers the one opaque public-client profile reference.
+`auth login`, `auth status`, and `auth logout` consume that reference unchanged.
+Login refuses to replace an existing credential; status exposes only method,
+state, and provider-advertised expiry; logout removes the local credential and
+does not claim provider-side revocation. API tasks using either method converge
+on the same secret-free session/binding contract before infrastructure sends a
+request to `https://api.chatwork.com/v2`; public destination overrides remain
+forbidden.
 
 The first implementation fixes these ceilings; command-line or environment overrides cannot raise them:
 
@@ -115,13 +138,13 @@ The first implementation fixes these ceilings; command-line or environment overr
 | Aggregated list result | 10,000 items |
 | File upload | 5 MiB |
 
-The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. The active capability work packet fixes cancellation, message-window semantics, provider rate-limit behavior, mutation policy, and publishable schema fixtures before live I/O is enabled. OAuth and multiple accounts remain deferred.
+The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. The active capability work packet fixes cancellation, message-window semantics, provider rate-limit behavior, mutation policy, OAuth lifecycle, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
 
 ## Mutation confirmation policy
 
 An exact invocation with validated canonical references and complete typed intent is sufficient for ordinary creates and updates, including message/task creation, room metadata changes, read-state changes, message edits, and task status changes. This is explicit command intent, not a general authorization grant.
 
-Mutations that change membership, contact access, or link exposure additionally require the exact `--confirm access-change` value. In the fixed operation snapshot these are room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance. Destructive operations additionally require the exact `--confirm destructive` value: room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection. Confirmation is invocation-local, is never inferred from a TTY or agent identity, and is not reused.
+Mutations that change membership, contact access, or link exposure additionally require the exact `--confirm=access-change` value. In the fixed operation snapshot these are room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance. Destructive operations additionally require the exact `--confirm=destructive` value: room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection. Confirmation is invocation-local, is never inferred from a TTY or agent identity, and is not reused.
 
 Every provider operation has one transport attempt. An uncertain mutation result is non-retryable and names an exact read-only catalog task for reconciliation before another mutation; it never recommends repeating the write.
 
@@ -138,7 +161,7 @@ Candidate C's versioned grammar, schemas, defaults, and ordering are compatibili
 - Silent fuzzy matching, truncation, or relationship inference.
 - Default lossy/model-generated summaries.
 - Claiming structural escaping makes external text semantically trustworthy.
-- OAuth, multiple accounts, administration/private APIs, webhooks, GUI work, alternative presentations, token optimization, and release publication in the first complete implementation.
+- Confidential-client, loopback-HTTP, and device OAuth grants; multiple accounts or OAuth profiles; administration/private APIs; webhooks; GUI work; alternative presentations; token optimization; and release publication in the first complete implementation.
 
 ## Completion evidence for a Chatwork capability
 

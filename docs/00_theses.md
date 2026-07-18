@@ -164,7 +164,7 @@ Command certainty, operational closure, semantic fidelity, understanding quality
 The first complete implementation is bounded by the 32 REST operations linked from the official Chatwork documentation index on 2026-07-18. It must:
 
 1. map every operation to at least one task-oriented public workflow and mechanically reject gaps or unreviewed extras;
-2. implement single-account API-token authentication, fixed-destination bounded transport, provider faults, and safe mutation intent;
+2. implement single-account PAT and public-client OAuth 2.0 authentication behind one secret-free binding, fixed-destination bounded transport, provider faults, and safe mutation intent;
 3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, and partial coverage;
 4. implement every remaining operation with the same catalog, reference, authentication, effect, and recovery contracts;
 5. render candidate C deterministically and prove its semantic answer, bounds, trust framing, and canonical reference flow;
@@ -176,10 +176,22 @@ seconds. The checked contract also caps success/error bodies at 8 MiB/64 KiB,
 complete output at 16 MiB, aggregate lists at 10,000 items, documented endpoint
 lists at 100 items, and upload at 5 MiB. Exact typed invocation suffices for
 ordinary creates/updates; the reviewed access-changing and destructive sets
-add exact `--confirm access-change` and `--confirm destructive`, respectively.
+add exact `--confirm=access-change` and `--confirm=destructive`, respectively.
 Uncertain mutation outcomes reconcile only through read-only tasks.
 
-Future provider additions, OAuth, multiple accounts, GUI work, release publication, alternative presentations, and further token optimization are outside this completion boundary.
+Authentication selection is explicit rather than preferential. Every API task
+requires exact `CWK_AUTH_METHOD=pat|oauth2`; PAT reads `CWK_API_TOKEN` only from
+the command process, while OAuth uses Authorization Code Grant with state and
+PKCE S256 for one registered public client. The OAuth redirect is an exact
+non-HTTP custom URI, the complete callback is pasted through stdin, and tokens
+are stored only in the operating-system credential store. `auth profiles`
+produces the one opaque OAuth profile reference consumed unchanged by login,
+status, and logout. Login refuses to overwrite an existing credential, and
+logout removes local credential material without claiming remote revocation.
+
+Future provider additions, confidential-client or device grants, multiple
+accounts/profiles, GUI work, release publication, alternative presentations,
+and further token optimization are outside this completion boundary.
 
 ## Explicit non-goals
 

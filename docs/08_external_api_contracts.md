@@ -29,6 +29,33 @@ Authentication is a precondition, not a transport error to discover after a writ
 
 A non-nil catalog authentication requirement means the command uses the template application gate. The catalog must declare the gate's complete standard fault set with exact code, kind, retryability, and command-valid recovery actions; validation rejects omissions before dispatch. Provider-specific authentication, rate-limit, unavailable, or unsupported faults are additional derived-project declarations rather than replacements for that base set.
 
+### Chatwork method and OAuth profile contract
+
+The fixed Chatwork implementation permits `pat` and `oauth2` in every API-task
+requirement but makes runtime selection explicit through exact
+`CWK_AUTH_METHOD=pat|oauth2`. An absent selector, unknown value, missing selected
+credential, or selected-method failure makes zero provider task requests. The
+adapter never probes one credential and falls back to the other.
+
+OAuth lifecycle commands do not require an existing authentication session.
+`auth profiles` is the invocable discovery root and emits one exact opaque
+`chatwork-oauth-profile` reference. Login, status, and logout are act commands
+that require that value unchanged. Login is a create bound to that profile;
+logout is an access-changing destructive write bound to the existing profile;
+both reconcile an unknown local-store outcome only through read-only
+`auth status`. Login refuses an existing credential rather than silently
+replacing it. Logout removes local credential material and never reports remote
+revocation.
+
+The OAuth adapter uses Authorization Code Grant with state and PKCE S256 for a
+public client, an exact registered non-HTTP custom redirect URI, and manual
+full-callback input through stdin. The consent URL is transient stderr guidance;
+the complete callback, code, state, verifier, access/refresh tokens, store keys,
+and provider token bodies are never successful output. Only infrastructure may
+import the reviewed OAuth and credential-store modules. Adapter tests pin the
+authorization/token origins, redirect comparison, scope set, refresh identity,
+store behavior, secret redaction, and zero-task-call failures.
+
 ## Pagination and completeness
 
 `domain/page` defines a one-page envelope with an opaque cursor. `app/pagination.Drain` owns exhaustive traversal and requires explicit page, item, and page-size budgets.
@@ -91,7 +118,7 @@ The binding rules distinguish an object that does not exist yet from an existing
 
 `app/execution.Invoker` snapshots and validates command, effect, target, and impact; applies an injected policy; checks cancellation; then calls one logical mutation action. It deliberately does not decide whether policy means human approval, dry-run, OS authentication, role authorization, or another mechanism.
 
-For Chatwork, the injected policy has three finite decisions. Ordinary creates and updates need no extra flag after exact references, payload, effect, target, and impact validate. Room creation, room-member replacement, invite-link creation/update, and incoming-request acceptance require exact `--confirm access-change`. Room leave/delete, message deletion, invite-link deletion, and incoming-request rejection require exact `--confirm destructive`. The flag is invocation-local typed policy input, not reusable approval. Failure to supply the required exact value makes zero provider calls.
+For Chatwork, the injected policy has three finite decisions. Ordinary creates and updates need no extra flag after exact references, payload, effect, target, and impact validate. Room creation, room-member replacement, invite-link creation/update, and incoming-request acceptance require exact `--confirm=access-change`. Room leave/delete, message deletion, invite-link deletion, and incoming-request rejection require exact `--confirm=destructive`. The flag is invocation-local typed policy input, not reusable approval. Failure to supply the required exact value makes zero provider calls.
 
 All Chatwork mutations are unsafe for automatic retry under this first contract because the provider snapshot supplies no CLI-owned idempotency guarantee. An unknown post-send outcome is non-retryable and its catalog fault names a read-only reconciliation command. That command may inspect the target or parent scope but cannot call a create/write task.
 

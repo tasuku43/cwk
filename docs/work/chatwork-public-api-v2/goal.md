@@ -20,6 +20,12 @@ room”: discover a room, pass its exact reference to the bounded message task,
 and understand the result without `jq`, `grep`, provider-notation parsing, a
 custom join, source inspection, or an exploratory Chatwork request.
 
+The same finite completion includes both process-local PAT authentication and
+one public-client OAuth 2.0 profile. An agent can discover the profile, complete
+login with state and PKCE S256 through a non-HTTP custom redirect and stdin
+callback, inspect its secret-free status, remove its local stored credential,
+and select PAT or OAuth2 for an API task without an implicit fallback.
+
 ## Fixed scope
 
 The coverage universe is the 32 API reference operations linked by the official
@@ -47,7 +53,8 @@ operation.
 - Do not implement candidate A/B variants, a presentation competition, or
   further token optimization in this work. Candidate C is the sole first
   presentation contract.
-- Do not add OAuth, multiple accounts, a GUI, release publication, or unrelated
+- Do not add confidential-client, device, or loopback-HTTP OAuth grants;
+  multiple accounts/profiles; a GUI; release publication; or unrelated
   refactoring.
 - Do not require live Chatwork access for the test suite or collect real account
   data to build fixtures.
@@ -65,9 +72,17 @@ operation.
 - [ ] Discover commands produce exact room, account, message, task, file, and
   incoming-request references required by action commands; round trips preserve
   every byte.
-- [ ] A single-account API-token flow keeps the credential in infrastructure,
-  binds the validated session to each task call, and allows only the documented
-  Chatwork HTTPS destination in production.
+- [ ] A single-account authentication boundary supports exact
+  `CWK_AUTH_METHOD=pat|oauth2` selection without fallback. PAT remains
+  process-local; OAuth uses the reviewed public-client Authorization Code +
+  state + PKCE S256 flow, a registered non-HTTP custom redirect, full callback
+  through stdin, and operating-system credential storage. Both keep secrets in
+  infrastructure, bind the validated session to each task call, and allow only
+  the documented Chatwork HTTPS destinations in production.
+- [ ] `auth profiles` produces one opaque OAuth profile reference consumed
+  unchanged by login/status/logout. Login refuses overwrite, status is
+  secret-free and read-only, logout removes only local credential material, and
+  unknown local mutation outcomes reconcile through exact `auth status`.
 - [ ] Metadata/read and non-upload calls time out at 20 seconds, upload at 60
   seconds; every operation has one attempt; success/error bodies are capped at
   8 MiB/64 KiB, output at 16 MiB, aggregate lists at 10,000 items, documented
@@ -76,8 +91,8 @@ operation.
 - [ ] Every mutation declares effect, exact target roles, impact, idempotency,
   policy, and read-only reconciliation for an uncertain outcome. Ordinary exact
   creates/updates require no extra flag; the reviewed access-changing and
-  destructive sets require exact `--confirm access-change` and
-  `--confirm destructive`. Rejection, malformed input, authentication failure,
+  destructive sets require exact `--confirm=access-change` and
+  `--confirm=destructive`. Rejection, malformed input, authentication failure,
   and permission failure make zero mutation attempts.
 - [ ] Candidate C renders deterministic context capsules from typed task
   results. Its compact aliases are display-only; the same capsule exposes exact

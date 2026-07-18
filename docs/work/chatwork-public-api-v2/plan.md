@@ -7,7 +7,7 @@
 ## Chosen approach
 
 Implement a reviewed, task-oriented catalog over a fixed machine-readable
-32-operation snapshot. Build shared PAT authentication and bounded HTTP
+32-operation snapshot. Build shared PAT/OAuth authentication and bounded HTTP
 transport once, then add resource-centered vertical slices for identity,
 contacts, rooms/members, messages, tasks, files, invite links, and incoming
 requests. Every slice owns typed semantic results and maps its required upstream
@@ -63,17 +63,18 @@ reuse the canonical value from the dictionary unchanged.
   relation, task, file, invite, request, coverage, mutation-impact values.
 - Application: resource/task use cases and minimal ports; deterministic joins,
   filtering, bounded composition, and secret-free authentication binding.
-- Infrastructure: environment token authenticator/binding store, bounded
-  Chatwork HTTP transport, wire DTOs, notation parser, multipart/form adapters,
-  and stable provider-fault mapping.
-- CLI/catalog: task arguments, exact reference parsing, candidate-C rendering,
+- Infrastructure: process-environment PAT source, public-client OAuth library,
+  OS credential store, binding manager, bounded Chatwork HTTP transport, wire
+  DTOs, notation parser, multipart/form adapters, and stable fault mapping.
+- CLI/catalog: authentication-profile discovery/lifecycle, deterministic method
+  selection, task arguments, exact reference parsing, candidate-C rendering,
   composition root, complete agent contracts, and coverage registration.
 
 ### Data and control flow
 
 ```text
 argv -> catalog contract -> exact references / typed intent
-     -> authentication gate -> ephemeral binding
+     -> exact PAT/OAuth2 selection -> authentication gate -> ephemeral binding
      -> application task -> bounded Chatwork port
      -> infrastructure resolves binding -> HTTPS request
      -> wire validation / notation parsing -> typed result
@@ -104,15 +105,21 @@ between typed intent and the infrastructure request.
 
 - Exact typed invocation suffices for ordinary creates and updates.
 - Room creation, member replacement, invite-link creation/update, and incoming
-  request acceptance require exact `--confirm access-change`.
+  request acceptance require exact `--confirm=access-change`.
 - Room leave/delete, message deletion, invite-link deletion, and incoming
-  request rejection require exact `--confirm destructive`.
+  request rejection require exact `--confirm=destructive`.
 - Confirmation is scoped to one invocation and never reused or inferred.
 
 ### Security and public boundary
 
-- The API token enters only through the selected environment variable and is
-  resolved, stored, and attached to headers inside infrastructure.
+- PAT enters only through the selected environment variable. OAuth callback,
+  code, state, verifier, tokens, refresh source, and store handle remain inside
+  infrastructure; persisted token material uses only the OS credential store.
+- API tasks require exact `CWK_AUTH_METHOD=pat|oauth2`; no method probing or
+  fallback is allowed.
+- OAuth is one public client with state, PKCE S256, a registered non-HTTP custom
+  redirect, manual full-callback stdin, fixed Chatwork endpoints, and no client
+  secret or `offline_access`.
 - Production requests cannot redirect credentials away from the fixed Chatwork
   HTTPS origin.
 - Local-server injection exists only in internal constructors used by tests.
@@ -123,15 +130,18 @@ between typed intent and the infrastructure request.
 
 1. Governing contract, fixed operation manifest, coverage checker, and failing
    tests.
-2. Shared authentication, transport, fault, bounds, fixture, and context-capsule
-   foundations.
-3. Identity/contact/room discovery and exact read tasks, including recent room
+2. Shared PAT authentication, transport, fault, bounds, fixture, and
+   context-capsule foundations.
+3. Public-client OAuth profile discovery/login/status/logout, OS credential
+   storage, refresh/revalidation, deterministic method selection, and secret
+   canary tests.
+4. Identity/contact/room discovery and exact read tasks, including recent room
    messages.
-4. Remaining reads and all create/write/delete tasks with intent policy and
+5. Remaining reads and all create/write/delete tasks with intent policy and
    reconciliation.
-5. Complete catalog/help/reference graph, 32-operation local E2E matrix,
+6. Complete catalog/help/reference graph, 32-operation local E2E matrix,
    hostile-output and agent-readiness validation.
-6. Full, security, and public gates; evidence closure.
+7. Full, security, and public gates; evidence closure.
 
 The final closure step changes the manifest from `coverage_status: planned` to
 `complete`; contractlint then rejects any one of the 32 operations without a
@@ -161,7 +171,8 @@ reconciliation commands remain available whenever the mutation is public.
 ## Documentation promotion
 
 Before implementation exposure, promote fixed exhaustive snapshot coverage,
-candidate-C selection, PAT environment policy, production destination, numeric
-call bounds, mutation confirmation policy, and fixture/coverage enforcement to
+candidate-C selection, PAT/OAuth selection and storage policy, production
+destinations, numeric call bounds, mutation confirmation policy, and
+fixture/coverage enforcement to
 the governing theses, product, architecture, security, harness, authentication,
 external-contract, and agent-readiness documents.

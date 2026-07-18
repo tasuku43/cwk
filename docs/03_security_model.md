@@ -130,8 +130,8 @@ The first Chatwork implementation treats a fully specified exact invocation as s
 
 Two higher-impact classes fail before provider I/O unless argv contains the exact typed confirmation:
 
-- `--confirm access-change` for room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance;
-- `--confirm destructive` for room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection.
+- `--confirm=access-change` for room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance;
+- `--confirm=destructive` for room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection.
 
 The catalog binds each confirmation to the corresponding operation impact; a confirmation for one class does not satisfy the other, persist across invocations, or prove human approval. Missing, duplicated, misspelled, or inapplicable confirmation is invalid input or policy rejection with zero mutation attempts.
 
@@ -150,9 +150,48 @@ The base template contains a secret-free authentication contract, an ephemeral n
 
 Secrets must not cross from infrastructure into domain or application values and must not be accepted through command-line arguments when a safer channel is available. Do not persist tokens in plaintext configuration or test real credentials in CI. Read [Authentication](07_authentication.md) and [ADR 0001](decisions/0001-oauth-library-boundary.md) before implementing OAuth or PAT support.
 
-The first Chatwork implementation selects one API token from the `CWK_API_TOKEN` process environment. This is an explicit non-persistent automation trade-off, not a claim that environment variables are a secure credential store. The CLI does not accept the token in argv, configuration, stdin data payloads, or command output; infrastructure reads it once, keeps it in memory behind an ephemeral authentication binding, and redacts it from every error and test diagnostic. Credential-store integration, OAuth, refresh, and multiple accounts are separate decisions.
+The first Chatwork implementation supports one account through two explicitly
+selected methods. `CWK_AUTH_METHOD` must be exactly `pat` or `oauth2` for every
+API task; missing or unknown selection fails before credential access, and the
+adapter never silently prefers one available credential.
 
-Production credentials may be sent only to the exact HTTPS origin `https://api.chatwork.com` under the `/v2` base path. Redirect following is disabled for credential-bearing requests. A different base URL can be injected only through internal test construction with synthetic tokens and a local server; there is no public flag or environment override for the destination.
+PAT selects one API token from the `CWK_API_TOKEN` command-process environment.
+This is an explicit non-persistent automation trade-off, not a claim that
+environment variables are a secure credential store. The CLI does not accept
+the token in argv, configuration, stdin data payloads, or output;
+infrastructure reads it once, keeps it in memory behind an ephemeral binding,
+and redacts it from every error and test diagnostic.
+
+OAuth selects Chatwork's Authorization Code Grant for one public client. State
+and a fresh PKCE S256 verifier are mandatory for every login. The exact
+registered redirect URI must use a non-HTTP custom scheme; loopback HTTP,
+confidential-client secrets, device flow, and `offline_access` are not
+supported. `CWK_OAUTH_CLIENT_ID` and `CWK_OAUTH_REDIRECT_URI` are non-secret
+registration configuration. Login writes one transient consent URL to stderr,
+accepts only the complete callback URL through stdin, compares its redirect and
+state exactly, and never places an authorization code, state, verifier, access
+token, refresh token, or credential-store key in argv, stdout, logs, structured
+errors, or fixtures.
+
+OAuth access and refresh material is persisted only through the selected
+operating-system credential store. A public profile reference emitted by
+`auth profiles` is workflow identity, not a credential-store key or bearer
+capability. Login refuses to overwrite an existing stored credential. Status
+returns only method, `unconfigured|ready|expired`, and advertised expiry.
+Logout deletes only that exact local store entry and explicitly reports that it
+did not revoke a remote token. Store access failure (including platform denial),
+missing, stale, identity-mismatched, and refresh-failed states are typed faults
+and do not fall back to PAT.
+
+Production API credentials may be sent only to the exact HTTPS origin
+`https://api.chatwork.com` under the `/v2` base path. OAuth authorization uses
+the fixed `https://www.chatwork.com/packages/oauth2/login.php` endpoint and
+code/refresh exchange uses the fixed `https://oauth.chatwork.com/token`
+endpoint. Redirect following is
+disabled for credential-bearing API and token requests. A different base URL
+can be injected only through internal test construction with synthetic tokens
+and a local server; there is no public flag or environment override for any
+production destination.
 
 ## Filesystem, process, and network policy
 

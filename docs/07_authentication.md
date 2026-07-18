@@ -185,9 +185,58 @@ Do not accept a PAT as a normal command-line flag: argv commonly reaches shell h
 
 ### Chatwork first implementation
 
-Chatwork CLI selects PAT authentication for one account. Infrastructure reads `CWK_API_TOKEN` from the process environment, creates one ephemeral binding record, and sends the token only as the `x-chatworktoken` header to the fixed production Chatwork origin. `cwk` never writes the token to disk and never accepts a destination override in its public CLI or environment contract.
+Chatwork CLI supports one account through PAT and OAuth 2.0. Every provider API
+task requires `CWK_AUTH_METHOD` to be exactly `pat` or `oauth2`. The selector is
+secret-free but mandatory: missing, unknown, or unavailable selection fails
+before a task request, and infrastructure never tries the other method as a
+fallback.
 
-Environment delivery is chosen because it is non-interactive and non-persistent from the CLI's perspective; it still inherits environment-inspection and parent-process risks. Documentation must recommend setting it only for the command process and clearing inherited values. A future operating-system credential store can replace the source behind the same infrastructure boundary but is not required for the fixed first implementation.
+For `pat`, infrastructure reads `CWK_API_TOKEN` from the command-process
+environment, creates one ephemeral binding record, and sends the token only as
+the `x-chatworktoken` header to the fixed production Chatwork API origin.
+`cwk` never writes the token to disk. Environment delivery remains a deliberate
+automation trade-off with environment-inspection and parent-process risks;
+documentation recommends setting it only for the command process and clearing
+inherited values.
+
+For `oauth2`, the fixed profile is one public OAuth client using Authorization
+Code Grant, exact state validation, and PKCE S256. The authorization endpoint is
+`https://www.chatwork.com/packages/oauth2/login.php`; the token endpoint is
+`https://oauth.chatwork.com/token`. The exact registered redirect URI must not
+use `http` or `https`; the CLI does not start a loopback listener. The login task
+shows one transient consent URL on stderr, then reads one complete redirected
+URL from stdin. It rejects a changed redirect, missing/duplicate callback
+field, state mismatch, authorization denial, or invalid code before persistence.
+
+The OAuth public registration uses non-secret `CWK_OAUTH_CLIENT_ID` and
+`CWK_OAUTH_REDIRECT_URI`; there is no client-secret input. The reviewed scope
+set is `users.all:read rooms.all:read_write contacts.all:read_write`, the finite
+set needed by the fixed API coverage goal. `offline_access` is not requested
+because Chatwork reserves it for confidential clients. Infrastructure stores
+access and refresh tokens only in the operating-system credential store and
+uses `golang.org/x/oauth2` for authorization URL, PKCE, exchange, and refresh
+machinery. Provider-advertised expiry remains binding metadata; refresh occurs
+only inside the exact bound private record immediately before API I/O. A
+refresh that changes identity/account, fails, or is canceled causes zero task
+requests and never falls back to PAT.
+
+The public authentication workflow is:
+
+1. `auth profiles` discovers the one fixed `chatwork-oauth-profile` reference.
+2. `auth login --profile <ref>` consumes it unchanged, refuses to overwrite an
+   existing credential, and stores a validated OAuth credential.
+3. `auth status --profile <ref>` performs no refresh or provider API call and
+   returns only method, `unconfigured|ready|expired`, and advertised expiry.
+4. `auth logout --profile <ref>` removes the exact local credential-store entry
+   and reports `remote_revocation: false`; it does not claim remote revocation.
+
+Login is a create within the discovered profile and logout is a destructive,
+access-changing write to that exact profile. Their explicit task invocation is
+sufficient; the Chatwork provider-mutation confirmation flags do not apply.
+Both declare read-only `auth status` reconciliation for an unclassified local
+mutation outcome. Authorization codes, state, PKCE verifiers, tokens, store
+keys, and credential-bearing causes never enter argv, stdout, logs, snapshots,
+fixtures, domain values, or application values.
 
 ## Decisions left to a derived project
 
@@ -195,15 +244,15 @@ The template intentionally does not fix these choices:
 
 | Decision | Where to decide it |
 |---|---|
-| OAuth grant, browser/device behavior, redirect listener, callback URI, state, nonce, and PKCE policy | Product contract, security model, and OAuth ADR |
+| OAuth grant, browser/device behavior, redirect listener, callback URI, state, nonce, and PKCE policy | Selected above for the Chatwork first implementation; revise through a superseding product/security decision |
 | Provider endpoints and client registration | Infrastructure configuration and security model |
-| PAT input mechanism | Security model and CLI contract |
-| Credential store and operating-system integration | Security model and infrastructure ADR |
-| Refresh, reuse, cache lifetime, logout, and revocation | Security model and authentication ADR |
-| Concrete scopes, PAT permissions, and capability names | Product contract and security model |
-| Account discovery and selection | User-task workflow and product contract |
+| PAT input mechanism | Selected above: command-process environment only |
+| Credential store and operating-system integration | Selected above for OAuth; exact dependency remains an infrastructure ADR and security review |
+| Refresh, reuse, cache lifetime, logout, and revocation | Selected above for the fixed public profile; numeric refresh headroom remains in the infrastructure ADR |
+| Concrete scopes, PAT permissions, and capability names | Selected above for the fixed API coverage goal |
+| Account discovery and selection | One account and one OAuth profile in the first implementation |
 | Whether a write requires human approval, reauthentication, or dry-run | Thesis, security model, and mutation policy |
-| Authentication commands and recovery command names | Command catalog |
+| Authentication commands and recovery command names | Selected above and enforced by the command catalog |
 
 These are not optional decisions. They are deliberately deferred until a real external API and user task make the tradeoffs concrete.
 
