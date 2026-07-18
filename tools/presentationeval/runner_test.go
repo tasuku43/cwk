@@ -49,6 +49,9 @@ func (f *fakeCodexProcesses) Run(_ context.Context, request processRequest) (pro
 		}
 		return processResponse{Stdout: fakeCodexJSONL(f.t, "cwk rooms list", string(result.Stdout), answer, 200)}, nil
 	case "git":
+		if reflect.DeepEqual(request.Args, []string{"status", "--porcelain", "--untracked-files=all"}) {
+			return processResponse{Stdout: []byte{}}, nil
+		}
 		return processResponse{Stdout: []byte(strings.Repeat("a", 40) + "\n")}, nil
 	case "go":
 		output := argumentAfter(request.Args, "-o")
@@ -116,7 +119,7 @@ func TestRunBenchmarkBuildsFixtureAndRecordsFailClosedCodexRun(t *testing.T) {
 		}
 	}
 	joined := strings.Join(e2e.Args, " ")
-	for _, required := range []string{"--ask-for-approval never exec", "--sandbox workspace-write", "--ignore-user-config", "--ignore-rules", "sandbox_workspace_write.network_access=false", "shell_environment_policy.inherit=none", "--disable apps", "--disable plugins", "--disable standalone_web_search"} {
+	for _, required := range []string{"--ask-for-approval never exec", "--sandbox workspace-write", "--ignore-user-config", "--ignore-rules", "sandbox_workspace_write.network_access=false", "shell_environment_policy.inherit=none", `model_reasoning_effort="medium"`, "--disable apps", "--disable plugins", "--disable standalone_web_search"} {
 		if !strings.Contains(joined, required) {
 			t.Errorf("Codex args missing %q: %s", required, joined)
 		}
@@ -132,6 +135,30 @@ func TestCodexJSONLRejectsUnknownEventsAndShellOperators(t *testing.T) {
 	}
 	if _, err := parseCWKCommand("cwk rooms list | grep x"); err == nil {
 		t.Fatal("shell pipeline accepted")
+	}
+	got, err := parseCWKCommand(`/bin/zsh -lc 'cwk rooms list'`)
+	if err != nil || !reflect.DeepEqual(got, []string{"rooms", "list"}) {
+		t.Fatalf("single Codex shell wrapper = %v, %v", got, err)
+	}
+	if _, err := parseCWKCommand(`/bin/zsh -lc 'cwk rooms list; id'`); err == nil {
+		t.Fatal("shell wrapper with a second command accepted")
+	}
+}
+
+func TestRecordedAgentFailureIsPreservedAsIneligible(t *testing.T) {
+	submission := runSubmission{
+		Schema: runSchema, RunID: "failed-1", Candidate: "p", SituationID: "attention.rooms", Repetition: 1,
+		Agent: pinnedCodexCLI, Model: "gpt-test", Commit: strings.Repeat("a", 40), WallTimeMS: 10,
+		FailureCode: "agent_run_failed", Steps: []runStep{}, Answer: json.RawMessage(`{}`),
+		Usage: tokenUsage{}, PresentationProbe: presentationProbe{ProbeID: "p-attention.rooms-1"},
+		AllowedTools: []string{"cwk"}, ForbiddenTools: []string{}, NonCWKTools: []string{}, ExternalProcessing: []string{},
+	}
+	scored, err := scoreSubmission(submission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scored.FailureCode != "agent_run_failed" || scored.ExactAnswer || scored.CriticalPass || scored.TranscriptPass || scored.UsagePass {
+		t.Fatalf("recorded failure was not scored as ineligible: %#v", scored)
 	}
 }
 

@@ -88,6 +88,9 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 	if submission.Repetition < 1 {
 		return scoredRun{}, fmt.Errorf("repetition must be positive")
 	}
+	if submission.FailureCode != "" && submission.FailureCode != "agent_run_failed" && submission.FailureCode != "transcript_replay_failed" {
+		return scoredRun{}, fmt.Errorf("unknown failure_code %q", submission.FailureCode)
+	}
 	scenario, found := situationByID(submission.SituationID)
 	if !found {
 		return scoredRun{}, fmt.Errorf("unknown situation %q", submission.SituationID)
@@ -95,12 +98,15 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 
 	value := scoredRun{
 		Schema: scoreSchema, RunID: submission.RunID, Candidate: submission.Candidate,
-		SituationID: submission.SituationID, Repetition: submission.Repetition,
+		SituationID: submission.SituationID, Repetition: submission.Repetition, FailureCode: submission.FailureCode,
 		CommandCount: len(submission.Steps), Tokens: submission.Usage,
 		PresentationProbe: submission.PresentationProbe,
 	}
 	paths := make([]string, 0, len(submission.Steps))
-	transcriptPass := true
+	transcriptPass := submission.FailureCode == ""
+	if submission.FailureCode != "" {
+		value.Violations = append(value.Violations, "recorded runner failure: "+submission.FailureCode)
+	}
 	for index, step := range submission.Steps {
 		parsedArgv, parseErr := parseCWKCommand(step.Command)
 		if step.EventID == "" || parseErr != nil || !reflect.DeepEqual(parsedArgv, step.Argv) || len(step.Argv) == 0 {
@@ -142,6 +148,9 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 	}
 
 	value.UsagePass = validateUsage(submission, &value.Violations)
+	if submission.FailureCode != "" {
+		value.UsagePass = false
+	}
 	var expected, actual any
 	if err := json.Unmarshal(scenario.AnswerKey, &expected); err != nil {
 		return scoredRun{}, err
@@ -176,7 +185,7 @@ func validateUsage(submission runSubmission, violations *[]string) bool {
 		pass = false
 	}
 	u := submission.Usage
-	if u.Prompt < 0 || u.Cached < 0 || u.Completion < 0 || u.Total < 0 || u.Cached > u.Prompt || u.Total != u.Prompt+u.Completion {
+	if u.Prompt < 0 || u.Cached < 0 || u.CacheWrite < 0 || u.Completion < 0 || u.Reasoning < 0 || u.Total < 0 || u.Cached > u.Prompt || u.Total != u.Prompt+u.Completion {
 		*violations = append(*violations, "end-to-end token usage is inconsistent")
 		pass = false
 	}

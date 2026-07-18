@@ -64,6 +64,7 @@ func invokeCodex(ctx context.Context, runner processRunner, invocation codexInvo
 	}
 	args := []string{"--ask-for-approval", "never", "exec", "--sandbox", "workspace-write", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--strict-config", "-C", invocation.Workspace, "--model", invocation.Model, "--json", "--output-schema", schemaPath, "--output-last-message", lastPath,
 		"-c", "sandbox_workspace_write.network_access=false", "-c", "shell_environment_policy.inherit=none",
+		"-c", `model_reasoning_effort="medium"`,
 		"-c", configString("shell_environment_policy.set.PATH", invocation.FixtureBin),
 		"-c", configString("shell_environment_policy.set."+fixtureScenarioEnvironment, invocation.SituationID),
 		"-c", configString("shell_environment_policy.set."+fixtureCandidateEnvironment, invocation.Candidate),
@@ -188,14 +189,16 @@ func parseCodexJSONL(input, last []byte, allowCWK bool) (codexTranscript, error)
 				return codexTranscript{}, fmt.Errorf("invalid turn.completed order")
 			}
 			var usage struct {
-				Input  int64 `json:"input_tokens"`
-				Cached int64 `json:"cached_input_tokens"`
-				Output int64 `json:"output_tokens"`
+				Input      int64 `json:"input_tokens"`
+				Cached     int64 `json:"cached_input_tokens"`
+				CacheWrite int64 `json:"cache_write_input_tokens"`
+				Output     int64 `json:"output_tokens"`
+				Reasoning  int64 `json:"reasoning_output_tokens"`
 			}
 			if err := decodeStrict(envelope["usage"], &usage); err != nil {
 				return codexTranscript{}, fmt.Errorf("usage: %w", err)
 			}
-			transcript.Usage = tokenUsage{Prompt: usage.Input, Cached: usage.Cached, Completion: usage.Output, Total: usage.Input + usage.Output}
+			transcript.Usage = tokenUsage{Prompt: usage.Input, Cached: usage.Cached, CacheWrite: usage.CacheWrite, Completion: usage.Output, Reasoning: usage.Reasoning, Total: usage.Input + usage.Output}
 			seenCompleted = true
 		case "error", "turn.failed":
 			return codexTranscript{}, fmt.Errorf("Codex emitted %s", eventType)
@@ -308,10 +311,22 @@ func parseCWKCommand(command string) ([]string, error) {
 		return nil, fmt.Errorf("command event has incomplete quoting")
 	}
 	flush()
-	if len(argv) < 2 || argv[0] != "cwk" {
-		return nil, fmt.Errorf("command event must invoke only direct cwk argv")
+	if len(argv) >= 2 && argv[0] == "cwk" {
+		return argv[1:], nil
 	}
-	return argv[1:], nil
+	if len(argv) == 3 && argv[1] == "-lc" && allowedShellWrapper(argv[0]) {
+		return parseCWKCommand(argv[2])
+	}
+	return nil, fmt.Errorf("command event must contain only one cwk invocation")
+}
+
+func allowedShellWrapper(value string) bool {
+	switch value {
+	case "sh", "bash", "zsh", "/bin/sh", "/bin/bash", "/bin/zsh":
+		return true
+	default:
+		return false
+	}
 }
 
 func answerSchema(answer json.RawMessage) ([]byte, error) {

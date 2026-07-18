@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -157,6 +158,9 @@ func runBenchmark(ctx context.Context, dependencies runnerDependencies, request 
 	if err != nil {
 		return err
 	}
+	if err := requireCleanRepository(ctx, dependencies.Processes, repository); err != nil {
+		return err
+	}
 	workspace, err := os.MkdirTemp("", "cwk-presentation-run-")
 	if err != nil {
 		return err
@@ -178,38 +182,73 @@ func runBenchmark(ctx context.Context, dependencies runnerDependencies, request 
 		return err
 	}
 	defer file.Close()
+	probe, probeErr := measurePresentationProbe(ctx, dependencies, request, scenario, workspace, 1)
+	if probeErr != nil {
+		return probeErr
+	}
 	for repetition := 1; repetition <= request.Repetitions; repetition++ {
-		probe, probeErr := measurePresentationProbe(ctx, dependencies, request, scenario, workspace, repetition)
-		if probeErr != nil {
-			return probeErr
-		}
 		started := dependencies.Now()
+		submission := runSubmission{
+			Schema: runSchema, RunID: fmt.Sprintf("%s-%s-%d-%d", request.Candidate, scenario.ID, started.UnixNano(), repetition),
+			Candidate: request.Candidate, SituationID: scenario.ID, Repetition: repetition,
+			Agent: pinnedCodexCLI, Model: request.Model, Commit: commit,
+			PresentationProbe: probe, AllowedTools: []string{"cwk"}, ForbiddenTools: []string{},
+			NonCWKTools: []string{}, ExternalProcessing: []string{},
+		}
 		transcript, runErr := invokeCodex(ctx, dependencies.Processes, codexInvocation{
 			CodexPath: request.CodexPath, Model: request.Model, Workspace: work,
 			FixtureBin: fixtureBin, Candidate: request.Candidate, SituationID: scenario.ID,
 			Prompt: benchmarkPrompt(scenario), Answer: scenario.AnswerKey, AllowCWK: true,
 		})
 		wall := dependencies.Now().Sub(started).Milliseconds()
+		submission.WallTimeMS = wall
 		if runErr != nil {
-			return fmt.Errorf("run %s repetition %d: %w", scenario.ID, repetition, runErr)
+			submission.FailureCode = "agent_run_failed"
+			submission.Steps = []runStep{}
+			submission.Answer = json.RawMessage(`{}`)
+			if err := writeJSON(file, submission); err != nil {
+				return err
+			}
+			continue
 		}
 		steps, err := replaySteps(scenario.ID, transcript.Commands)
 		if err != nil {
-			return err
+			submission.FailureCode = "transcript_replay_failed"
+			submission.Steps = []runStep{}
+			submission.Answer = transcript.FinalAnswer
+			submission.Usage = transcript.Usage
+			if err := writeJSON(file, submission); err != nil {
+				return err
+			}
+			continue
 		}
-		submission := runSubmission{
-			Schema: runSchema, RunID: fmt.Sprintf("%s-%s-%d-%d", request.Candidate, scenario.ID, started.UnixNano(), repetition),
-			Candidate: request.Candidate, SituationID: scenario.ID, Repetition: repetition,
-			Agent: pinnedCodexCLI, Model: request.Model, Commit: commit, WallTimeMS: wall,
-			Steps: steps, Answer: transcript.FinalAnswer, Usage: transcript.Usage, PresentationProbe: probe,
-			AllowedTools: []string{"cwk"}, ForbiddenTools: transcript.ForbiddenTools,
-			NonCWKTools: []string{}, ExternalProcessing: []string{},
-		}
+		submission.Steps = steps
+		submission.Answer = transcript.FinalAnswer
+		submission.Usage = transcript.Usage
+		submission.ForbiddenTools = nonNilStrings(transcript.ForbiddenTools)
 		if err := writeJSON(file, submission); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func requireCleanRepository(ctx context.Context, runner processRunner, repository string) error {
+	response, err := runner.Run(ctx, processRequest{Path: "git", Args: []string{"status", "--porcelain", "--untracked-files=all"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
+	if err != nil || response.ExitCode != 0 {
+		return fmt.Errorf("inspect candidate worktree: %w", err)
+	}
+	if len(bytes.TrimSpace(response.Stdout)) != 0 {
+		return fmt.Errorf("candidate worktree must be clean before a scored run")
+	}
+	return nil
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
 }
 
 func validateBenchmarkRequest(request benchmarkRequest) error {

@@ -1,7 +1,9 @@
 # Proposed Competition Protocol
 
-This protocol must be reviewed and changed to `Frozen` before candidate
-implementation begins.
+This protocol must be reviewed and changed to `Frozen` before scored candidate
+measurements begin. Prototype commits made while the runner was undergoing
+live conformance are rebased onto the exact frozen base and reverified before
+they become eligible; no prototype measurement is scored.
 
 - Status: Proposed
 - Baseline: C0, `cwk-context-capsule/1`
@@ -75,7 +77,7 @@ Run one candidate-local scenario through the pinned Codex runner as:
 go run ./tools/presentationeval run \
   --candidate <c0|p|l|r|j> \
   --scenario <id> \
-  --codex <absolute-path-to-codex-0.141.0> \
+  --codex <absolute-path-to-codex-0.145.0-alpha.18> \
   --model <pinned-model-id> \
   --out <runs.jsonl>
 ```
@@ -94,7 +96,7 @@ The paired no-tool measurement is also independently runnable:
 go run ./tools/presentationeval token-probe \
   --candidate <c0|p|l|r|j> \
   --scenario <id> \
-  --codex <absolute-path-to-codex-0.141.0> \
+  --codex <absolute-path-to-codex-0.145.0-alpha.18> \
   --model <pinned-model-id> \
   --out <probe.json>
 ```
@@ -127,17 +129,23 @@ declared canonical field directly is allowed.
 
 ## Repetitions and run order
 
-- Five primary repetitions per candidate/task pair.
-- Three additional repetitions for the predeclared high-variance relation and
-  100-item-list task families.
-- Eight scored agent situations: 40 primary runs per candidate, plus 12
-  high-variance confirmation runs per candidate, for 52 runs per candidate
-  and at most 260 scored runs across the fixed five candidates.
+- One primary repetition per candidate/situation pair.
+- One additional repetition for each of the four predeclared high-variance
+  situations.
+- Eight scored agent situations: 8 primary runs per candidate, plus 4
+  high-variance confirmation runs per candidate, for 12 runs per candidate
+  and exactly 60 scheduled scored runs across the fixed five candidates.
+- Run one paired no-tool token probe per candidate/situation, then reuse that
+  deterministic measurement for the additional high-variance repetition.
+- The scored schedule consumes at most 140 external model invocations: 60
+  workflow runs plus 80 paired-probe calls. The complete competition,
+  including conformance attempts, has a hard cap of 160 invocations.
 - Alternate candidate order with a Latin-square schedule using fixed seed
   `20260718`.
 - Do not run two candidates in the same agent context.
-- Use temperature zero when supported; otherwise record the fixed sampling
-  settings and seeds.
+- Pin `gpt-5.6-terra` with reasoning effort `medium`. The Codex surface does
+  not expose temperature or seed controls for this model; run order and every
+  observable setting remain fixed.
 - Preserve failed, timed-out, and malformed runs. Do not replace them silently.
 
 ## Eligibility gates
