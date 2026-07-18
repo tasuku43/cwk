@@ -59,5 +59,8 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 	if result.Task != request.Task {
 		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_result_mismatch", "Chatwork task adapter returned a result for a different task", false)
 	}
+	if err := result.ValidateFor(request); err != nil {
+		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, err)
+	}
 	return result, nil
 }

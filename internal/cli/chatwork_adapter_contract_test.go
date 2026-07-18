@@ -102,6 +102,45 @@ func TestChatworkAdapterContractBindsEveryTypedTask(t *testing.T) {
 	}
 }
 
+func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
+	want := map[string][]string{
+		"messages send":           {"message_ref", "room_ref"},
+		"room-tasks create":       {"task_ref", "room_ref"},
+		"files upload":            {"file_ref", "room_ref"},
+		"messages mark-read":      {"unread", "mentions"},
+		"messages mark-unread":    {"unread", "mentions"},
+		"rooms leave":             {"acknowledged", "target_ref"},
+		"rooms delete":            {"acknowledged", "target_ref"},
+		"contact-requests reject": {"acknowledged", "target_ref"},
+		"contact-requests list":   {"request_ref", "account_ref", "name", "message", "coverage"},
+		"members replace":         {"administrators", "members", "readonly"},
+	}
+	for _, spec := range chatworkCommandSpecs() {
+		expected, applies := want[spec.Path]
+		if !applies {
+			continue
+		}
+		got := make([]string, len(spec.Agent.Output.Fields))
+		for index, field := range spec.Agent.Output.Fields {
+			got[index] = field.Name
+		}
+		if len(got) != len(expected) {
+			t.Errorf("%s fields = %v, want %v", spec.Path, got, expected)
+			continue
+		}
+		for index := range expected {
+			if got[index] != expected[index] {
+				t.Errorf("%s fields = %v, want %v", spec.Path, got, expected)
+				break
+			}
+		}
+		delete(want, spec.Path)
+	}
+	if len(want) != 0 {
+		t.Fatalf("critical catalog commands are missing: %v", want)
+	}
+}
+
 func assertChatworkAuthenticationContract(t *testing.T, spec CommandSpec) {
 	t.Helper()
 	requirement := spec.Agent.Authentication
@@ -250,6 +289,7 @@ func assertChatworkInfraFaultContract(t *testing.T, spec CommandSpec) {
 		{"chatwork_response_too_large", fault.KindContract, false, all},
 		{"chatwork_response_malformed", fault.KindContract, false, all},
 		{"chatwork_response_unmapped", fault.KindContract, false, all},
+		{"chatwork_result_invalid", fault.KindContract, false, all},
 		{"chatwork_unavailable", fault.KindUnavailable, true, read},
 		{"chatwork_mutation_outcome_unknown", fault.KindContract, false, mutation},
 		{"chatwork_notation_malformed", fault.KindContract, false, messageRead},

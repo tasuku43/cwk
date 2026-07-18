@@ -76,3 +76,66 @@ func TestRequestRejectsInvalidText(t *testing.T) {
 		t.Fatal("NUL body succeeded")
 	}
 }
+
+func TestResultRequiresTaskSpecificSemanticVariant(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "2"}
+	message := Reference{Kind: ReferenceMessage, Value: "3"}
+	valid := Result{
+		Task: TaskMessagesSend,
+		CreatedInRoom: &RoomScopedCreation{
+			Refs:       []Reference{message},
+			ParentRoom: room,
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid room-scoped creation failed: %v", err)
+	}
+
+	wrongVariant := valid
+	wrongVariant.CreatedInRoom = nil
+	wrongVariant.Created = []Reference{message}
+	if err := wrongVariant.Validate(); err == nil {
+		t.Fatal("generic created reference passed for room-scoped creation")
+	}
+
+	missingParent := valid
+	missingParent.CreatedInRoom = &RoomScopedCreation{Refs: []Reference{message}}
+	if err := missingParent.Validate(); err == nil {
+		t.Fatal("room-scoped creation without parent passed")
+	}
+
+	duplicate := Result{Task: TaskRoomTasksCreate, CreatedInRoom: &RoomScopedCreation{
+		Refs: []Reference{
+			{Kind: ReferenceTask, Value: "4"},
+			{Kind: ReferenceTask, Value: "4"},
+		},
+		ParentRoom: room,
+	}}
+	if err := duplicate.Validate(); err == nil {
+		t.Fatal("duplicate created references passed")
+	}
+}
+
+func TestResultDistinguishesExplicitZeroStateAndAcknowledgement(t *testing.T) {
+	if err := (Result{Task: TaskMessagesMarkRead, ReadState: &ReadState{}}).Validate(); err != nil {
+		t.Fatalf("explicit zero read state failed: %v", err)
+	}
+	if err := (Result{Task: TaskMessagesMarkRead}).Validate(); err == nil {
+		t.Fatal("absent read state passed")
+	}
+	if err := (Result{
+		Task: TaskRoomsDelete,
+		Acknowledgement: &Acknowledgement{
+			Acknowledged: true,
+			Target:       Reference{Kind: ReferenceRoom, Value: "2"},
+		},
+	}).Validate(); err != nil {
+		t.Fatalf("explicit acknowledgement failed: %v", err)
+	}
+	if err := (Result{
+		Task:            TaskRoomsDelete,
+		Acknowledgement: &Acknowledgement{Target: Reference{Kind: ReferenceRoom, Value: "2"}},
+	}).Validate(); err == nil {
+		t.Fatal("false acknowledgement passed")
+	}
+}

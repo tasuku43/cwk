@@ -23,9 +23,8 @@ func TestRenderMessageContextGolden(t *testing.T) {
 	}
 }
 
-func TestRenderIsDeterministicAndSortsMapBackedFields(t *testing.T) {
+func TestRenderIsDeterministic(t *testing.T) {
 	result := messageFixture()
-	result.RoleCounts = map[string]int64{"member": 2, "admin": 1, "readonly": 3}
 
 	first, err := Render(result)
 	if err != nil {
@@ -40,9 +39,88 @@ func TestRenderIsDeterministicAndSortsMapBackedFields(t *testing.T) {
 			t.Fatalf("Render() run %d was nondeterministic", run)
 		}
 	}
-	if !(strings.Index(first, `"admin"=1`) < strings.Index(first, `"member"=2`) &&
-		strings.Index(first, `"member"=2`) < strings.Index(first, `"readonly"=3`)) {
-		t.Fatalf("role counts are not sorted: %s", first)
+}
+
+func TestRenderPreservesTaskSpecificMutationFacts(t *testing.T) {
+	room := chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "42"}
+	message := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "100"}
+	task := chatwork.Reference{Kind: chatwork.ReferenceTask, Value: "200"}
+	file := chatwork.Reference{Kind: chatwork.ReferenceFile, Value: "300"}
+	request := chatwork.Reference{Kind: chatwork.ReferenceRequest, Value: "77"}
+	tests := []struct {
+		name   string
+		result chatwork.Result
+		want   []string
+	}{
+		{
+			name: "room-scoped creation",
+			result: chatwork.Result{Task: chatwork.TaskMessagesSend,
+				CreatedInRoom: &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{message}, ParentRoom: room}},
+			want: []string{"creation message-ref=m1 room-ref=r1", "canonical=42", "canonical=100"},
+		},
+		{
+			name: "task creation parent",
+			result: chatwork.Result{Task: chatwork.TaskRoomTasksCreate,
+				CreatedInRoom: &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{task}, ParentRoom: room}},
+			want: []string{"creation task-ref=t1 room-ref=r1", "canonical=42", "canonical=200"},
+		},
+		{
+			name: "file creation parent",
+			result: chatwork.Result{Task: chatwork.TaskFilesUpload,
+				CreatedInRoom: &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{file}, ParentRoom: room}},
+			want: []string{"creation file-ref=f1 room-ref=r1", "canonical=42", "canonical=300"},
+		},
+		{
+			name:   "explicit zero read state",
+			result: chatwork.Result{Task: chatwork.TaskMessagesMarkRead, ReadState: &chatwork.ReadState{}},
+			want:   []string{"read-state unread=0 mentions=0"},
+		},
+		{
+			name: "acknowledgement target",
+			result: chatwork.Result{Task: chatwork.TaskContactRequestsReject,
+				Acknowledgement: &chatwork.Acknowledgement{Acknowledged: true, Target: request}},
+			want: []string{"acknowledgement acknowledged=true target-ref=q1", "canonical=77"},
+		},
+		{
+			name: "membership catalog names",
+			result: chatwork.Result{Task: chatwork.TaskMembersReplace,
+				MembershipCounts: &chatwork.MembershipCounts{Administrators: 2, Members: 3, Readonly: 4}},
+			want: []string{"membership-counts administrators=2 members=3 readonly=4"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range test.want {
+				if !strings.Contains(got, want) {
+					t.Errorf("output does not contain %q:\n%s", want, got)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderContactRequestIncludesDeclaredName(t *testing.T) {
+	result := chatwork.Result{
+		Task: chatwork.TaskContactRequestsList,
+		Requests: []chatwork.ContactRequest{{
+			Ref: chatwork.Reference{Kind: chatwork.ReferenceRequest, Value: "77"},
+			Account: chatwork.Account{
+				Ref:  chatwork.Reference{Kind: chatwork.ReferenceAccount, Value: "9"},
+				Name: "Synthetic Requester",
+			},
+			Message: "Synthetic request",
+		}},
+	}
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `name untrusted="Synthetic Requester"`) {
+		t.Fatalf("declared contact-request name is missing:\n%s", got)
 	}
 }
 
@@ -130,7 +208,6 @@ func messageFixture() chatwork.Result {
 	account9 := chatwork.Reference{Kind: chatwork.ReferenceAccount, Value: "9"}
 	message100 := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "100"}
 	message101 := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "101"}
-	message999 := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "999"}
 
 	return chatwork.Result{
 		Task: chatwork.TaskMessagesList,
@@ -166,7 +243,7 @@ func messageFixture() chatwork.Result {
 					Resolved: true,
 				},
 				Quotes: []chatwork.Relation{
-					{Kind: "quote", Target: message999, Resolved: false, ExternalID: "provider-quote-1"},
+					{Kind: "quote", Target: account9, Resolved: false, ExternalID: "1700000010"},
 				},
 			},
 		},

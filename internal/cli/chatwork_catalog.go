@@ -211,6 +211,7 @@ func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mu
 		declaredCommandError(fault.KindContract, "missing_context", false, help, "Repair the context-aware command invocation."),
 		declaredCommandError(fault.KindContract, "missing_chatwork_port", false, help, "Repair the Chatwork adapter composition."),
 		declaredCommandError(fault.KindContract, "chatwork_result_mismatch", false, help, "Repair the typed Chatwork adapter result contract."),
+		declaredCommandError(fault.KindContract, "chatwork_result_invalid", false, help, "Repair the task-specific typed Chatwork result contract."),
 		declaredCommandError(fault.KindAuthentication, "invalid_authentication_binding", false, help, "Re-establish the configured Chatwork authentication."),
 		declaredCommandError(fault.KindInternal, "unclassified_chatwork_error", false, help, "Inspect the Chatwork adapter classification."),
 		declaredCommandError(fault.KindInvalidInput, "chatwork_invalid_request", false, help, "Correct the task inputs accepted by Chatwork."),

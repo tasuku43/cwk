@@ -38,13 +38,69 @@ func testBinding(t *testing.T) authn.BindingID {
 }
 
 func TestExecuteReturnsMatchingResult(t *testing.T) {
-	port := &fakePort{}
+	port := &fakePort{result: chatwork.Result{Rooms: []chatwork.Room{}}}
 	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if result.Task != chatwork.TaskRoomsList || port.calls != 1 {
 		t.Fatalf("result = %+v, calls = %d", result, port.calls)
+	}
+}
+
+func TestExecuteRejectsInvalidTaskSpecificResult(t *testing.T) {
+	port := &fakePort{result: chatwork.Result{
+		Created: []chatwork.Reference{{Kind: chatwork.ReferenceMessage, Value: "3"}},
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesSend,
+		Room: chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "2"},
+	})
+	var got *fault.Error
+	if !errors.As(err, &got) || got.Code != "chatwork_result_invalid" || result.Task != "" || port.calls != 1 {
+		t.Fatalf("result = %+v, err = %#v, calls = %d", result, err, port.calls)
+	}
+}
+
+func TestExecuteRejectsResultIdentityThatDoesNotMatchRequest(t *testing.T) {
+	room2 := chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "2"}
+	room9 := chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "9"}
+	message3 := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "3"}
+	message8 := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "8"}
+	tests := []struct {
+		name    string
+		request chatwork.Request
+		result  chatwork.Result
+	}{
+		{
+			name:    "created parent room",
+			request: chatwork.Request{Task: chatwork.TaskMessagesSend, Room: room2},
+			result: chatwork.Result{Task: chatwork.TaskMessagesSend, CreatedInRoom: &chatwork.RoomScopedCreation{
+				Refs: []chatwork.Reference{message3}, ParentRoom: room9,
+			}},
+		},
+		{
+			name:    "acknowledged target",
+			request: chatwork.Request{Task: chatwork.TaskRoomsDelete, Room: room2},
+			result: chatwork.Result{Task: chatwork.TaskRoomsDelete, Acknowledgement: &chatwork.Acknowledgement{
+				Acknowledged: true, Target: room9,
+			}},
+		},
+		{
+			name:    "affected target",
+			request: chatwork.Request{Task: chatwork.TaskMessagesUpdate, Room: room2, Message: message3},
+			result:  chatwork.Result{Task: chatwork.TaskMessagesUpdate, Affected: []chatwork.Reference{message8}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			port := &fakePort{result: test.result}
+			result, err := New(port).Execute(context.Background(), testBinding(t), test.request)
+			var got *fault.Error
+			if !errors.As(err, &got) || got.Code != "chatwork_result_invalid" || result.Task != "" || port.calls != 1 {
+				t.Fatalf("result = %+v, err = %#v, calls = %d", result, err, port.calls)
+			}
+		})
 	}
 }
 

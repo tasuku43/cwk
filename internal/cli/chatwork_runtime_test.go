@@ -206,7 +206,7 @@ func TestRunChatworkMutationPreservesUnclassifiedOutcome(t *testing.T) {
 	}
 }
 
-func TestRunChatworkChecksOutputCeilingAfterConfirmedMutation(t *testing.T) {
+func TestRunChatworkRejectsWrongResultVariantAfterConfirmedMutation(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages send")
 	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
 		return chatwork.Result{
@@ -221,14 +221,14 @@ func TestRunChatworkChecksOutputCeilingAfterConfirmedMutation(t *testing.T) {
 	}}
 	cli, _, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
 	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--body", "hello"})
-	if code != ExitContract || !strings.Contains(stderr.String(), "code: output_contract_exceeded") {
+	if code != ExitContract || !strings.Contains(stderr.String(), "code: chatwork_result_invalid") {
 		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
 	if port.calls != 1 {
-		t.Fatalf("port calls = %d, want a single completed mutation", port.calls)
+		t.Fatalf("port calls = %d, want a single attempted mutation", port.calls)
 	}
 	if stdout.Len() != 0 {
-		t.Fatalf("oversized output wrote %d bytes", stdout.Len())
+		t.Fatalf("invalid result wrote %d bytes", stdout.Len())
 	}
 }
 

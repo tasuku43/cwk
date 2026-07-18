@@ -20,11 +20,8 @@ const Schema = "cwk-context-capsule/1"
 
 // Render returns the deterministic candidate-C projection of result.
 func Render(result chatwork.Result) (string, error) {
-	if !result.Task.Valid() {
-		return "", fmt.Errorf("context capsule task is missing or invalid")
-	}
-	if result.Coverage.Limit < 0 {
-		return "", fmt.Errorf("context capsule coverage limit must not be negative")
+	if err := result.Validate(); err != nil {
+		return "", fmt.Errorf("context capsule result: %w", err)
 	}
 
 	references, err := collectReferences(result)
@@ -112,6 +109,7 @@ func renderResult(output *strings.Builder, result chatwork.Result, aliases alias
 		line(output, "  contact-requests %d", len(result.Requests))
 		for _, request := range result.Requests {
 			line(output, "    %s account=%s", aliases.forRef(request.Ref), aliases.forRef(request.Account.Ref))
+			line(output, "      name untrusted=%s", external(request.Account.Name))
 			line(output, "      message untrusted=%s", external(request.Message))
 		}
 	}
@@ -121,19 +119,36 @@ func renderResult(output *strings.Builder, result chatwork.Result, aliases alias
 	if result.Affected != nil {
 		line(output, "  affected %s", refList(result.Affected, aliases))
 	}
-	if result.Unread != 0 || result.Mentions != 0 {
-		line(output, "  counts unread=%d mentions=%d", result.Unread, result.Mentions)
+	if result.CreatedInRoom != nil {
+		renderRoomScopedCreation(output, result, aliases)
 	}
-	if result.RoleCounts != nil {
-		keys := make([]string, 0, len(result.RoleCounts))
-		for key := range result.RoleCounts {
-			keys = append(keys, key)
+	if result.ReadState != nil {
+		line(output, "  read-state unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
+	}
+	if result.Acknowledgement != nil {
+		line(output, "  acknowledgement acknowledged=%t target-ref=%s",
+			result.Acknowledgement.Acknowledged, aliases.forRef(result.Acknowledgement.Target))
+	}
+	if result.MembershipCounts != nil {
+		line(output, "  membership-counts administrators=%d members=%d readonly=%d",
+			result.MembershipCounts.Administrators, result.MembershipCounts.Members, result.MembershipCounts.Readonly)
+	}
+}
+
+func renderRoomScopedCreation(output *strings.Builder, result chatwork.Result, aliases aliasTable) {
+	creation := result.CreatedInRoom
+	switch result.Task {
+	case chatwork.TaskMessagesSend:
+		line(output, "  creation message-ref=%s room-ref=%s",
+			aliases.forRef(creation.Refs[0]), aliases.forRef(creation.ParentRoom))
+	case chatwork.TaskRoomTasksCreate:
+		for _, ref := range creation.Refs {
+			line(output, "  creation task-ref=%s room-ref=%s",
+				aliases.forRef(ref), aliases.forRef(creation.ParentRoom))
 		}
-		sort.Strings(keys)
-		line(output, "  role-counts %d", len(keys))
-		for _, key := range keys {
-			line(output, "    %s=%d", atom(key), result.RoleCounts[key])
-		}
+	case chatwork.TaskFilesUpload:
+		line(output, "  creation file-ref=%s room-ref=%s",
+			aliases.forRef(creation.Refs[0]), aliases.forRef(creation.ParentRoom))
 	}
 }
 
@@ -326,6 +341,21 @@ func collectReferences(result chatwork.Result) ([]chatwork.Reference, error) {
 			}
 		}
 	}
+	if result.CreatedInRoom != nil {
+		if err := add(result.CreatedInRoom.ParentRoom); err != nil {
+			return nil, err
+		}
+		for _, ref := range result.CreatedInRoom.Refs {
+			if err := add(ref); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if result.Acknowledgement != nil {
+		if err := add(result.Acknowledgement.Target); err != nil {
+			return nil, err
+		}
+	}
 
 	references := make([]chatwork.Reference, 0, len(unique))
 	for _, ref := range unique {
@@ -435,9 +465,6 @@ func validateExternalText(result chatwork.Result) error {
 	for _, request := range result.Requests {
 		addAccount(request.Account)
 		values = append(values, request.Message)
-	}
-	for key := range result.RoleCounts {
-		values = append(values, key)
 	}
 	for _, value := range values {
 		if !utf8.ValidString(value) {

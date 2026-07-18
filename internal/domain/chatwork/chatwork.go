@@ -319,6 +319,37 @@ type ContactRequest struct {
 	Message string
 }
 
+// RoomScopedCreation preserves both newly created object identities and the
+// exact room scope supplied by the caller. The parent is part of the task
+// result rather than presentation reconstruction.
+type RoomScopedCreation struct {
+	Refs       []Reference
+	ParentRoom Reference
+}
+
+// ReadState represents the provider-confirmed room counters after a read-state
+// mutation. A pointer on Result distinguishes an explicit 0/0 state from a
+// task that did not return read-state facts.
+type ReadState struct {
+	Unread   int64
+	Mentions int64
+}
+
+// Acknowledgement records a provider-confirmed empty-body mutation and the
+// exact target supplied by the caller.
+type Acknowledgement struct {
+	Acknowledged bool
+	Target       Reference
+}
+
+// MembershipCounts is the typed members.replace outcome. Its fields use
+// provider-independent task vocabulary instead of wire response keys.
+type MembershipCounts struct {
+	Administrators int64
+	Members        int64
+	Readonly       int64
+}
+
 type Coverage struct {
 	Kind        string
 	Limit       int
@@ -328,20 +359,237 @@ type Coverage struct {
 
 // Result is a typed semantic union. Only fields relevant to Task are populated.
 type Result struct {
-	Task       Task
-	Coverage   Coverage
-	Account    *Account
-	Status     *Status
-	Rooms      []Room
-	Accounts   []Account
-	Messages   []Message
-	Tasks      []WorkTask
-	Files      []File
-	InviteLink *InviteLink
-	Requests   []ContactRequest
-	Created    []Reference
-	Affected   []Reference
-	Unread     int64
-	Mentions   int64
-	RoleCounts map[string]int64
+	Task             Task
+	Coverage         Coverage
+	Account          *Account
+	Status           *Status
+	Rooms            []Room
+	Accounts         []Account
+	Messages         []Message
+	Tasks            []WorkTask
+	Files            []File
+	InviteLink       *InviteLink
+	Requests         []ContactRequest
+	Created          []Reference
+	Affected         []Reference
+	CreatedInRoom    *RoomScopedCreation
+	ReadState        *ReadState
+	Acknowledgement  *Acknowledgement
+	MembershipCounts *MembershipCounts
+}
+
+// Validate proves that the semantic union uses the one result variant owned by
+// Task. It deliberately validates provider-independent result shape here so a
+// renderer cannot guess whether a zero value was absent or explicitly
+// returned.
+func (r Result) Validate() error {
+	if !r.Task.Valid() {
+		return fmt.Errorf("Chatwork result task is missing or invalid")
+	}
+	if r.Coverage.Limit < 0 {
+		return fmt.Errorf("Chatwork result coverage limit must not be negative")
+	}
+
+	variant := r.resultVariant()
+	want := ""
+	switch r.Task {
+	case TaskAccountShow, TaskContactRequestsAccept:
+		want = "account"
+	case TaskAccountStatus:
+		want = "status"
+	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
+		want = "tasks"
+	case TaskContactsList, TaskMembersList:
+		want = "accounts"
+	case TaskRoomsList, TaskRoomsShow:
+		want = "rooms"
+	case TaskRoomsCreate:
+		want = "created"
+	case TaskRoomsUpdate, TaskMessagesUpdate, TaskMessagesDelete, TaskRoomTasksSetStatus:
+		want = "affected"
+	case TaskRoomsLeave, TaskRoomsDelete, TaskContactRequestsReject:
+		want = "acknowledgement"
+	case TaskMembersReplace:
+		want = "membership-counts"
+	case TaskMessagesList, TaskMessagesShow:
+		want = "messages"
+	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
+		want = "room-scoped-creation"
+	case TaskMessagesMarkRead, TaskMessagesMarkUnread:
+		want = "read-state"
+	case TaskFilesList, TaskFilesShow:
+		want = "files"
+	case TaskInviteLinkShow, TaskInviteLinkCreate, TaskInviteLinkUpdate, TaskInviteLinkDelete:
+		want = "invite-link"
+	case TaskContactRequestsList:
+		want = "contact-requests"
+	}
+	if variant != want {
+		return fmt.Errorf("Chatwork result variant is %q, want %q for %s", variant, want, r.Task)
+	}
+
+	switch r.Task {
+	case TaskRoomsShow:
+		if len(r.Rooms) != 1 {
+			return fmt.Errorf("rooms.show result must contain exactly one room")
+		}
+	case TaskMessagesShow:
+		if len(r.Messages) != 1 {
+			return fmt.Errorf("messages.show result must contain exactly one message")
+		}
+	case TaskRoomTasksShow:
+		if len(r.Tasks) != 1 {
+			return fmt.Errorf("room-tasks.show result must contain exactly one task")
+		}
+	case TaskFilesShow:
+		if len(r.Files) != 1 {
+			return fmt.Errorf("files.show result must contain exactly one file")
+		}
+	}
+
+	return r.validateVariantFacts()
+}
+
+// ValidateFor additionally binds result identities to the exact validated
+// request. A structurally valid result for another parent or target is not a
+// valid outcome of this invocation.
+func (r Result) ValidateFor(request Request) error {
+	if err := request.Validate(); err != nil {
+		return fmt.Errorf("Chatwork result request is invalid: %w", err)
+	}
+	if r.Task != request.Task {
+		return fmt.Errorf("Chatwork result task is %s, want %s", r.Task, request.Task)
+	}
+	if err := r.Validate(); err != nil {
+		return err
+	}
+
+	switch r.Task {
+	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
+		if r.CreatedInRoom.ParentRoom != request.Room {
+			return fmt.Errorf("Chatwork result parent room does not match the request")
+		}
+	case TaskRoomsLeave, TaskRoomsDelete:
+		if r.Acknowledgement.Target != request.Room {
+			return fmt.Errorf("Chatwork result acknowledged room does not match the request")
+		}
+	case TaskContactRequestsReject:
+		if r.Acknowledgement.Target != request.Request {
+			return fmt.Errorf("Chatwork result acknowledged contact request does not match the request")
+		}
+	case TaskRoomsUpdate:
+		if len(r.Affected) != 1 || r.Affected[0] != request.Room {
+			return fmt.Errorf("Chatwork result affected room does not match the request")
+		}
+	case TaskMessagesUpdate, TaskMessagesDelete:
+		if len(r.Affected) != 1 || r.Affected[0] != request.Message {
+			return fmt.Errorf("Chatwork result affected message does not match the request")
+		}
+	case TaskRoomTasksSetStatus:
+		if len(r.Affected) != 1 || r.Affected[0] != request.TaskRef {
+			return fmt.Errorf("Chatwork result affected task does not match the request")
+		}
+	}
+	return nil
+}
+
+func (r Result) resultVariant() string {
+	variants := make([]string, 0, 16)
+	add := func(name string, present bool) {
+		if present {
+			variants = append(variants, name)
+		}
+	}
+	add("account", r.Account != nil)
+	add("status", r.Status != nil)
+	add("rooms", r.Rooms != nil)
+	add("accounts", r.Accounts != nil)
+	add("messages", r.Messages != nil)
+	add("tasks", r.Tasks != nil)
+	add("files", r.Files != nil)
+	add("invite-link", r.InviteLink != nil)
+	add("contact-requests", r.Requests != nil)
+	add("created", r.Created != nil)
+	add("affected", r.Affected != nil)
+	add("room-scoped-creation", r.CreatedInRoom != nil)
+	add("read-state", r.ReadState != nil)
+	add("acknowledgement", r.Acknowledgement != nil)
+	add("membership-counts", r.MembershipCounts != nil)
+	if len(variants) == 1 {
+		return variants[0]
+	}
+	if len(variants) == 0 {
+		return "absent"
+	}
+	return strings.Join(variants, "+")
+}
+
+func (r Result) validateVariantFacts() error {
+	validateRef := func(ref Reference, kind ReferenceKind) error {
+		if ref.Kind != kind {
+			return fmt.Errorf("Chatwork result reference kind is %s, want %s", ref.Kind, kind)
+		}
+		return ValidateReference(ref.Kind, ref.Value)
+	}
+	validateRefs := func(refs []Reference, kind ReferenceKind, allowMany bool) error {
+		if len(refs) == 0 || (!allowMany && len(refs) != 1) {
+			return fmt.Errorf("Chatwork result must contain the declared %s reference cardinality", kind)
+		}
+		seen := make(map[Reference]struct{}, len(refs))
+		for _, ref := range refs {
+			if err := validateRef(ref, kind); err != nil {
+				return err
+			}
+			if _, exists := seen[ref]; exists {
+				return fmt.Errorf("Chatwork result contains a duplicate %s reference", kind)
+			}
+			seen[ref] = struct{}{}
+		}
+		return nil
+	}
+
+	switch r.Task {
+	case TaskRoomsCreate:
+		return validateRefs(r.Created, ReferenceRoom, false)
+	case TaskRoomsUpdate:
+		return validateRefs(r.Affected, ReferenceRoom, false)
+	case TaskMessagesUpdate, TaskMessagesDelete:
+		return validateRefs(r.Affected, ReferenceMessage, false)
+	case TaskRoomTasksSetStatus:
+		return validateRefs(r.Affected, ReferenceTask, false)
+	case TaskMessagesSend:
+		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceMessage, false); err != nil {
+			return err
+		}
+		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+	case TaskRoomTasksCreate:
+		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceTask, true); err != nil {
+			return err
+		}
+		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+	case TaskFilesUpload:
+		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceFile, false); err != nil {
+			return err
+		}
+		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+	case TaskMessagesMarkRead, TaskMessagesMarkUnread:
+		if r.ReadState.Unread < 0 || r.ReadState.Mentions < 0 {
+			return fmt.Errorf("Chatwork read-state counts must not be negative")
+		}
+	case TaskRoomsLeave, TaskRoomsDelete:
+		if !r.Acknowledgement.Acknowledged {
+			return fmt.Errorf("Chatwork room acknowledgement must be explicit")
+		}
+		return validateRef(r.Acknowledgement.Target, ReferenceRoom)
+	case TaskContactRequestsReject:
+		if !r.Acknowledgement.Acknowledged {
+			return fmt.Errorf("Chatwork contact-request acknowledgement must be explicit")
+		}
+		return validateRef(r.Acknowledgement.Target, ReferenceRequest)
+	case TaskMembersReplace:
+		if r.MembershipCounts.Administrators < 0 || r.MembershipCounts.Members < 0 || r.MembershipCounts.Readonly < 0 {
+			return fmt.Errorf("Chatwork membership counts must not be negative")
+		}
+	}
+	return nil
 }

@@ -70,6 +70,9 @@ func TestSyntheticResponseCorpusCoversEveryTaskThroughCandidateC(t *testing.T) {
 			if result.Task != fixture.Task {
 				t.Fatalf("result task = %q, want %q", result.Task, fixture.Task)
 			}
+			if err := result.Validate(); err != nil {
+				t.Fatalf("task-specific semantic result is invalid: %v", err)
+			}
 		})
 	}
 }

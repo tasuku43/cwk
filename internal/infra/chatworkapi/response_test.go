@@ -72,23 +72,51 @@ func TestMapResponseCoversResourceShapes(t *testing.T) {
 
 func TestMapIdentityResponses(t *testing.T) {
 	tests := []struct {
-		task chatwork.Task
-		body string
-		kind chatwork.ReferenceKind
+		task       chatwork.Task
+		body       string
+		kind       chatwork.ReferenceKind
+		roomScoped bool
 	}{
-		{chatwork.TaskRoomsCreate, `{"room_id":2}`, chatwork.ReferenceRoom},
-		{chatwork.TaskMessagesSend, `{"message_id":"3"}`, chatwork.ReferenceMessage},
-		{chatwork.TaskRoomTasksCreate, `{"task_ids":[4]}`, chatwork.ReferenceTask},
-		{chatwork.TaskFilesUpload, `{"file_id":5}`, chatwork.ReferenceFile},
+		{chatwork.TaskRoomsCreate, `{"room_id":2}`, chatwork.ReferenceRoom, false},
+		{chatwork.TaskMessagesSend, `{"message_id":"3"}`, chatwork.ReferenceMessage, true},
+		{chatwork.TaskRoomTasksCreate, `{"task_ids":[4]}`, chatwork.ReferenceTask, true},
+		{chatwork.TaskFilesUpload, `{"file_id":5}`, chatwork.ReferenceFile, true},
 	}
 	for _, test := range tests {
-		result, err := mapResponse(completeRequest(test.task), []byte(test.body))
+		request := completeRequest(test.task)
+		result, err := mapResponse(request, []byte(test.body))
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(result.Created) != 1 || result.Created[0].Kind != test.kind {
+		created := result.Created
+		if test.roomScoped {
+			if result.CreatedInRoom == nil || result.CreatedInRoom.ParentRoom != request.Room {
+				t.Fatalf("task %s room-scoped result = %+v", test.task, result)
+			}
+			created = result.CreatedInRoom.Refs
+		}
+		if len(created) != 1 || created[0].Kind != test.kind {
 			t.Fatalf("task %s result = %+v", test.task, result)
 		}
+	}
+}
+
+func TestMapIdentityResponsesPreserveExplicitZeroReadStateAndMembershipNames(t *testing.T) {
+	read, err := mapResponse(completeRequest(chatwork.TaskMessagesMarkRead), []byte(`{"unread_num":0,"mention_num":0}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.ReadState == nil || read.ReadState.Unread != 0 || read.ReadState.Mentions != 0 {
+		t.Fatalf("read state = %+v", read.ReadState)
+	}
+
+	members, err := mapResponse(completeRequest(chatwork.TaskMembersReplace), []byte(`{"admin":[1,2],"member":[3],"readonly":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if members.MembershipCounts == nil || members.MembershipCounts.Administrators != 2 ||
+		members.MembershipCounts.Members != 1 || members.MembershipCounts.Readonly != 0 {
+		t.Fatalf("membership counts = %+v", members.MembershipCounts)
 	}
 }
 

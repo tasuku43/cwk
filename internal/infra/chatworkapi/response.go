@@ -268,11 +268,6 @@ func mapResponse(input chatwork.Request, body []byte) (chatwork.Result, error) {
 			return chatwork.Result{}, err
 		}
 		result.InviteLink = &chatwork.InviteLink{Ref: invite, Public: wire.Public, URL: wire.URL, NeedsApproval: wire.NeedAcceptance, Description: wire.Description}
-		if input.Task == chatwork.TaskInviteLinkCreate {
-			result.Created = []chatwork.Reference{invite}
-		} else if input.Task != chatwork.TaskInviteLinkShow {
-			result.Affected = []chatwork.Reference{invite}
-		}
 	case chatwork.TaskContactRequestsList:
 		var wire []contactRequestDTO
 		if err := decodeJSON(body, &wire); err != nil {
@@ -293,7 +288,6 @@ func mapResponse(input chatwork.Request, body []byte) (chatwork.Result, error) {
 			return chatwork.Result{}, err
 		}
 		result.Account = &account
-		result.Affected = []chatwork.Reference{input.Request}
 	case chatwork.TaskRoomsCreate, chatwork.TaskRoomsUpdate, chatwork.TaskMembersReplace,
 		chatwork.TaskMessagesSend, chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread,
 		chatwork.TaskMessagesUpdate, chatwork.TaskMessagesDelete, chatwork.TaskRoomTasksCreate,
@@ -326,14 +320,17 @@ func mapIdentityResponse(input chatwork.Request, body []byte, result *chatwork.R
 		}
 		result.Affected = []chatwork.Reference{ref}
 	case chatwork.TaskMembersReplace:
-		result.RoleCounts = map[string]int64{"admin": int64(len(wire.Admin)), "member": int64(len(wire.Member)), "readonly": int64(len(wire.Readonly))}
-		result.Affected = []chatwork.Reference{input.Room}
+		result.MembershipCounts = &chatwork.MembershipCounts{
+			Administrators: int64(len(wire.Admin)),
+			Members:        int64(len(wire.Member)),
+			Readonly:       int64(len(wire.Readonly)),
+		}
 	case chatwork.TaskMessagesSend:
 		ref, err := reference(chatwork.ReferenceMessage, wire.MessageID)
 		if err != nil {
 			return err
 		}
-		result.Created = []chatwork.Reference{ref}
+		result.CreatedInRoom = &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{ref}, ParentRoom: input.Room}
 	case chatwork.TaskMessagesUpdate, chatwork.TaskMessagesDelete:
 		ref, err := reference(chatwork.ReferenceMessage, wire.MessageID)
 		if err != nil {
@@ -341,20 +338,20 @@ func mapIdentityResponse(input chatwork.Request, body []byte, result *chatwork.R
 		}
 		result.Affected = []chatwork.Reference{ref}
 	case chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread:
-		result.Unread, result.Mentions = wire.Unread, wire.Mentions
-		result.Affected = []chatwork.Reference{input.Room}
+		result.ReadState = &chatwork.ReadState{Unread: wire.Unread, Mentions: wire.Mentions}
 	case chatwork.TaskRoomTasksCreate:
-		result.Created = make([]chatwork.Reference, 0, len(wire.TaskIDs))
+		created := make([]chatwork.Reference, 0, len(wire.TaskIDs))
 		for _, id := range wire.TaskIDs {
 			ref, err := reference(chatwork.ReferenceTask, id)
 			if err != nil {
 				return err
 			}
-			result.Created = append(result.Created, ref)
+			created = append(created, ref)
 		}
-		if len(result.Created) == 0 {
+		if len(created) == 0 {
 			return malformedResponse()
 		}
+		result.CreatedInRoom = &chatwork.RoomScopedCreation{Refs: created, ParentRoom: input.Room}
 	case chatwork.TaskRoomTasksSetStatus:
 		ref, err := reference(chatwork.ReferenceTask, wire.TaskID)
 		if err != nil {
@@ -366,7 +363,7 @@ func mapIdentityResponse(input chatwork.Request, body []byte, result *chatwork.R
 		if err != nil {
 			return err
 		}
-		result.Created = []chatwork.Reference{ref}
+		result.CreatedInRoom = &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{ref}, ParentRoom: input.Room}
 	}
 	return nil
 }
@@ -387,9 +384,9 @@ func emptyResult(input chatwork.Request) chatwork.Result {
 	case chatwork.TaskContactRequestsList:
 		result.Requests = []chatwork.ContactRequest{}
 	case chatwork.TaskRoomsLeave, chatwork.TaskRoomsDelete:
-		result.Affected = []chatwork.Reference{input.Room}
+		result.Acknowledgement = &chatwork.Acknowledgement{Acknowledged: true, Target: input.Room}
 	case chatwork.TaskContactRequestsReject:
-		result.Affected = []chatwork.Reference{input.Request}
+		result.Acknowledgement = &chatwork.Acknowledgement{Acknowledged: true, Target: input.Request}
 	}
 	return result
 }
