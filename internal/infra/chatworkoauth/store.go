@@ -8,8 +8,8 @@ import (
 )
 
 const (
-	credentialService = "cwk.chatwork.oauth2"
-	credentialAccount = "default"
+	credentialService = "cwk.chatwork.oauth2" // #nosec G101 -- public OS credential-store service index, not credential material.
+	credentialAccount = "default"             // #nosec G101 -- public single-profile store index, not an account secret or identifier.
 	// Windows Credential Manager has the lowest documented payload ceiling of
 	// the supported go-keyring backends. Keep a small margin below it.
 	maxStoredCredentialBytes = 2400

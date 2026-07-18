@@ -17,7 +17,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
-const TokenEnvironment = "CWK_API_TOKEN"
+const TokenEnvironment = "CWK_API_TOKEN" // #nosec G101 -- environment variable name only; no credential value is embedded.
 
 type credentialRecord struct {
 	credential requestCredential

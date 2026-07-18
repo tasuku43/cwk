@@ -32,7 +32,7 @@ import (
 
 const (
 	AuthorizationEndpoint = "https://www.chatwork.com/packages/oauth2/login.php"
-	TokenEndpoint         = "https://oauth.chatwork.com/token"
+	TokenEndpoint         = "https://oauth.chatwork.com/token" // #nosec G101 -- fixed public provider endpoint, not token material.
 	ClientIDEnvironment   = "CWK_OAUTH_CLIENT_ID"
 	RedirectEnvironment   = "CWK_OAUTH_REDIRECT_URI"
 
@@ -393,7 +393,7 @@ func (m *Manager) saveTokenLocked(ctx context.Context, token *oauth2.Token, scop
 		AccessToken: token.AccessToken, RefreshToken: token.RefreshToken,
 		TokenType: token.Type(), Expiry: token.Expiry.UTC(), Scopes: append([]string(nil), scopes...), AccountID: accountID,
 	}
-	value, err := json.Marshal(stored)
+	value, err := json.Marshal(stored) // #nosec G117 -- deliberate bounded serialization exclusively for the OS credential-store adapter.
 	if err != nil || len(value) > maxStoredCredentialBytes {
 		return oauthFault(fault.KindContract, "oauth_credential_too_large", "Chatwork OAuth credential exceeds the credential-store limit", false)
 	}

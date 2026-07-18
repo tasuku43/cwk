@@ -228,7 +228,7 @@ func validUploadFilename(value string) bool {
 }
 
 func boundedReadFile(path string) ([]byte, error) {
-	file, err := os.Open(path)
+	file, err := os.Open(path) // #nosec G304 -- files upload intentionally reads the exact user-selected --path and applies the fixed byte ceiling below.
 	if err != nil {
 		return nil, err
 	}
