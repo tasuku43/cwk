@@ -12,7 +12,7 @@ This validation asks whether an agent can translate a user's Chatwork request in
 
 Direct extraction of a declared canonical reference or fact is allowed. Rebuilding semantics that `cwk` claims to provide is not.
 
-Provider-call evaluation uses the first-implementation ceilings: one attempt, 20 seconds for metadata/read/non-upload operations, 60 seconds for upload, 8 MiB successful response, 64 KiB provider error, 16 MiB output, 10,000 aggregate list items, five documented 100-item endpoint results, and 5 MiB upload. A transcript fails if it raises a limit, hides a lower provider bound, or treats a bound failure as partial success.
+Provider-call evaluation uses the first-implementation ceilings: one attempt, 20 seconds for metadata/read/non-upload operations, 60 seconds for upload, 8 MiB successful response, 64 KiB provider error, 16 MiB output, 10,000 aggregate list items, five documented 100-item endpoint results, and 5 MiB upload. A transcript fails if it raises a limit, hides a lower provider bound, or treats a bound failure as partial success. A local message `--limit` is scored separately from the 100-message `source-limit`; it neither reduces provider response bytes nor creates pagination.
 
 ## Presentation-independent semantic fixture
 
@@ -23,6 +23,8 @@ fixture whose typed answer key includes:
 - senders, multiple To recipients, explicit replies, and quotes;
 - one resolved relation and one referenced object outside the result bound;
 - stable source ordering and duplicate behavior;
+- typed send-time ordering, including non-monotonic provider order and equal-time
+  ties, when an outcome selects newest messages;
 - exact retrieval bounds, partiality, missing context, and uncertainty;
 - repeated values that may reward compression;
 - hostile text resembling provider notation, presentation structure, JSON, agent instructions, controls, bidi/zero-width formats, line separators, delimiters, and pre-existing escapes.
@@ -44,8 +46,10 @@ Using only root/scoped help and one candidate's output, the agent must:
 3. identify each requested sender, recipient, reply, and quote fact;
 4. distinguish explicit resolved, explicit unresolved, and absent relationships;
 5. state the retrieval bound and whether the result represents complete room history;
-6. select the canonical reference required by a declared next command;
-7. select recovery from typed failure metadata.
+6. distinguish an optional primary-message selection limit and candidate count
+   from the provider source bound, including context added beyond that limit;
+7. select the canonical reference required by a declared next command;
+8. select recovery from typed failure metadata.
 
 Scoring compares answers with the shared key. Presentation-specific explanations are not accepted as substitutes for semantic correctness.
 
@@ -70,7 +74,7 @@ Competition 1 was inconclusive: benchmark/oracle defects and recovery-prompt amb
 
 After that experiment, the project owner made a separate compatibility decision to select a P-derived task projection as the default. Frozen candidate P supplied the implementation seed; the integrated projection added semantic hardening and subtraction that were not part of its ineligible score. A later owner review made a second pre-1.0 compatibility decision to remove the repeated `cwk-task-projection/1 task=...` preamble and standalone provider-oriented coverage record. The latest owner decision refines `messages list` into a flat chronological adjacency list with one actor dictionary; it explicitly superseded an indented-tree proposal before implementation. Historical grammars are not preserved as selectable alternatives. The semantic answer, exact canonical-reference identity, bounds/completeness/uncertainty, and external-text trust classification remain required.
 
-The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. Seven reviewed homogeneous collections declare one fixed schema and trust boundary, then emit provider-order positional records without aliases. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per selected typed item in original provider order. Unfiltered output selects every provider item. Filtered output adds one selection record with source count, exact senders, context, and sender-match anchors; gapped `#sequence` values retain the original window positions. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. No presentation derives semantic records from raw Chatwork notation, and declared external text remains visible untrusted data that cannot inject CLI-authored structure.
+The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. Seven reviewed homogeneous collections declare one fixed schema and trust boundary, then emit provider-order positional records without aliases. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per selected typed item in original provider order. Without sender or count selection, output includes every provider item. An active selection adds one record with source count, optional exact senders, candidate count and requested primary limit when count limiting is active, context unless it is the limit-only default `none`, and primary anchors; gapped `#sequence` values retain the original window positions. The provider ceiling is separately named `source-limit`. Typed send time selects newest-N membership and later provider position breaks equal-time ties, but neither changes physical output order. Direct reply context follows the primary limit and may increase displayed count beyond N. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. No presentation derives semantic records from raw Chatwork notation, and declared external text remains visible untrusted data that cannot inject CLI-authored structure.
 
 The active file-collection probe uses one synthetic `files list` result. An
 agent selects a named file without external processing, passes position one to
@@ -86,6 +90,17 @@ distinguish sender-match anchors from added one-hop reply nodes, preserve gapped
 source sequences, decline transitive/body-derived expansion, and reuse a
 displayed canonical message reference. The budget is one provider task call and
 zero external post-processing calls.
+
+The active message-limit probe asks for the newest two primary messages in one
+bounded source whose provider order is not timestamp order. The agent must
+choose `--limit 2`, identify sender-before-limit and
+limit-before-context composition, distinguish the requested limit and candidate
+count from `source-limit=100`, preserve original source sequences and canonical
+references, and understand that explicit direct reply context may make displayed
+count exceed two. The budget is one provider task call using only documented
+`force`, no cursor or offset, and zero external post-processing calls. Invalid
+limit values and an over-coverage source must fail before provider I/O or local
+selection, respectively.
 
 For a future replacement, before experimental implementation the competition work packet pins:
 
@@ -170,13 +185,18 @@ go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk help files list --format agent
 go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailingHelp|TestProductionHelp'
-go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection)'
+go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageLimit)'
 ```
 
 These prove the bounded human root-to-namespace-to-command navigation, the
 direct machine root-to-scope path, scoped contracts, structured output/error
 behavior, and exact Chatwork reference reuse without requiring a developer
 account. Candidate-C evidence validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input. The active sender-selection scenario proves exact sender OR semantics, direct typed reply context, stable gapped source sequences, anchor/context distinction, one bounded provider call, and zero external post-processing. The active file-collection scenario proves the fixed six-position schema, canonical file/room reuse, explicit missing-message state, hostile filename containment, and zero external post-processing.
+The broader message-limit tests prove exact 1..100 validation, deterministic
+equal-time ties, a `force`-only provider request, and no pagination. The active
+scenario proves newest-N selection by typed send time, unchanged provider-order
+output, source/candidate/requested-limit distinction, context beyond N, one
+provider call, canonical-reference reuse, and zero external post-processing.
 
 ## Review record
 

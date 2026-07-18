@@ -84,7 +84,7 @@ The current default is the headerless task projection, a further reviewed subtra
 - task-relevant bounds, completeness, and uncertainty;
 - structural trust framing for every external-text field.
 
-It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender filter, every provider-returned message is selected. A filtered result additionally emits one selection record before the trust declaration; it preserves the source-window count, exact sender filter, context policy, and sender-match anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
+It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes` and names the provider ceiling `source-limit`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender or count limit, every provider-returned message is selected. An active selection additionally emits one record before the trust declaration; it preserves the source-window count, an exact sender filter when present, candidate count and requested primary-message limit when count limiting is active, context policy unless it is the limit-only default `none`, and primary anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 Seven homogeneous read collections also declare `external-text=untrusted
 escaped` and one fixed schema before their provider-order records:
@@ -124,22 +124,37 @@ Candidate worktrees are experimental. Their output is not public merely because 
 ## Filtering and task composition
 
 The product owns deterministic filtering and joining needed by a supported
-outcome. `messages list` establishes the first finite typed filter contract:
+outcome. `messages list` establishes the first finite typed selection contract:
 up to 100 repeatable `--sender <account-ref>` inputs match any listed exact
-sender, and
-`--context none|replies` defaults to `none`. `replies` adds only direct parents
-and children connected to sender matches by typed reply edges inside the one
-provider-returned window. It does not traverse transitively, expand To or quote
+sender, optional `--limit <count>` accepts 1 through 100 primary messages, and
+`--context none|replies` defaults to `none`. Sender OR matching runs first. A
+requested limit then selects the newest N candidates by typed `send_time`, with
+later provider position winning equal-time ties. `replies` runs last and adds
+only direct parents and children connected to the selected anchors by typed
+reply edges inside the one provider-returned window. Context may increase the
+displayed count beyond N; it does not traverse transitively, expand To or quote
 relations, parse raw body notation, fetch missing parents, or perform another
 provider call.
 
-Filtering retains the provider window's original one-based sequence, so
-displayed `#N` values may have gaps. A single selection record declares the
-source-window count, exact sender set, context mode, and sender-match sequence
-anchors; records not listed as anchors are included reply context. Repeating two
-senders is a truthful two-sender-focused slice, not a claim that every displayed
-message is authored by or directed exclusively between them. Exact canonical
-account and message references remain the only command identities.
+Selection retains the provider window's original one-based sequence and
+physical order, so displayed `#N` values may have gaps even though timestamps
+chose the anchor set. A single selection record declares the source-window
+count, exact sender set when present, pre-limit candidate count and requested
+limit when count limiting is active, context unless it is the limit-only
+default `none`, and primary anchor sequences; records not listed as anchors are
+included reply context. The provider's maximum-100 response remains a distinct
+`source-limit`, and a response above that declared coverage fails instead of
+being hidden by local selection. Repeating two senders is a truthful
+two-sender-focused slice, not a claim that every displayed message is authored
+by or directed exclusively between them. Exact canonical account and message
+references remain the only command identities.
+
+The Chatwork endpoint documents only its `force` window query. The
+selection limit is application-owned, makes one provider call, and reduces
+rendered/token cost when it actually removes primary records; it never reduces
+provider response bytes. It supplies no cursor or offset and is not pagination.
+Invalid, duplicate, non-integer, zero, negative, or above-100 values fail before
+authentication or provider I/O.
 
 The governing rule is not “never use a query language”; it is “do not shift a recurring supported task back to the agent.” A generic expression facility must earn its place through the same outcome, discovery, safety, and evaluation evidence as any other public capability.
 
@@ -195,7 +210,7 @@ The first implementation fixes these ceilings; command-line or environment overr
 | Aggregated list result | 10,000 items |
 | File upload | 5 MiB |
 
-The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. The active contracts fix cancellation, message-window semantics, provider rate-limit behavior, mutation policy, PAT failure-before-I/O behavior, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
+The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. A user-selected message limit cannot raise or replace that source bound, and an oversized provider result fails before selection. The active contracts fix cancellation, message-window semantics, provider rate-limit behavior, mutation policy, PAT failure-before-I/O behavior, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
 
 ## Mutation confirmation policy
 
@@ -219,6 +234,12 @@ root agent help, non-help scoped agent contracts, exact command paths, and
 command execution contracts did not change. The scoped `help` task contract
 changed only by correcting its stale invalid-selector recovery wording to name
 namespaces as valid selectors.
+
+Bounded message selection is an additive pre-1.0 command-input change. It also
+renames the provider-bound output field from catalog `limit`/text `limit=...`
+to catalog `source_limit`/text `source-limit=...` so the fixed 100-message
+retrieval ceiling cannot be confused with optional `--limit`; message record
+positions and canonical references do not change.
 
 ## Explicit non-goals
 

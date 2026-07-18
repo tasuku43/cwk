@@ -127,14 +127,14 @@ Pass a value such as `4101` unchanged to a declared `--room` input. Provider
 organization IDs, icon URLs, empty descriptions, empty download URLs, zero
 coverage limits, provider coverage kinds, and other non-contract fields are not
 emitted. A bounded message window declares `window=recent|changes`,
-`complete=false`, its positive limit, unresolved relationship count, typed
+`complete=false`, its positive provider `source-limit`, unresolved relationship count, typed
 To/reply/quote facts, and message bodies under one `untrusted escaped` framing.
 It factors repeated sender data into a document-local actor dictionary, but
 keeps every canonical message reference directly reusable by the next command.
 For example, a two-message synthetic window is shaped as:
 
 ```text
-messages room-ref=4101 count=2 window=recent limit=100 complete=false unresolved-relations=0
+messages room-ref=4101 count=2 window=recent source-limit=100 complete=false unresolved-relations=0
 external-text=untrusted escaped
 schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
 actors
@@ -149,25 +149,32 @@ The fixed schema gives meaning to the positional values without repeating
 document-local edge. Use the second field (`9001` or `9002`), not `#1` or an
 actor alias, when a later command requires `--message`.
 
-To select exact speakers without post-processing, repeat `--sender` up to 100
-times; repeated values use OR semantics. Add `--context replies` only when
-direct typed reply parents and children from the same bounded provider window
-are useful:
+To reduce a message result without post-processing, add `--limit` with a count
+from 1 through 100. It selects the newest primary messages by their typed send
+time; equal timestamps prefer the later provider position, while rendered
+records retain their original provider order and `#sequence` values. Repeat
+`--sender` up to 100 times to form an OR candidate set before that limit is
+applied. Add `--context replies` only when direct typed reply parents and
+children from the same bounded provider window are useful:
 
 ```sh
+go run ./cmd/cwk messages list --room 4101 --window recent --limit 10
 go run ./cmd/cwk messages list --room 4101 --window recent --sender 7001
 go run ./cmd/cwk messages list --room 4101 --window recent \
-  --sender 7001 --sender 7002 --context replies
+  --sender 7001 --sender 7002 --limit 10 --context replies
 ```
 
-The filtered result keeps the original `#sequence`, including gaps, and lists
-which sequences were sender matches. Added records are one-hop reply context;
-the header `count` includes both anchors and added context, while
-`selection source-count` is the unfiltered provider-window size. The command
-does not infer relations from `[To]`/`[rp]` body text, walk whole
-threads, fetch an omitted parent, or claim that two speakers form an exclusive
-conversation. Account and message references remain canonical values accepted
-unchanged by later commands.
+Every active selection keeps the original `#sequence`, including gaps, and
+records the source count and anchor sequences once. When `--limit` is active,
+that record also includes the pre-limit candidate count and requested primary
+limit. Added records are one-hop reply context, so explicit `--context replies`
+may make the header `count` exceed `--limit`; the default context is `none`.
+The provider `source-limit=100` remains a separate retrieval bound. The command
+makes one Chatwork request using only the documented `force` query, does not
+paginate, and does not infer relations from
+`[To]`/`[rp]` body text, walk whole threads, fetch an omitted parent, or claim
+that two speakers form an exclusive conversation. Account and message
+references remain canonical values accepted unchanged by later commands.
 
 File discovery follows the same rule and keeps an absent source-message
 position explicit:

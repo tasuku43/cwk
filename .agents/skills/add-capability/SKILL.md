@@ -106,6 +106,18 @@ name matching, raw-body inference, hidden additional calls, and an unbounded
 "related" mode are not acceptable shortcuts. For message reply context, test
 the exact hop bound and prove To/quote/raw notation cannot expand it.
 
+For the reviewed Chatwork message count limit, declare optional
+`--limit <count>` with the inclusive range 1..100. Exact-sender OR matching
+precedes the limit; typed send time selects the newest N primary anchors, with
+later provider position breaking equal-time ties; direct typed reply context
+follows and may increase displayed count beyond N. Preserve provider order and
+original source sequences in output. Keep the requested limit and pre-limit
+candidate count separate from the provider's `source-limit=100`. This selection
+makes one provider request using only documented `force`; it is not a query parameter,
+cursor, offset, or page. Reject invalid values before authentication/I/O and
+reject a provider result above declared coverage before local selection can hide
+it.
+
 ## 3. Declare the operation contract
 
 For every external action, specify:
@@ -311,8 +323,11 @@ Add the smallest set that proves the capability:
   quality floor, latency, benchmark-defect reporting, and raw result retention;
 - finite-filter tests proving exact canonical inputs, OR/AND semantics,
   invalid combinations before I/O, provider-call count, selection bounds,
-  source-order preservation, context-hop limits, match/context distinction,
-  and no inference from presentation or external text;
+  typed-time newest-N membership and deterministic ties, source-order
+  preservation, source/candidate/requested-limit distinction, context allowed
+  beyond a primary limit, context-hop limits, over-coverage source rejection,
+  match/context distinction, and no inference from presentation or external
+  text;
 - retained baseline fixtures for the candidate-C first contract and active
   golden fixtures for the current task projection; future replacements receive
   active compatibility fixtures only after reviewed evidence and an explicit

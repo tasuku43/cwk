@@ -93,13 +93,15 @@ For Chatwork output, including relationship-aware message results and the curren
 - Infrastructure decodes Chatwork wire DTOs and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity.
 - Application use cases select the bounded data required by one outcome,
   resolve only explicit relationships available within that bound, and return
-  a typed task result with coverage and unresolved facts. Message sender
-  selection runs here after the one provider response: repeated exact senders
-  form OR anchors, optional reply context adds only direct typed in-window
-  parents/children, and source sequences remain those of the unfiltered window.
-  Application-only filter fields are removed before the infrastructure port is
-  called.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. A filtered result receives source count, filter, context, and anchor metadata directly from application and emits them once. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges retain per-record labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+  a typed task result with coverage and unresolved facts. Message selection runs
+  here after the one provider response: repeated exact senders form one OR
+  candidate set; optional limit selects its newest N messages by typed send time
+  with later provider position breaking equal-time ties; optional reply context
+  then adds only direct typed in-window parents/children. Source sequences and
+  final physical order remain those of the unfiltered provider window.
+  Application-only sender/context/limit fields are removed before the
+  infrastructure port is called.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, optional primary-message limit, context, and anchor metadata directly from application. Presentation emits candidate count and requested limit only for count limiting and omits context only for the limit-only default `none`. The provider ceiling is rendered separately as `source-limit`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges retain per-record labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -214,20 +216,33 @@ Relationship truth has three states:
 | explicit and unresolved | Provider notation identifies a relation but the referenced object is outside the bound or unavailable | Preserve the relation and unresolved/coverage state without fabricating the object |
 | absent or unsupported | No provider fact establishes the relation | Do not imply that the relation exists |
 
-Filtering and context selection are application outcome concerns. Provider
-pagination and notation parsing remain infrastructure concerns. Presentation
-owns only representation. In particular, `messages list --sender` is evaluated
-once over the bounded typed provider result, never over rendered text. Its
-`replies` context is direct and non-transitive; omitted targets remain explicit
-unresolved canonical references instead of being guessed or fetched. Selection
-metadata carries source count, original source sequences, and sender-match
-anchors so presentation need not reconstruct policy.
+Filtering, count limiting, and context selection are application outcome
+concerns. Provider pagination and notation parsing remain infrastructure
+concerns. Presentation owns only representation. In particular, `messages list`
+evaluates exact-sender OR selection once over the bounded typed provider result,
+then applies optional `--limit` 1..100 by typed send time, and only then expands
+direct non-transitive `replies` context. A timestamp selects membership but
+never changes provider-order output; equal timestamps prefer the later provider
+position. Omitted targets remain explicit unresolved canonical references
+instead of being guessed or fetched. Selection metadata carries source and
+candidate counts, the requested limit, original source sequences, and primary
+anchors so presentation need not reconstruct policy. Explicit reply context may
+make displayed count exceed the primary limit.
+
+Chatwork documents no limit, cursor, or offset for this endpoint. Infrastructure
+continues to issue exactly one request with only the documented `force` query,
+and rejects application-only selection state if it crosses the port. The
+provider's maximum-100 coverage is a `source-limit`, not the public selection
+limit or a page size. An over-bound source result fails before application
+selection, and invalid public limit values fail before authentication or I/O.
+The catalog result remains one complete bounded task result with no pagination
+binding.
 
 Candidate C (`cwk-context-capsule/1`) is the first stable public presentation baseline and retains that historical evidence. Competition 1 was inconclusive because benchmark defects made its promotion result non-authoritative. A P-derived task projection (`cwk-task-projection/1`) was selected afterward by an explicit owner compatibility decision, then hardened beyond the frozen candidate. The current default further removes its in-band schema/task preamble and standalone provider coverage line through a second explicit pre-1.0 compatibility decision. Neither decision describes P as the benchmark winner. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code, and raw experimental evidence remains immutable decision input.
 
 Upstream coverage is separately pinned in `.harness/chatwork_api_v2.json`. That manifest may prove that every fixed official operation has a public task owner, but it cannot dispatch a request or generate a command. `cli.Catalog` remains the only public-command source of truth.
 
-The same manifest pins the first implementation's reviewed resource ceilings and the exact upstream operation IDs in each confirmation class. Production code uses compile-time typed constants with those values; it does not load harness JSON at runtime. `tools/contractlint` detects drift in the independent evidence, while adapter, application, and CLI tests prove enforcement at the transport, list, upload, and rendered-output boundaries. Its current `coverage_status` is `complete`, so every one of the fixed 32 operations must retain at least one public capability owner.
+The same manifest pins the first implementation's reviewed resource ceilings and the exact upstream operation IDs in each confirmation class. Production code uses compile-time typed constants with those values; it does not load harness JSON at runtime. `tools/contractlint` detects drift in the independent evidence, while adapter, application, and CLI tests prove enforcement at the transport, source-cardinality, selection, upload, and rendered-output boundaries. Its current `coverage_status` is `complete`, so every one of the fixed 32 operations must retain at least one public capability owner.
 
 The representative public graph is:
 

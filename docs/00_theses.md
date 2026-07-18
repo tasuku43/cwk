@@ -113,6 +113,17 @@ sequence, including gaps, distinguishes sender matches from added context once
 per document, and does not claim that two selected speakers form an exclusive
 conversation.
 
+An optional `messages list --limit` accepts 1 through 100 and caps primary
+message anchors without becoming a provider query or pagination control. The
+candidate set is all source messages, or the exact-sender OR matches when
+`--sender` is present. Typed send time selects the newest N candidates; equal
+times prefer the later provider position. Selected records are still emitted in
+their original provider order with original source sequences. Explicit
+`replies` context runs afterward and may therefore make displayed count exceed
+N. Selection metadata keeps the requested limit and candidate count separate
+from the provider's 100-message `source-limit`, and a source that exceeds its
+declared coverage fails before selection can hide the violation.
+
 The same fixed-schema rule applies to the reviewed homogeneous read
 collections for contacts, rooms, members, personal tasks, room tasks, files,
 and contact requests. Each declares external-text trust and its schema once,

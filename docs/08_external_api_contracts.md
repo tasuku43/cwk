@@ -72,6 +72,11 @@ An exhaustive command follows this contract:
 
 Paged commands support only JSON and use JSON as their default. This keeps every successful presentation self-describing and prevents a text or TSV page without a completion marker from looking exhaustive. Catalog validation rejects a missing paged binding, a binding on complete output, any other output format, a required or non-CLI cursor input, an invalid or colliding top-level cursor field, a missing or unknown completion rule, non-opaque cursors, kind mismatch, and extra cursor candidates. Renderer fixture checks require the top-level cursor to be present and string-typed. Agent help projects the binding with the input/output contracts and derives a same-command continuation workflow, so an agent passes the emitted cursor bytes back without trimming, decoding, or guessing. A declared page is not an incomplete successful output; silently truncating that page, omitting its continuation cursor, or reaching a local limit without a cursor is a contract failure.
 
+A finite application-owned projection over one already complete bounded task
+result is not provider pagination. It may expose an explicit selection limit
+only when output also retains the upstream source bound and selection provenance;
+it must not imply that another page exists or manufacture a cursor.
+
 ## Timeout, retry, and idempotency
 
 `domain/apicall.Policy` is declared per adapter operation:
@@ -92,13 +97,23 @@ The adapter contract must distinguish a request that was not sent, a confirmed r
 
 The template does not select a backoff formula or universal numeric ceiling because vendor limits and latency budgets differ. A derived security/product contract records the maximum accepted timeout and attempt count, formula, jitter source, caps, and tests; user configuration above those bounds must fail rather than create an effectively unbounded call.
 
-Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result.
+Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
 
-`messages list --sender` and `--context` are application-owned selection inputs
-over that single bounded message response. They never become Chatwork query
-parameters, trigger a second request, or fetch a referenced message outside the
-returned window; adapter request construction rejects them if they cross the
-application port boundary.
+`messages list --sender`, `--limit`, and `--context` are application-owned
+selection inputs over that single bounded message response. The optional limit
+accepts 1 through 100 primary messages. Exact-sender OR matching runs first;
+typed `send_time` then chooses the newest N candidates, with later provider
+position breaking equal-time ties; direct typed reply context runs last and may
+increase displayed count beyond N. Membership selection does not reorder the
+provider records or their original sequences. These inputs never become
+Chatwork query parameters, trigger a second request, or fetch a referenced
+message outside the returned window. Adapter request construction rejects them
+if they cross the application port boundary, and the one provider request
+continues to use only the documented `force` query. There is no cursor, offset,
+or pagination. The provider's 100-message ceiling is exposed separately as
+`source-limit`; the requested limit and pre-limit candidate count belong to
+selection provenance. Invalid limit values fail before authentication or
+provider I/O.
 
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 

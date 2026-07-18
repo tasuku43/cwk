@@ -134,7 +134,8 @@ The test suite has complementary levels:
   unchanged unknown-command faults.
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
-  multi-sender message selection contract.
+  multi-sender message selection contract and the inclusive 1..100 primary
+  message limit.
 - Catalog hostile-input tests reject invalid UTF-8, terminal controls, Unicode
   format controls, line separators, and whitespace in non-argv input names
   before exact help can render them.
@@ -149,6 +150,14 @@ The test suite has complementary levels:
 - Release tests inspect actual artifacts and metadata, not only workflow text.
 - Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
+- Bounded message-selection tests prove sender OR precedes newest-N selection,
+  typed send time chooses anchors with later provider position breaking ties,
+  reply context follows the limit, and rendered records retain provider order
+  and source sequences. They distinguish requested limit and candidate count
+  from the provider `source-limit`, allow explicit context to exceed N, reject
+  invalid values before authentication/I/O, reject a source above declared
+  coverage before selection, and keep local policy out of the one documented
+  `force` request.
 - No-post-processing agent transcripts fail if a supported task requires `jq`, `grep`, a custom join, raw notation parsing, source inspection, or an exploratory provider call.
 - Presentation competitions pin fixtures, agent/model versions, prompts, repetitions, invocation budgets, answer scoring, token accounting, and latency measurement before candidate implementation.
 - Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, maintenance, benchmark-defect, and audit evidence. A selected presentation receives golden and compatibility tests only after an explicit compatibility decision; an inconclusive benchmark is never relabeled as a win.
@@ -186,13 +195,13 @@ Every strong statement should identify its enforcement path.
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
 | Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
-| Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
+| Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header with the provider bound named `source-limit`, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. Message actor aliases are allowed only as document-local compression with canonical dictionary entries; semantic raw-notation records, wire extras, derived thread metadata, and non-contract defaults fail |
-| Bounded message sender selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, and an active synthetic agent scenario require exact sender OR inputs with machine-readable repeatability and a 100-reference bound, explicit `none|replies` context, one provider call, direct typed one-hop reply expansion, stable gapped source sequences, anchor/context distinction, canonical-reference reuse, and zero rendered-text filtering or raw-notation inference |
+| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, and active synthetic agent scenarios require exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional primary `--limit` 1..100; sender predicate then typed-send-time newest-N selection with later-position tie-break then direct typed one-hop reply expansion; context allowed beyond N; provider-order gapped source sequences; source/candidate/requested-limit and anchor/context distinction; one documented `force` request with no pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
 | Fixed Chatwork API coverage | Strict 32-operation snapshot plus bidirectional operation-to-public-capability validation |
-| Fixed Chatwork resource bounds | Exact typed snapshot values plus transport, aggregation, upload, and output boundary tests |
+| Fixed Chatwork resource bounds | Exact typed snapshot values plus transport, provider source-cardinality, aggregation, upload, and output boundary tests; local message selection cannot hide a response above declared coverage |
 | Chatwork mutation confirmation | Exact operation-ID policy sets plus typed invoker/CLI zero-call tests |
 | External schema compatibility | Vendored fixture, generator, and drift test |
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures |
