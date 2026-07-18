@@ -16,7 +16,7 @@ they become eligible; no prototype measurement is scored.
 
 | Item | Frozen value |
 |---|---|
-| Candidate base and runner | `95b5e331590a6462fb69b20ea454cc18defbc912` |
+| Candidate base and amended runner | `eeaf341947d2655b3576b041731da66b3cfe707c` |
 | Live conformance runner | `5b37b1c67b58956beb54b9b7f5dbb5944178e9bf` |
 | Fixture and answer-key SHA-256 | `50482bd32d446e6512202c011fe107d5842c20ec7da30a8e66732b98aa6a289f` |
 | Simulator SHA-256 | `fb3d8382b5071e88be02e0d0dfd0227f70942c3abdb22b371eb182df444111ec` |
