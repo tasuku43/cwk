@@ -51,10 +51,14 @@ after an inconclusive competition, not as its benchmark winner. The current
 default is its further reviewed headerless subtraction. Its renderer starts
 directly with the task result and emits only catalog-declared task fields, exact
 canonical references, task-relevant bounds/completeness/uncertainty, and
-external-text trust framing; do not add an in-band schema/task preamble,
-standalone provider coverage record, aliases, raw provider notation as semantic
-structure, wire extras, empty optional shells, or non-contract defaults. Record a repeated external pipeline as thesis
-evidence. Compare materially different future presentation candidates in
+external-text trust framing. The accepted `messages list` specialization emits
+one fixed positional schema, one document-local actor dictionary, and flat
+provider-order records; the second record field remains the exact canonical
+message reference. Do not add a global schema/task preamble, standalone provider
+coverage record, aliases outside that reviewed message dictionary, raw provider
+notation as semantic structure, wire extras, empty optional shells, or
+non-contract defaults. Record a repeated external pipeline as thesis evidence.
+Compare materially different future presentation candidates in
 isolated worktrees under the protocol in
 `docs/09_agent_readiness_validation.md` before replacing the current default,
 and retain inconclusive raw results and benchmark defects.
@@ -271,8 +275,9 @@ Add the smallest set that proves the capability:
 - canonical-reference round trips that reject presentation-derived shorthand
   unless a separate typed contract explicitly defines it;
 - a no-post-processing agent transcript, the historical candidate-C baseline,
-  and the current headerless task-projection subtractive-field contract; any future
-  replacement uses a presentation competition that pins candidates,
+  and the current headerless task-projection contract, including its fixed
+  positional message schema and subtractive-field rules; any future replacement
+  uses a presentation competition that pins candidates,
   agent/model versions, prompts, repetitions, answer scoring, token accounting,
   quality floor, latency, benchmark-defect reporting, and raw result retention;
 - retained baseline fixtures for the candidate-C first contract and active

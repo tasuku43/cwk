@@ -86,7 +86,9 @@ task-relevant bounds/completeness/uncertainty, and structural trust framing for
 external text. `messages list` may factor repeated sender identity and name into
 one deterministic document-local actor dictionary; each message still carries
 its full canonical message reference, provider sequence, and explicit typed
-edges. The actor alias is never command identity. The projection does not add
+edges. One fixed schema assigns the positional message reference, actor, send
+time, and quoted body, so those records do not repeat field labels. The actor
+alias is never command identity. The projection does not add
 raw Chatwork notation as semantic structure, undeclared provider or wire fields,
 duplicated coverage prose, derived depth/thread/root/child facts, or helpful
 non-contract defaults. Declared message bodies remain visible as untrusted

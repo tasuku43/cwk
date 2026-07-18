@@ -27,3 +27,13 @@ schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
 The schema, not repeated per-record labels, assigns meaning. `#N` and actor
 aliases remain document-local; the raw second field remains the canonical value
 accepted by commands.
+
+## Evidence
+
+- `62fb36f` implements the positional renderer and its catalog, golden, hostile,
+  deep-chain, canonical-round-trip, and active-readiness tests.
+- The synthetic CLI produces `#3 9003 a2 1700000020 reply=#1 to=a1 "done"`
+  without changing its typed semantic answer.
+- `tiktoken==0.13.0` with `o200k_base` counts 330 tokens for the positional
+  output, versus 365 for the labeled adjacency and 541 for the repeated
+  baseline. Exact hashes and byte counts are in `token-measurement.md`.

@@ -77,3 +77,7 @@ changes remain.
 Completed on 2026-07-19. The final implementation preserves typed semantics,
 passes the repository full gate, and records the bounded token comparison in
 `token-measurement.md`.
+
+The later `message-positional-records` packet supersedes only this packet's
+per-record `message-ref=`, `sent=`, and `body=` labels. The flat adjacency,
+actor, relation, trust, and canonical-reference decisions remain in force.

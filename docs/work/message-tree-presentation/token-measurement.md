@@ -11,9 +11,9 @@ Competition 1 protocol or evidence.
 - Before text: the headerless repeated-message projection at commit `2d22298`,
   frozen as
   `tools/presentationeval/testdata/active-message-adjacency.before.txt`.
-- After text: the flat provider-order adjacency projection produced by
-  `capsule.Render` from the same typed fixture, frozen as
-  `tools/presentationeval/testdata/active-message-adjacency.after.txt`.
+- After text: the first labeled flat provider-order adjacency projection from
+  the same typed fixture, retained as historical evidence in
+  `tools/presentationeval/testdata/active-message-adjacency.labeled-after.txt`.
 - Included bytes: exact UTF-8 success stdout only, including the final newline.
 - Excluded bytes: prompts, help, errors, shell output, and agent completion.
 
@@ -47,8 +47,8 @@ encoding, fixture, renderer, or input-hash change invalidates the comparison.
 
 ## Result record
 
-The test-only reconstruction and active renderer are required to reproduce the
-two goldens from the same typed fixture. The frozen transport measurements are:
+The test-only reconstruction and the retained labeled output fix the two texts
+from the same typed fixture. The frozen transport measurements are:
 
 | Input | SHA-256 | Bytes | Tokens |
 | --- | --- | ---: | ---: |

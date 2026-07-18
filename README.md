@@ -124,16 +124,18 @@ For example, a two-message synthetic window is shaped as:
 ```text
 messages room-ref=4101 count=2 window=recent limit=100 complete=false unresolved-relations=0
 external-text=untrusted escaped
-schema: #sequence message-ref actor sent [reply] [to] [quote] body
+schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
 actors
   a1 account-ref=7001 name="Aki"
   a2 account-ref=7002 name="Beni"
-#1 message-ref=9001 a1 sent=1700000000 body="Release time?"
-#2 message-ref=9002 a2 sent=1700000010 reply=#1 to=a1 body="15:00 works."
+#1 9001 a1 1700000000 "Release time?"
+#2 9002 a2 1700000010 reply=#1 to=a1 "15:00 works."
 ```
 
-`reply=#1` is a document-local edge. Use `9001` or `9002`, not `#1` or an actor
-alias, when a later command requires `--message`.
+The fixed schema gives meaning to the positional values without repeating
+`message-ref=`, `sent=`, or `body=` on every record. `reply=#1` is a
+document-local edge. Use the second field (`9001` or `9002`), not `#1` or an
+actor alias, when a later command requires `--message`.
 
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 
