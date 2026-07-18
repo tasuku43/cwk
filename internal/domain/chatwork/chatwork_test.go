@@ -208,8 +208,16 @@ func TestResultRejectsMessageRelationKindAndTargetMismatches(t *testing.T) {
 	}{
 		{"reply relation kind", func(result *Result) { result.Messages[0].Reply.Kind = "quote" }},
 		{"reply target kind", func(result *Result) { result.Messages[0].Reply.Target = account }},
+		{"resolved reply without target", func(result *Result) {
+			result.Messages[0].Reply.Resolved = true
+			result.Messages[0].Reply.Target = Reference{}
+		}},
 		{"quote relation kind", func(result *Result) { result.Messages[0].Quotes[0].Kind = "reply" }},
 		{"quote target kind", func(result *Result) { result.Messages[0].Quotes[0].Target = message }},
+		{"resolved quote without target", func(result *Result) {
+			result.Messages[0].Quotes[0].Resolved = true
+			result.Messages[0].Quotes[0].Target = Reference{}
+		}},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -231,8 +239,15 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 	results := []Result{
 		{Task: TaskAccountShow, Account: &Account{Ref: account}},
 		{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
+		{Task: TaskMessagesList, Messages: []Message{{
+			Ref: message, Room: room, Sender: Account{Ref: account},
+			Reply: &Relation{Kind: "reply"}, Quotes: []Relation{{Kind: "quote"}},
+		}}},
 		{Task: TaskPersonalTasksList, Tasks: []WorkTask{{
 			Ref: task, Room: Room{Ref: room}, AssignedBy: Account{Ref: account}, Message: message,
+		}}},
+		{Task: TaskFilesList, Files: []File{{
+			Ref: Reference{Kind: ReferenceFile, Value: "6"}, Room: room, Account: Account{Ref: account},
 		}}},
 		{Task: TaskContactRequestsList, Requests: []ContactRequest{{
 			Ref: Reference{Kind: ReferenceRequest, Value: "5"}, Account: Account{Ref: account},

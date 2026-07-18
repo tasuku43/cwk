@@ -672,7 +672,7 @@ func validateResultMessage(field string, message Message) error {
 		if message.Reply.Kind != "reply" {
 			return fmt.Errorf("Chatwork result %s reply relation kind is %q, want %q", field, message.Reply.Kind, "reply")
 		}
-		if err := validateResultReference(field+" reply target", message.Reply.Target, ReferenceMessage, false); err != nil {
+		if err := validateResultReference(field+" reply target", message.Reply.Target, ReferenceMessage, !message.Reply.Resolved); err != nil {
 			return err
 		}
 	}
@@ -680,7 +680,7 @@ func validateResultMessage(field string, message Message) error {
 		if quote.Kind != "quote" {
 			return fmt.Errorf("Chatwork result %s quote[%d] relation kind is %q, want %q", field, index, quote.Kind, "quote")
 		}
-		if err := validateResultReference(fmt.Sprintf("%s quote[%d] target", field, index), quote.Target, ReferenceAccount, false); err != nil {
+		if err := validateResultReference(fmt.Sprintf("%s quote[%d] target", field, index), quote.Target, ReferenceAccount, !quote.Resolved); err != nil {
 			return err
 		}
 	}
@@ -713,7 +713,7 @@ func validateResultFile(field string, file File) error {
 	if err := validateResultAccount(field+" account", file.Account, false); err != nil {
 		return err
 	}
-	return validateResultReference(field+" message", file.Message, ReferenceMessage, false)
+	return validateResultReference(field+" message", file.Message, ReferenceMessage, true)
 }
 
 func validateResultContactRequest(field string, request ContactRequest) error {
