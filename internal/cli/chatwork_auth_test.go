@@ -34,6 +34,25 @@ type authBrowserStub struct {
 	url   string
 }
 
+type releasableAuthReader struct {
+	started  chan struct{}
+	release  chan struct{}
+	finished chan struct{}
+}
+
+func newReleasableAuthReader() *releasableAuthReader {
+	return &releasableAuthReader{
+		started: make(chan struct{}), release: make(chan struct{}), finished: make(chan struct{}),
+	}
+}
+
+func (r *releasableAuthReader) Read([]byte) (int, error) {
+	close(r.started)
+	<-r.release
+	close(r.finished)
+	return 0, io.EOF
+}
+
 func (s *authBrowserStub) Open(_ context.Context, raw string) error {
 	s.calls++
 	s.url = raw
@@ -104,7 +123,7 @@ func TestAuthLoginUsesTransientConsentAndNeverRendersCallback(t *testing.T) {
 	if strings.Contains(stdout.String(), "authorization-code-canary") || strings.Contains(stderr.String(), "authorization-code-canary") || strings.Contains(stdout.String(), "state-canary") || strings.Contains(stderr.String(), "state-canary") {
 		t.Fatal("callback code or state was rendered")
 	}
-	if !strings.Contains(stderr.String(), "browser_opened: false\nauthorization_url: https://www.chatwork.com/packages/oauth2/login.php?opaque=transient\ncallback_url: ") {
+	if !strings.Contains(stderr.String(), "authorization_url: https://www.chatwork.com/packages/oauth2/login.php?opaque=transient\ncallback_url: ") || strings.Contains(stderr.String(), "browser_opened") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -121,7 +140,7 @@ func TestAuthLoginOpensBrowserAndDoesNotRequireAuthorizationURLCopy(t *testing.T
 	if opener.calls != 1 || opener.url != manager.consentURL && !strings.Contains(opener.url, "www.chatwork.com/packages/oauth2/login.php") {
 		t.Fatalf("opener calls/url = %d/%q", opener.calls, opener.url)
 	}
-	if strings.Contains(stderr.String(), "authorization_url:") || !strings.Contains(stderr.String(), "browser_opened: true\ncallback_url: ") {
+	if strings.Contains(stderr.String(), "authorization_url:") || strings.Contains(stderr.String(), "browser_opened") || !strings.Contains(stderr.String(), "callback_url: ") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -168,6 +187,45 @@ func TestAuthLoginBoundsCallbackBeforeManagerCanUseIt(t *testing.T) {
 	}
 	if strings.Contains(stderr.String(), strings.Repeat("x", 32)) || !strings.Contains(stderr.String(), "code: oauth_redirect_receive_failed") {
 		t.Fatalf("stderr leaked callback or missed fault: %q", stderr.String())
+	}
+}
+
+func TestAuthLoginCancellationUnblocksCallbackRead(t *testing.T) {
+	reader := newReleasableAuthReader()
+	manager := &authManagerStub{loginStatus: chatworkauthcmd.CredentialStatus{Authenticated: true, ExpiresAt: time.Unix(1_800_000_000, 0)}}
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	command := newCLI(reader, stdout, stderr, DefaultCatalog(), passingInspector("ready"))
+	command.chatworkOAuth = chatworkauthcmd.New(manager)
+	command.authBrowser = &authBrowserStub{}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan int, 1)
+	go func() {
+		result <- command.RunContext(ctx, []string{"auth", "login", "--client-id", "public-client"})
+	}()
+	select {
+	case <-reader.started:
+	case <-time.After(time.Second):
+		t.Fatal("callback read did not start")
+	}
+	cancel()
+	select {
+	case code := <-result:
+		if code != ExitCanceled {
+			t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+		}
+	case <-time.After(time.Second):
+		t.Fatal("cancellation did not release the callback wait")
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: authentication_canceled") || strings.Contains(stderr.String(), "browser_opened") {
+		t.Fatalf("stdout/stderr = %q/%q", stdout.String(), stderr.String())
+	}
+	close(reader.release)
+	select {
+	case <-reader.finished:
+	case <-time.After(time.Second):
+		t.Fatal("released callback reader worker did not finish")
 	}
 }
 

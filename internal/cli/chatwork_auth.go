@@ -206,21 +206,58 @@ func oauthCallbackReceiver(c *CLI) chatworkauthcmd.RedirectReceiver {
 			return "", fault.New(fault.KindInvalidInput, "oauth_configuration_invalid", "The OAuth authorization request is invalid.", false)
 		}
 		browserOpened := c.authBrowser != nil && c.authBrowser.Open(ctx, authorizationURL) == nil
-		prompt := []byte("browser_opened: true\ncallback_url: ")
+		prompt := []byte("callback_url: ")
 		if !browserOpened {
-			prompt = []byte("browser_opened: false\nauthorization_url: " + authorizationURL + "\ncallback_url: ")
+			prompt = []byte("authorization_url: " + authorizationURL + "\ncallback_url: ")
 		}
 		if _, err := writeOnce(c.Err, prompt); err != nil {
 			return "", fault.Wrap(fault.KindInternal, "output_write_failed", "The OAuth authorization prompt could not be written.", true, err)
 		}
-		callback, err := readBoundedLine(c.In, maxOAuthCallbackBytes)
+		callback, err := readBoundedLineContext(ctx, c.In, maxOAuthCallbackBytes)
 		if err != nil {
+			if ctx.Err() != nil {
+				_, _ = writeOnce(c.Err, []byte("\n"))
+				return "", fault.New(fault.KindCanceled, "authentication_canceled", "The authentication task was canceled.", false)
+			}
 			return "", fault.Wrap(fault.KindAuthentication, "oauth_redirect_receive_failed", "The OAuth redirect could not be received.", false, err)
 		}
 		if callback == "" {
 			return "", fault.New(fault.KindInvalidInput, "oauth_callback_missing", "The complete OAuth callback URL is required.", false)
 		}
 		return callback, nil
+	}
+}
+
+type boundedLineResult struct {
+	value string
+	err   error
+}
+
+// readBoundedLineContext races one bounded read against cancellation. A
+// generic io.Reader has no portable cancellation contract, and closing a
+// terminal does not reliably release ReadConsole on Windows. The executable
+// exits after cancellation, while embedded tests release their fake reader so
+// the single buffered worker can finish without retaining a caller resource.
+func readBoundedLineContext(ctx context.Context, reader io.Reader, limit int) (string, error) {
+	if ctx == nil {
+		return "", context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	result := make(chan boundedLineResult, 1)
+	go func() {
+		value, err := readBoundedLine(reader, limit)
+		result <- boundedLineResult{value: value, err: err}
+	}()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case completed := <-result:
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		return completed.value, completed.err
 	}
 }
 

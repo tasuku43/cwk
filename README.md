@@ -95,7 +95,8 @@ cwk auth login --client-id <public-client-id>
 The command opens the authorization page in the browser when possible. After
 granting access, paste the complete `cwk://oauth/callback?...` URL into the
 waiting terminal once. If the browser cannot be opened automatically, the
-command prints the authorization URL to open manually.
+command prints the authorization URL to open manually. Pressing Ctrl-C while
+the terminal is waiting for the callback cancels the login promptly.
 
 Later logins and reauthorization need no client ID:
 
