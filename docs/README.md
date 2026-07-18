@@ -13,7 +13,7 @@ In a newly derived repository, Codex starts with [`$bootstrap-derived-cli`](../.
 | [04_harness.md](04_harness.md) | How written claims become local and CI checks | Contributors, agents, maintainers |
 | [05_public_repository.md](05_public_repository.md) | Clean-room derivation, sanitization, licensing, and public-readiness review | Maintainers and release owners |
 | [06_release.md](06_release.md) | Versioning, artifact construction, provenance decisions, and release procedure | Release owners |
-| [07_authentication.md](07_authentication.md) | Secret-free OAuth/PAT boundary and derived security decisions | Security owners, adapter authors, agents |
+| [07_authentication.md](07_authentication.md) | PAT-only secret-free boundary and requirements for any future authentication extension | Security owners, adapter authors, agents |
 | [08_external_api_contracts.md](08_external_api_contracts.md) | Pagination, retry/idempotency, schema, capability, and API adapter contracts | Adapter authors, agents, reviewers |
 | [09_agent_readiness_validation.md](09_agent_readiness_validation.md) | Scenario-based discovery, execution, interpretation, and recovery validation | Product owners, agents, reviewers |
 

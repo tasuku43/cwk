@@ -8,6 +8,10 @@ Historical note: this design records the original public template scaffold.
 In the derived `cwk` product, the sample commands were later removed from the
 public catalog and retained only as explicitly constructed offline test
 fixtures after Chatwork workflows replaced their contract coverage.
+Its generic OAuth/PAT discussion is likewise scaffold history, not a claim that
+the current product supplies both methods. [ADR 0003](../decisions/0003-chatwork-pat-only.md)
+makes `CWK_API_TOKEN` the sole Chatwork credential input and removes OAuth from
+the current core.
 
 ## Problem
 

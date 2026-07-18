@@ -1,12 +1,12 @@
 # ADR 0002: Use a fixed public-client OAuth flow and operating-system credential store
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-07-18
 - Amended: 2026-07-18, single-account command-bound login and public configuration
 - Deciders: Chatwork CLI maintainers
 - Scope: Chatwork authentication, infrastructure dependencies, credential storage, and harness
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR 0003](0003-chatwork-pat-only.md)
 
 ## Context
 

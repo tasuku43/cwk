@@ -55,7 +55,11 @@ Bootstrap failure must leave the repository in a diagnosable state and must not 
 
 `$bootstrap-derived-cli` is the first-run Codex workflow for a derived repository. It does not implement a second replacement engine: it resolves missing identity decisions, invokes `tools/bootstrap` in preview-then-apply order, verifies the resulting module/import/command paths and gates, then requires a project-specific thesis and security handoff before `$add-capability`. `tools/repoguard` requires both the Skill instructions and their Codex interface metadata, while the Skill's workflow delegates mechanical safety to the same bootstrap and check commands used by humans and CI.
 
-The Skill deliberately leaves provider selection, OAuth versus PAT, credential storage, side-effect approval, user tasks, and release ownership to the derived project's theses and security model. A `ready` profile proves only that identity replacement completed.
+For a newly derived repository, the Skill leaves provider authentication,
+credential storage, side-effect approval, user tasks, and release ownership to
+that project's theses and security model. In this derived `cwk` product, ADR
+0003 has already selected process-local PAT only. A `ready` profile proves only
+that identity replacement completed.
 
 ### `tools/archlint`
 
@@ -110,20 +114,16 @@ The test suite has complementary levels:
 - Domain tests fix pure invariants.
 - Application tests fix task interpretation, orchestration, and ambiguity behavior.
 - Authentication, pagination, and mutation-boundary tests prove rejection/cancellation before downstream calls, exact secret-free authentication binding, complete standard runtime-fault declarations, and complete-or-no-result behavior.
-- Chatwork authentication-selection tests require exact `pat|oauth2`, exercise
-  both credentials being present, and prove that missing, unknown, unavailable,
-  expired, refresh-failed, and store-failed selections neither probe nor fall
-  back to the other method and make zero unintended provider task requests.
-- Chatwork OAuth protocol tests fix public-client Authorization Code Grant,
-  state, PKCE S256, exact custom-scheme redirect validation, no client secret or
-  `offline_access`, bounded fixed destinations, redirect denial, and
-  secret-free provider fault mapping.
-- Chatwork OAuth storage and binding fixtures use fake stores and two synthetic
-  accounts to cover store absence/denial/corruption, stale and cross-session
-  bindings, refresh races, rotated-token persistence before task
-  authorization, refreshed-identity mismatch, and secret canaries. Tests never
-  access a developer operating-system credential store or live Chatwork
-  account.
+- Chatwork PAT-only composition tests prove that `CWK_API_TOKEN` is the sole
+  credential input, every requirement admits only `pat`, and a missing or
+  invalid token makes zero provider task requests. They also prove that the
+  removed `CWK_AUTH_METHOD` value cannot select another path.
+- Chatwork authentication-binding tests use synthetic tokens and two isolated
+  clients to reject missing, stale, wrong-client, and cross-session bindings;
+  no automated test reads a developer credential or contacts live Chatwork.
+- Chatwork secret-canary tests prove that the token reaches only the exact
+  `x-chatworktoken` request header and never argv, output, errors, logs,
+  snapshots, fixtures, or persistent configuration.
 - Catalog pagination tests require an exact optional-input/top-level-string-output opaque cursor binding, typed empty-cursor completion, and JSON-only presentation for `paged` results, and forbid that binding for `complete` results. Renderer fixtures reject an omitted, null, or non-string cursor.
 - Infrastructure tests fix protocol conversion and boundary failure.
 - CLI tests fix routing, help, rendering, and exit behavior.
@@ -158,14 +158,10 @@ Every strong statement should identify its enforcement path.
 | Side-effect ordering | Fake adapter counters and failure-before-I/O tests |
 | Mutation outcome classification | Structured-fault-first/cause-stripping tests, non-retryable unclassified outcome fallback, and read-only recovery validation |
 | Authentication precondition | Secret-free session contract, zero-downstream-call tests, and catalog validation of every standard gate fault's code/kind/retryability |
-| Authentication binding | Opaque JSON-excluded/fmt-redacted binding type, infrastructure-only issuance lint, exact pass-through test, and derived two-account/stale-binding/refresh-race adapter fixtures |
-| Explicit Chatwork authentication selection | CLI/composition tests for authoritative environment `pat|oauth2` or stored login-selected `oauth2`, deterministic selection when both sources exist, selected-source-only access, and zero-call/no-fallback failures |
-| OAuth protocol boundary | Infrastructure-only dependency lint plus state, PKCE S256, exact redirect, public-client exchange, fixed-destination, redirect-denial, and cancellation adapter tests |
-| OAuth credential storage | Fake-store absence/denial/corruption/size/cancellation tests, no-plaintext-fallback assertion, and platform build matrix |
-| OAuth public configuration | Strict schema/bounds/symlink/permission/atomic-write tests proving that only non-secret client metadata and the selected method reach the platform user configuration |
-| OAuth browser handoff | Exact-origin bounded opener tests, shell-free argv inspection, failure fallback, cancellation, and secret-redacted errors |
-| OAuth refresh identity continuity | Serialized refresh-race fixtures, required-scope and exact-account revalidation, rotated-record persistence-before-authorization, stale-binding rejection, and zero unintended task requests |
-| Authentication secret exclusion | Provider/store/callback secret-canary scans across stdout, stderr, structured faults, logs, snapshots, fixtures, and test diagnostics |
+| Authentication binding | Opaque JSON-excluded/fmt-redacted binding type, infrastructure-only issuance lint, exact pass-through tests, and two-client/stale-binding adapter fixtures |
+| Sole Chatwork PAT input | CLI/composition tests requiring `CWK_API_TOKEN`, PAT-only requirement snapshots, obsolete-selector non-effect, and zero-call missing/invalid-token failures |
+| PAT process-local binding | Synthetic two-client/stale-binding fixtures, exact unchanged binding pass-through, fixed-destination header tests, and no persistent credential source |
+| Authentication secret exclusion | Token-canary scans across argv rejection, stdout, stderr, structured faults, logs, snapshots, fixtures, test diagnostics, and repository state |
 | Pagination completeness | Cursor loop/budget/cancellation tests, retryability/catalog agreement, and no-partial-result assertion |
 | Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only presentation, and agent-help/reference-workflow projection |
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |

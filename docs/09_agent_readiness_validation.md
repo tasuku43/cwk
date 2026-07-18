@@ -103,27 +103,27 @@ Mutation probes also require the agent to distinguish the three typed policies w
 
 Authentication probes require the agent to:
 
-1. select `auth login` directly for the declared single local authentication
-   target, supply a public client ID only on first login, and use no synthetic
-   profile discovery or selector;
-2. distinguish an authoritative environment method from the exact persisted
-   OAuth selection without inferring a preference from available credentials;
-3. keep PATs, callbacks, codes, PKCE verifiers, access/refresh tokens,
-   and credential-store keys out of argv and successful output;
-4. distinguish unconfigured/expired OAuth state from insufficient API
-   scope and from a credential-store access fault;
-5. recover an uncertain login/logout store outcome through exact read-only
-   `auth status`, not by repeating the mutation;
-6. understand that logout removes local credentials and does not prove remote
-   token revocation.
+1. identify `CWK_API_TOKEN` from exact scoped help as the sole required
+   credential input and `pat` as the sole admitted method;
+2. invoke the requested Chatwork task without probing for a login, profile,
+   method selector, stored configuration, or credential status command;
+3. keep the token out of argv, command literals, stdout, stderr, fixtures,
+   diagnostics, and persistent project or user configuration;
+4. distinguish missing or invalid token input from a valid account that lacks
+   permission;
+5. recover `chatwork_token_missing` and `chatwork_token_invalid` through the
+   exact scoped-help action declared by the command, not a removed
+   authentication namespace;
+6. understand that the token selects one account for one command process and
+   that `cwk` neither persists nor revokes it.
 
-The synthetic OAuth transcript uses a fixed public client and redirect,
-successful/failing browser opener, state mismatch case, PKCE failure case, full
-callback supplied through stdin, strict fake user configuration, fake OS
-credential store, expiry/refresh race, and secret canaries. It
-records zero provider task calls for selection, callback, store, identity,
-scope, and refresh rejection. Live credentials and browser history are never
-evaluation inputs or retained evidence.
+The synthetic PAT transcript supplies a canary only through the test process
+environment, admits one PAT-only session, forwards its ephemeral binding
+unchanged, and checks the exact `x-chatworktoken` header at a local server. It
+records zero provider task calls for missing/invalid token, binding mismatch,
+and permission rejection. It also verifies that an ambient obsolete
+`CWK_AUTH_METHOD` value cannot select a different adapter. Live credentials are
+never evaluation inputs or retained evidence.
 
 ## No-post-processing audit
 

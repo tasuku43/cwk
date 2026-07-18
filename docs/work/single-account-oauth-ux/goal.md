@@ -1,9 +1,10 @@
 # Work Goal: One-command single-account OAuth login
 
 - Status: Complete
+- Current applicability: Superseded by [ADR 0003](../../decisions/0003-chatwork-pat-only.md) and the [PAT-only authentication work](../pat-only-auth/goal.md); retained as historical implementation evidence.
 - Owner: Codex
 - Target: Current implementation cycle
-- Related ADRs: ADR 0002 (to be amended)
+- Related ADRs: ADR 0002 (superseded by ADR 0003)
 
 ## Outcome
 

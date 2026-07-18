@@ -174,7 +174,7 @@ Command certainty, operational closure, semantic fidelity, understanding quality
 The first complete implementation is bounded by the 32 REST operations linked from the official Chatwork documentation index on 2026-07-18. It must:
 
 1. map every operation to at least one task-oriented public workflow and mechanically reject gaps or unreviewed extras;
-2. implement single-account PAT and public-client OAuth 2.0 authentication behind one secret-free binding, fixed-destination bounded transport, provider faults, and safe mutation intent;
+2. implement single-account, process-local PAT authentication behind one secret-free binding, fixed-destination bounded transport, provider faults, and safe mutation intent;
 3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, and partial coverage;
 4. implement every remaining operation with the same catalog, reference, authentication, effect, and recovery contracts;
 5. render candidate C deterministically and prove its semantic answer, bounds, trust framing, and canonical reference flow;
@@ -189,24 +189,17 @@ ordinary creates/updates; the reviewed access-changing and destructive sets
 add exact `--confirm=access-change` and `--confirm=destructive`, respectively.
 Uncertain mutation outcomes reconcile only through read-only tasks.
 
-Authentication selection is explicit rather than preferential. An exact
-`CWK_AUTH_METHOD` selects command-process PAT automation; otherwise the first
-single-account OAuth login attempt supplies the stored exact `oauth2` selection. PAT
-reads `CWK_API_TOKEN` only from the command process, while OAuth uses
-Authorization Code Grant with state and PKCE S256 for one registered public
-client. First login accepts the non-secret client ID, uses the fixed
-`cwk://oauth/callback` redirect, opens the consent URL when a bounded platform
-opener is available, and reads one complete callback from stdin. Public client
-configuration is stored before consent in the platform user configuration and
-tokens only after successful exchange in the operating-system credential store.
-Login/status/logout bind the one
-catalog-declared local authentication singleton and require no synthetic
-profile reference. Login refuses to overwrite an existing credential, and
-logout removes local credential material without claiming remote revocation.
+Authentication has no selection step. `CWK_API_TOKEN` is the sole Chatwork
+credential input and is read only from the command process. The CLI does not
+accept it in argv, persist it in project or user configuration, expose an
+authentication lifecycle command, or probe another credential source. Missing
+or invalid token input fails before a provider task request. The fixed
+production destination and secret-free ephemeral binding remain unchanged.
 
-Future provider additions, confidential-client or device grants, multiple
-accounts/profiles, GUI work, release publication, alternative presentations,
-and further token optimization are outside this completion boundary.
+Future provider additions, OAuth grants and lifecycle commands, token
+persistence, multiple accounts/profiles, GUI work, release publication,
+alternative presentations, and further token optimization are outside this
+completion boundary.
 
 ## Explicit non-goals
 

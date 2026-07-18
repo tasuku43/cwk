@@ -49,30 +49,30 @@ Unknown effects and incomplete mutation intent are invalid domain states at an e
 The application layer depends on domain values and primitive types. It does not import infrastructure, parse CLI arguments, render terminal output, or construct transport requests.
 
 `internal/app/doctorcmd` owns the local utility, while `internal/app/chatworkcmd`
-and `internal/app/chatworkauthcmd` own the public provider tasks and OAuth
-lifecycle. `internal/app/samplecmd` remains only as an explicitly constructed
-synthetic test fixture. Reusable application boundaries include authentication
-gating, complete-or-no-result pagination, and policy-neutral mutation
-invocation.
+owns the public provider tasks. `internal/app/samplecmd` remains only as an
+explicitly constructed synthetic test fixture. Reusable application boundaries
+include authentication gating, complete-or-no-result pagination, and
+policy-neutral mutation invocation.
 
 ### Infrastructure
 
 `internal/infra/` implements application or domain-facing contracts for external systems. Examples in a derived project may include HTTP adapters, filesystems, credential stores, clocks, subprocesses, or platform services.
 
-Infrastructure owns protocol-specific validation and conversion. Raw OAuth tokens, refresh tokens, PATs, token sources, and authorization headers never leave this layer. Infrastructure does not decide which public command should exist, how several adapters form a user task, or how terminal output is presented.
+Infrastructure owns protocol-specific validation and conversion. The Chatwork
+API token and authorization header never leave this layer. Infrastructure does
+not decide which public command should exist, how several adapters form a user
+task, or how terminal output is presented.
 
-The Chatwork authentication adapters are the only production packages that
-import `golang.org/x/oauth2` or `github.com/zalando/go-keyring`. The OAuth
-adapter owns state, PKCE, authorization-code exchange, refresh, token rotation,
-identity verification, and the operating-system credential-store handle. The
-Chatwork API adapter receives only a private infrastructure authorization
-strategy and returns only secret-free authentication metadata across its
-domain-facing boundary. [ADR 0002](decisions/0002-chatwork-oauth-public-client.md)
-pins the dependency and platform trade-offs.
+The Chatwork API adapter is the sole production authentication adapter. It
+reads `CWK_API_TOKEN` once from the command environment, retains the token in a
+private process-local record, returns only secret-free authentication metadata
+across its domain-facing boundary, and resolves that exact record immediately
+before provider I/O. No production package owns OAuth protocol, browser,
+configuration, or credential-store behavior. [ADR 0003](decisions/0003-chatwork-pat-only.md)
+pins this reduced boundary.
 
-`internal/infra/systemdoctor` is the diagnostic adapter. `chatworkapi`,
-`chatworkoauth`, and the narrow `chatworkconfig` environment projection own the
-production provider boundaries. `internal/infra/sampledata` is a deterministic
+`internal/infra/systemdoctor` is the diagnostic adapter. `chatworkapi` owns the
+production provider boundary. `internal/infra/sampledata` is a deterministic
 offline repository retained only for generic contract tests.
 
 ### CLI
@@ -102,54 +102,23 @@ CLI, application, and infrastructure code propagate the caller context instead o
 
 ## Chatwork authentication topology
 
-PAT and OAuth are alternate credential sources behind one secret-free gate;
-they are not a fallback chain.
+Chatwork has one credential source behind the secret-free gate.
 
 ```text
-explicit CWK_AUTH_METHOD=pat|oauth2, otherwise stored oauth2 selection
-  -> CLI composition resolves exactly one infrastructure authenticator
-  -> application authentication gate receives a secret-free requirement
-  -> infrastructure issues one process-local binding for the selected record
-  -> application passes that binding unchanged to the Chatwork task port
-  -> infrastructure resolves and revalidates the same record immediately before I/O
-       pat    -> command-process environment -> x-chatworktoken
-       oauth2 -> operating-system credential store -> refresh/identity check -> Bearer
+command-process CWK_API_TOKEN
+  -> CLI composition constructs the PAT infrastructure adapter
+  -> application authentication gate receives a PAT-only secret-free requirement
+  -> infrastructure issues one process-local binding for that token record
+  -> application passes the binding unchanged to the Chatwork task port
+  -> infrastructure resolves the exact record immediately before I/O
+  -> x-chatworktoken on the fixed Chatwork API request
 ```
 
-A missing, unknown, or unavailable selected method fails before a provider task
-request. An explicit environment selector is authoritative; otherwise only the
-selection deliberately persisted by OAuth login is eligible. The composition
-root never probes both sources, prefers a credential because it happens to
-exist, or falls back from a failed OAuth refresh or store read to PAT. This
-keeps account choice explicit even when both sources are available.
-
-The OAuth surface is one command-bound `tool_local` authentication singleton;
-there is no public profile collection or selector. First login accepts one
-non-secret public client ID, fixes `cwk://oauth/callback`, opens the consent URL
-through the bounded platform opener when possible, and reads one complete
-custom-scheme callback URL from stdin. It first persists the validated public
-registration/selection, then verifies the exact registered redirect and state,
-exchanges the code, verifies the account through the fixed Chatwork API identity
-endpoint, and persists tokens in the OS credential store. A failed consent may
-therefore leave only reusable public configuration. Status reads the credential
-state and expiry projection without refresh or network I/O. Logout removes the
-exact local credential entry and makes no provider-revocation claim.
-
-OAuth refresh is serialized around the selected stored record. Immediately
-before a Chatwork API request, infrastructure resolves the exact ephemeral
-binding, uses `golang.org/x/oauth2` to refresh when the token is no longer
-valid, verifies the required scopes and account through `GET /v2/me`, compares
-that account with the stored and admitted identity, and persists the complete
-rotated credential before attaching the Bearer header to the task request. A
-refresh, scope, identity, cancellation, or persistence failure therefore makes
-zero Chatwork task requests. A stale, cross-session, or mismatched binding also
-fails before credential use.
-
-OAuth credentials are stored only through the operating-system facility
-selected by `go-keyring`: macOS Keychain, Secret Service on Linux/BSD, or
-Windows Credential Manager. Store absence, denial, lock, backend failure, and
-payload rejection are typed failures. There is no plaintext file,
-environment-variable, stdout, or in-memory-across-process fallback.
+There is no authentication-method selection, probing, or fallback. A missing or
+invalid `CWK_API_TOKEN` fails during composition before a provider task request.
+The token determines the one account used by that command process and remains
+private to infrastructure. `cwk` does not accept it in argv, persist it, or
+expose login, status, logout, callback, or profile commands.
 
 ## Catalog as the public source of truth
 

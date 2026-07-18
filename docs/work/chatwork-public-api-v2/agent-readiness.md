@@ -4,6 +4,11 @@ This file records synthetic, repeatable evidence for the fixed completion goal.
 It is not a live-account transcript and contains no Chatwork credential or real
 provider data.
 
+The OAuth section records the state accepted at that historical completion.
+Current authentication-readiness evidence is owned by the
+[PAT-only authentication work](../pat-only-auth/goal.md) under
+[ADR 0003](../../decisions/0003-chatwork-pat-only.md).
+
 ## Room-message outcome
 
 User request: “Get the messages in this room and preserve replies.”

@@ -145,70 +145,38 @@ No Chatwork operation is retried automatically in this implementation. After an 
 
 ## Credentials and secrets
 
-The base template contains a secret-free authentication contract, an ephemeral non-serialized session binding, and an application gate, but no concrete credential acquisition or storage implementation. A derived project must document:
+The core contains a secret-free authentication contract, an ephemeral
+non-serialized session binding, and an application gate. The current Chatwork
+adapter makes the PAT source concrete below. Any future credential method or
+storage mechanism must document:
 
 - credential issuer and scope;
-- acquisition and refresh flow;
+- acquisition and any refresh flow;
 - storage location and operating-system protection;
 - how secrets are kept out of process arguments, logs, errors, history, and generated files;
 - revocation and expiration behavior;
 - tests and scans that fail on unsafe handling.
 
-Secrets must not cross from infrastructure into domain or application values and must not be accepted through command-line arguments when a safer channel is available. Do not persist tokens in plaintext configuration or test real credentials in CI. Read [Authentication](07_authentication.md) and [ADR 0001](decisions/0001-oauth-library-boundary.md) before implementing OAuth or PAT support.
+Secrets must not cross from infrastructure into domain or application values and must not be accepted through command-line arguments when a safer channel is available. Do not persist tokens in plaintext configuration or test real credentials in CI. Read [Authentication](07_authentication.md) before changing the current PAT boundary; a future OAuth proposal must also start from [ADR 0001](decisions/0001-oauth-library-boundary.md) and a new accepted product/security decision.
 
-The first Chatwork implementation supports one account through two explicitly
-selected methods. A present `CWK_AUTH_METHOD` must be exactly `pat` or `oauth2`;
-when absent, only the exact `oauth2` choice deliberately stored by the first
-login attempt is
-eligible. Missing, unknown, corrupt, or unavailable selection fails before
-credential access, and the adapter never silently prefers one available
-credential.
+The first Chatwork implementation supports one account per command process
+through the API token in `CWK_API_TOKEN`. There is no method selector or second
+credential source. Missing or invalid token input fails before a provider task
+request.
 
-PAT selects one API token from the `CWK_API_TOKEN` command-process environment.
-This is an explicit non-persistent automation trade-off, not a claim that
-environment variables are a secure credential store. The CLI does not accept
-the token in argv, configuration, stdin data payloads, or output;
+Environment delivery is an explicit non-persistent automation trade-off, not a
+claim that environment variables are a secure credential store. The CLI does
+not accept the token in argv, configuration, stdin data payloads, or output;
 infrastructure reads it once, keeps it in memory behind an ephemeral binding,
-and redacts it from every error and test diagnostic.
+and redacts it from every error and test diagnostic. The tool exposes no
+credential login, status, logout, callback, profile, or persistence surface.
 
-OAuth selects Chatwork's Authorization Code Grant for one public client. State
-and a fresh PKCE S256 verifier are mandatory for every login. The exact
-registered redirect URI must use a non-HTTP custom scheme; loopback HTTP,
-confidential-client secrets, device flow, and `offline_access` are not
-supported. First login accepts the non-secret public client ID in argv and uses
-the fixed registered `cwk://oauth/callback` URI. The public client ID, redirect,
-schema, and exact `oauth2` selection may be stored in the platform user
-configuration; no credential may be stored there. It is written before consent
-so token persistence can never succeed without it; failed consent leaves no
-credential. Login sends the consent URL
-to an allowlisted shell-free platform opener when available and prints it as a
-fallback, accepts only the complete callback URL through stdin, and compares
-its redirect and state exactly. The opener may briefly expose the authorization
-URL's state and public PKCE challenge in its process arguments; that bounded
-residual contains no authorization code, verifier, access/refresh token, or
-client secret. Callback URLs, codes, verifiers, tokens, credential-store keys,
-and credential-bearing causes never enter argv, stdout, logs, structured
-errors, or fixtures.
-
-OAuth access and refresh material is persisted only through the selected
-operating-system credential store. Login/status/logout bind one declared local
-authentication singleton rather than a public profile reference. Login refuses
-to overwrite an existing stored credential. Status
-returns only method, `unconfigured|ready|expired`, and advertised expiry.
-Logout deletes only that exact local store entry and explicitly reports that it
-did not revoke a remote token. Store access failure (including platform denial),
-missing, stale, identity-mismatched, and refresh-failed states are typed faults
-and do not fall back to PAT.
-
-Production API credentials may be sent only to the exact HTTPS origin
-`https://api.chatwork.com` under the `/v2` base path. OAuth authorization uses
-the fixed `https://www.chatwork.com/packages/oauth2/login.php` endpoint and
-code/refresh exchange uses the fixed `https://oauth.chatwork.com/token`
-endpoint. Redirect following is
-disabled for credential-bearing API and token requests. A different base URL
-can be injected only through internal test construction with synthetic tokens
-and a local server; there is no public flag or environment override for any
-production destination.
+The token may be sent only to the exact HTTPS origin
+`https://api.chatwork.com` under the `/v2` base path as `x-chatworktoken`.
+Redirect following is disabled for credential-bearing requests. A different
+base URL can be injected only through internal test construction with synthetic
+tokens and a local server; there is no public flag or environment override for
+the production destination.
 
 ## Filesystem, process, and network policy
 

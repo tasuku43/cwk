@@ -1,9 +1,12 @@
 # Work Goal: Complete the first Chatwork API-backed CLI
 
 - Status: Accepted
+- Authentication amendment: The API coverage and presentation evidence remain accepted; OAuth-specific scope is historical and is superseded by [ADR 0003](../../decisions/0003-chatwork-pat-only.md) and the [PAT-only authentication work](../pat-only-auth/goal.md).
 - Owner: Project maintainers
 - Target: First complete API-backed implementation
-- Related ADRs: [ADR 0001](../../decisions/0001-oauth-library-boundary.md)
+- Related ADRs: [ADR 0001](../../decisions/0001-oauth-library-boundary.md),
+  historical [ADR 0002](../../decisions/0002-chatwork-oauth-public-client.md),
+  and current [ADR 0003](../../decisions/0003-chatwork-pat-only.md)
 
 ## Outcome
 

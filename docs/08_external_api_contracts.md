@@ -8,8 +8,8 @@ This document defines the small set of cross-project contracts supplied for API-
 |---|---|---|
 | Public surface | Commands describe user outcomes; catalog metadata is complete and machine-readable | Which outcomes, commands, aliases, and compatibility promises exist |
 | Discovery and action | Discovery emits opaque references; action consumes an exact reference without rediscovery or transformation | Reference kinds, filters, ambiguity rules, and task-specific workflows |
-| Authentication | Secret-free requirements and session metadata, a fail-closed application gate, an ephemeral binding issued only by infrastructure and passed unchanged through task ports, exact record revalidation before I/O, typed failures, and zero downstream calls on rejection | OAuth or PAT, grant, credential source/storage, scopes, expiry headroom, refresh/cache, tenant/account selection, login UX, and revocation |
-| OAuth implementation | Do not implement OAuth protocol machinery in the template; keep a selected library behind infrastructure | Whether OAuth is needed and which reviewed adapter/library is justified; see [ADR 0001](decisions/0001-oauth-library-boundary.md) |
+| Authentication | PAT-only secret-free requirements and session metadata, a fail-closed application gate, an ephemeral binding issued only by infrastructure and passed unchanged through task ports, exact record revalidation before I/O, typed failures, and zero downstream calls on rejection | Any future method, persistence, expiry, refresh/cache, tenant/account selection, login UX, or revocation requires a new product and security decision |
+| Future OAuth implementation | OAuth is not supplied by the current core; a future proposal must keep reviewed protocol machinery behind infrastructure | Whether OAuth is justified and which reviewed adapter/library is acceptable; see [ADR 0001](decisions/0001-oauth-library-boundary.md) |
 | Effects | `read`, `create`, or `write`; a create binds one opaque parent/scope input, a write binds one matching opaque existing-target input plus optional parent, generic impact is explicit, and policy is injected at one application boundary | Confirmation, approval, dry-run, OS authentication, authorization reuse, and domain-specific impact |
 | Pagination | Opaque cursor envelope, explicit budgets, loop detection, cancellation, complete-or-no-result traversal, and a JSON-only public-page contract with a top-level completion cursor | Exhaustive versus public paged behavior, page size, ordering/snapshot semantics, limits, and user overrides |
 | Calls | Finite timeout, attempt count, and upstream idempotency are explicit; unsafe mutation retry is rejected | Vendor error classification, retry/backoff budget, idempotency-key support, and endpoint-specific timeouts |
@@ -23,42 +23,33 @@ The template side of this table fixes vocabulary, validation, and enforcement po
 
 ## Authentication and credential flow
 
-Read [Authentication](07_authentication.md) before adding a network adapter. Application code receives only a validated, secret-free session description and passes its non-serialized ephemeral binding unchanged into the task port. Infrastructure resolves that binding and revalidates or refreshes the exact private authentication record at I/O time. Raw access tokens, refresh tokens, PATs, client secrets, token sources, authenticated transports, and authorization headers remain inside infrastructure.
+Read [Authentication](07_authentication.md) before adding a network adapter. Application code receives only a validated, secret-free session description and passes its non-serialized ephemeral binding unchanged into the task port. Infrastructure resolves that binding and revalidates the exact private authentication record at I/O time. The PAT and authorization header remain inside infrastructure. Other credential methods are future work rather than dormant current-core behavior.
 
 Authentication is a precondition, not a transport error to discover after a write. A failed or mismatched requirement must produce zero downstream API calls. Authentication and permission are different failure kinds: reauthentication is not presented as a remedy for a valid identity that lacks authorization.
 
 A non-nil catalog authentication requirement means the command uses the template application gate. The catalog must declare the gate's complete standard fault set with exact code, kind, retryability, and command-valid recovery actions; validation rejects omissions before dispatch. Provider-specific authentication, rate-limit, unavailable, or unsupported faults are additional derived-project declarations rather than replacements for that base set.
 
-### Chatwork method and single-account OAuth contract
+### Chatwork PAT-only contract
 
-The fixed Chatwork implementation permits `pat` and `oauth2` in every API-task
-requirement. A present exact `CWK_AUTH_METHOD=pat|oauth2` is authoritative;
-otherwise only the `oauth2` selection deliberately stored by the first login
-attempt is eligible.
-An absent/invalid selection, missing selected credential, or selected-method
-failure makes zero provider task requests. The adapter never probes one
-credential and falls back to the other.
+Every fixed Chatwork API-task requirement admits exactly `pat` and identifies
+`CWK_API_TOKEN` as its sole credential input. No selector is required because
+there is no second method. Missing or malformed token input fails during
+process-local adapter construction and makes zero provider task requests.
 
-OAuth lifecycle commands do not require an existing authentication session.
-Login, status, and logout are act commands bound to one catalog-declared fixed
-`tool_local` authentication target; no profile discovery or target argument is
-valid. Login is a create within that fixed scope; logout is an access-changing
-destructive write to it; both reconcile an unknown local-store outcome only
-through read-only `auth status`. Login refuses an existing credential rather
-than silently replacing it. Logout removes local credential material and never
-reports remote revocation.
+Infrastructure retains the token behind the exact ephemeral binding admitted
+by the application gate, resolves that binding immediately before I/O, and
+attaches the token only as `x-chatworktoken` to the fixed Chatwork API origin.
+The CLI accepts no token argv, persistent configuration, credential-store,
+login, status, logout, callback, browser, profile, or client-registration
+surface. `CWK_AUTH_METHOD` is not a public input, and its ambient value cannot
+change adapter selection or recovery.
 
-The OAuth adapter uses Authorization Code Grant with state and PKCE S256 for a
-public client, the exact registered `cwk://oauth/callback` URI, and manual
-full-callback input through stdin. First login accepts the public client ID and
-persists only non-secret client/selection metadata in the platform user
-configuration. The consent URL is opened through a bounded platform opener and
-becomes transient stderr guidance only when opening fails;
-the complete callback, code, state, verifier, access/refresh tokens, store keys,
-and provider token bodies are never successful output. Only infrastructure may
-import the reviewed OAuth and credential-store modules. Adapter tests pin the
-authorization/token origins, redirect comparison, scope set, refresh identity,
-store behavior, secret redaction, and zero-task-call failures.
+The scoped catalog contract declares the required PAT method and token
+environment prerequisite. `chatwork_token_missing` and
+`chatwork_token_invalid` recover through exact scoped help; no error points to
+an authentication lifecycle command. Synthetic adapter tests pin the exact
+header/destination, token redaction, binding isolation, and zero-call failure
+behavior.
 
 ## Pagination and completeness
 

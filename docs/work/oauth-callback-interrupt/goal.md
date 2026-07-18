@@ -1,9 +1,10 @@
 # Work Goal: Interruptible OAuth callback handoff
 
 - Status: Complete
+- Current applicability: Superseded by [ADR 0003](../../decisions/0003-chatwork-pat-only.md) and the [PAT-only authentication work](../pat-only-auth/goal.md); retained as historical regression evidence for the removed callback flow.
 - Owner: Codex
 - Target: Current implementation cycle
-- Related ADRs: ADR 0002
+- Related ADRs: ADR 0002 (superseded by ADR 0003)
 
 ## Outcome
 

@@ -18,12 +18,12 @@ The bootstrap tool replaces those exact defaults with validated project values. 
 - Pure domain rules, application use cases, infrastructure adapters, and a thin CLI composition root.
 - Explicit `read`, `create`, and `write` effects with typed intent, target, and impact information.
 - Structured command prerequisites, inputs, outputs, completeness, failures, and recovery actions for agents.
-- Policy-neutral foundations for OAuth/PAT, pagination, timeout, retry/idempotency, and mutations that derived projects make concrete.
+- A secret-free PAT authentication boundary plus policy-neutral foundations for pagination, timeout, retry/idempotency, and mutations.
 - A single command catalog as the source of truth for routing and help.
 - Executable architectural, security, release, and public-repository claims.
 - A clean public boundary: no inherited organization names, private URLs, credentials, or internal history.
 
-The template fixes reusable vocabulary and enforcement points, not provider or user-experience policy. For authentication, it fixes secret-free requirements and sessions, a fail-closed application gate, an ephemeral infrastructure-issued binding passed unchanged through task ports, and exact credential-record revalidation before I/O. A derived project still chooses OAuth versus PAT, its OAuth flow and reviewed library, credential input and storage, account and refresh behavior, API budgets, and mutation approval policy. [Authentication](docs/07_authentication.md) and [External API Contracts](docs/08_external_api_contracts.md) define that boundary in detail.
+The repository fixes reusable vocabulary and enforcement points without turning transport details into public tasks. For authentication, it uses PAT-only secret-free requirements and sessions, a fail-closed application gate, an ephemeral infrastructure-issued binding passed unchanged through task ports, and exact credential-record revalidation before I/O. OAuth is not supplied by the current core; adding it later requires a new product, domain, security, dependency, and migration decision. [Authentication](docs/07_authentication.md) and [External API Contracts](docs/08_external_api_contracts.md) define the current boundary in detail.
 
 ## Start a derived project
 
@@ -72,50 +72,28 @@ go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk doctor
 ```
 
-The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Configure PAT or OAuth authentication from the exact scoped-help contract before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
+The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API token from the command environment before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
 
 ### Authenticate
 
-For PAT, inject `CWK_API_TOKEN` into the command process through your shell or
-secret manager, without putting the token in argv, a command literal, or a
-project file. Select PAT explicitly for the command process:
+Inject `CWK_API_TOKEN` into the command process through your shell or secret
+manager, without putting the token in argv, a command literal, or a project
+file. It is the sole Chatwork credential input; there is no authentication
+method selector or login command. For example, a non-echoing shell prompt can
+populate a shell value and export only that variable to child commands:
 
 ```sh
-export CWK_AUTH_METHOD=pat
+read -r -s CWK_API_TOKEN
+export CWK_API_TOKEN
 cwk rooms list
+unset CWK_API_TOKEN
 ```
 
-For OAuth, register a public client with `cwk://oauth/callback` as its redirect
-URI. The first login needs the public client ID once:
-
-```sh
-cwk auth login --client-id <public-client-id>
-```
-
-The command opens the authorization page in the browser when possible. After
-granting access, paste the complete `cwk://oauth/callback?...` URL into the
-waiting terminal once. If the browser cannot be opened automatically, the
-command prints the authorization URL to open manually. Pressing Ctrl-C while
-the terminal is waiting for the callback cancels the login promptly.
-
-Later logins and reauthorization need no client ID:
-
-```sh
-cwk auth login
-```
-
-`cwk` supports one OAuth account and selects its stored configuration without a
-profile argument or OAuth environment variables. It stores only the
-authentication method, public client ID, and redirect URI in:
-
-- macOS and Linux: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`
-- Windows: `%AppData%\cwk\config.json`
-
-OAuth access and refresh tokens are stored only in the operating-system
-credential store, never in that configuration file. `cwk auth status` and
-`cwk auth logout` inspect or clear the single stored credential. Authentication
-selection is fail-closed; `cwk` does not probe one credential method and fall
-back to another.
+The token remains process-local: `cwk` does not persist it in XDG/AppData
+configuration, an operating-system credential store, or a project file. Unset
+the variable when the shell no longer needs it. Missing or malformed token
+input fails before a Chatwork request and scoped help identifies
+`CWK_API_TOKEN` as the required environment input.
 
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 

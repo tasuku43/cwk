@@ -107,37 +107,19 @@ The room-discovery/message anchor lands as a read slice, but the first complete 
 
 ## Authentication and external-call decisions
 
-The first implementation supports one Chatwork account through either PAT or
-OAuth 2.0. An explicitly present `CWK_AUTH_METHOD=pat|oauth2` is authoritative;
-when it is absent, the platform user configuration may contain the exact
-`oauth2` selection deliberately established by the first login attempt. Missing or invalid
-selection fails, and no selected-method failure probes or falls back to the
-other credential.
+The first implementation supports one Chatwork account per command process
+through the API token in `CWK_API_TOKEN`. That environment value is the sole
+credential input and PAT is therefore the only method admitted by every
+Chatwork task. There is no method selector, credential probing, login/status/
+logout command, stored account choice, or fallback path.
 
-PAT reads `CWK_API_TOKEN` only from the command-process environment and never
-persists it. OAuth uses the provider's Authorization Code Grant for one public
-client with state and PKCE S256. First login accepts the non-secret client ID as
-`--client-id`, fixes the registered redirect at `cwk://oauth/callback`, and
-stores those public values with the exact `oauth2` selection in the platform
-user configuration before consent. A canceled or rejected consent therefore
-leaves reusable non-secret configuration but no credential. On macOS and Linux
-the file is `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`; on Windows it
-is `%AppData%\cwk\config.json`. It opens the transient consent URL through a bounded
-platform opener when available, prints it only as fallback, then reads the
-complete callback URL from stdin and validates the exact redirect/state before
-exchange. Access and refresh material remains only in the operating-system
-credential store. Authorization codes, verifiers, tokens, credential-store
-keys, and credential-bearing errors never enter argv or stdout.
-
-`auth login`, `auth status`, and `auth logout` bind the one fixed tool-owned
-authentication target and accept no profile reference. Login requires
-`--client-id` only while public configuration is absent and refuses to replace
-an existing credential; status exposes only method, credential
-state, and provider-advertised expiry; logout removes the local credential and
-does not claim provider-side revocation. API tasks using either method converge
-on the same secret-free session/binding contract before infrastructure sends a
-request to `https://api.chatwork.com/v2`; public destination overrides remain
-forbidden.
+Infrastructure reads the token once from the command environment, validates
+its bounded shape, keeps it behind a secret-free ephemeral binding, and sends
+it only as `x-chatworktoken` to `https://api.chatwork.com/v2`. `cwk` never
+accepts the token in argv, writes it to project or user configuration, stores
+it in an operating-system credential service, or renders it. Missing or
+invalid token input fails before a provider task request; public destination
+overrides remain forbidden.
 
 The first implementation fixes these ceilings; command-line or environment overrides cannot raise them:
 
@@ -152,7 +134,7 @@ The first implementation fixes these ceilings; command-line or environment overr
 | Aggregated list result | 10,000 items |
 | File upload | 5 MiB |
 
-The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. The active capability work packet fixes cancellation, message-window semantics, provider rate-limit behavior, mutation policy, OAuth lifecycle, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
+The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. The active contracts fix cancellation, message-window semantics, provider rate-limit behavior, mutation policy, PAT failure-before-I/O behavior, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
 
 ## Mutation confirmation policy
 
@@ -175,7 +157,7 @@ Candidate C's versioned grammar, schemas, defaults, and ordering are compatibili
 - Silent fuzzy matching, truncation, or relationship inference.
 - Default lossy/model-generated summaries.
 - Claiming structural escaping makes external text semantically trustworthy.
-- Confidential-client, loopback-HTTP, and device OAuth grants; multiple accounts or OAuth profiles; administration/private APIs; webhooks; GUI work; alternative presentations; token optimization; and release publication in the first complete implementation.
+- OAuth grants and lifecycle commands; token persistence; multiple accounts or credential profiles; administration/private APIs; webhooks; GUI work; alternative presentations; token optimization; and release publication in the first complete implementation.
 
 ## Completion evidence for a Chatwork capability
 
