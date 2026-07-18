@@ -1,0 +1,8 @@
+cwk-candidate-r/1
+presentation candidate-r/task-projection/1
+task rooms.list count=4
+coverage kind=untrusted:"provider_collection" limit=0 complete=true description=untrusted:"synthetic complete room collection"
+room canonical=4101 name=untrusted:"Synthetic Lab" type=untrusted:"group" role=untrusted:"member" unread=0 mentions=0 tasks=1
+room canonical=4102 name=untrusted:"Synthetic Incident" type=untrusted:"group" role=untrusted:"member" unread=5 mentions=2 tasks=0
+room canonical=4103 name=untrusted:"Synthetic Archive" type=untrusted:"group" role=untrusted:"member" unread=0 mentions=0 tasks=0
+room canonical=4104 name=untrusted:"Synthetic Follow-up" type=untrusted:"group" role=untrusted:"member" unread=1 mentions=0 tasks=0

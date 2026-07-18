@@ -1,0 +1,507 @@
+cwk-context-capsule/1
+task rooms.list
+alias-policy display-only; command-input=canonical-reference
+coverage kind="provider_collection" limit=0 complete=true unresolved-relations=0 description="synthetic complete room collection"
+refs 100
+  r1 kind=chatwork-room canonical=4101
+  r2 kind=chatwork-room canonical=4102
+  r3 kind=chatwork-room canonical=4103
+  r4 kind=chatwork-room canonical=4104
+  r5 kind=chatwork-room canonical=4105
+  r6 kind=chatwork-room canonical=4106
+  r7 kind=chatwork-room canonical=4107
+  r8 kind=chatwork-room canonical=4108
+  r9 kind=chatwork-room canonical=4109
+  r10 kind=chatwork-room canonical=4110
+  r11 kind=chatwork-room canonical=4111
+  r12 kind=chatwork-room canonical=4112
+  r13 kind=chatwork-room canonical=4113
+  r14 kind=chatwork-room canonical=4114
+  r15 kind=chatwork-room canonical=4115
+  r16 kind=chatwork-room canonical=4116
+  r17 kind=chatwork-room canonical=4117
+  r18 kind=chatwork-room canonical=4118
+  r19 kind=chatwork-room canonical=4119
+  r20 kind=chatwork-room canonical=4120
+  r21 kind=chatwork-room canonical=4121
+  r22 kind=chatwork-room canonical=4122
+  r23 kind=chatwork-room canonical=4123
+  r24 kind=chatwork-room canonical=4124
+  r25 kind=chatwork-room canonical=4125
+  r26 kind=chatwork-room canonical=4126
+  r27 kind=chatwork-room canonical=4127
+  r28 kind=chatwork-room canonical=4128
+  r29 kind=chatwork-room canonical=4129
+  r30 kind=chatwork-room canonical=4130
+  r31 kind=chatwork-room canonical=4131
+  r32 kind=chatwork-room canonical=4132
+  r33 kind=chatwork-room canonical=4133
+  r34 kind=chatwork-room canonical=4134
+  r35 kind=chatwork-room canonical=4135
+  r36 kind=chatwork-room canonical=4136
+  r37 kind=chatwork-room canonical=4137
+  r38 kind=chatwork-room canonical=4138
+  r39 kind=chatwork-room canonical=4139
+  r40 kind=chatwork-room canonical=4140
+  r41 kind=chatwork-room canonical=4141
+  r42 kind=chatwork-room canonical=4142
+  r43 kind=chatwork-room canonical=4143
+  r44 kind=chatwork-room canonical=4144
+  r45 kind=chatwork-room canonical=4145
+  r46 kind=chatwork-room canonical=4146
+  r47 kind=chatwork-room canonical=4147
+  r48 kind=chatwork-room canonical=4148
+  r49 kind=chatwork-room canonical=4149
+  r50 kind=chatwork-room canonical=4150
+  r51 kind=chatwork-room canonical=4151
+  r52 kind=chatwork-room canonical=4152
+  r53 kind=chatwork-room canonical=4153
+  r54 kind=chatwork-room canonical=4154
+  r55 kind=chatwork-room canonical=4155
+  r56 kind=chatwork-room canonical=4156
+  r57 kind=chatwork-room canonical=4157
+  r58 kind=chatwork-room canonical=4158
+  r59 kind=chatwork-room canonical=4159
+  r60 kind=chatwork-room canonical=4160
+  r61 kind=chatwork-room canonical=4161
+  r62 kind=chatwork-room canonical=4162
+  r63 kind=chatwork-room canonical=4163
+  r64 kind=chatwork-room canonical=4164
+  r65 kind=chatwork-room canonical=4165
+  r66 kind=chatwork-room canonical=4166
+  r67 kind=chatwork-room canonical=4167
+  r68 kind=chatwork-room canonical=4168
+  r69 kind=chatwork-room canonical=4169
+  r70 kind=chatwork-room canonical=4170
+  r71 kind=chatwork-room canonical=4171
+  r72 kind=chatwork-room canonical=4172
+  r73 kind=chatwork-room canonical=4173
+  r74 kind=chatwork-room canonical=4174
+  r75 kind=chatwork-room canonical=4175
+  r76 kind=chatwork-room canonical=4176
+  r77 kind=chatwork-room canonical=4177
+  r78 kind=chatwork-room canonical=4178
+  r79 kind=chatwork-room canonical=4179
+  r80 kind=chatwork-room canonical=4180
+  r81 kind=chatwork-room canonical=4181
+  r82 kind=chatwork-room canonical=4182
+  r83 kind=chatwork-room canonical=4183
+  r84 kind=chatwork-room canonical=4184
+  r85 kind=chatwork-room canonical=4185
+  r86 kind=chatwork-room canonical=4186
+  r87 kind=chatwork-room canonical=4187
+  r88 kind=chatwork-room canonical=4188
+  r89 kind=chatwork-room canonical=4189
+  r90 kind=chatwork-room canonical=4190
+  r91 kind=chatwork-room canonical=4191
+  r92 kind=chatwork-room canonical=4192
+  r93 kind=chatwork-room canonical=4193
+  r94 kind=chatwork-room canonical=4194
+  r95 kind=chatwork-room canonical=4195
+  r96 kind=chatwork-room canonical=4196
+  r97 kind=chatwork-room canonical=4197
+  r98 kind=chatwork-room canonical=4198
+  r99 kind=chatwork-room canonical=4199
+  r100 kind=chatwork-room canonical=4200
+result
+  rooms 100
+    r1 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 1"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r2 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 2"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r3 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 3"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r4 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 4"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r5 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 5"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r6 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 6"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r7 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 7"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r8 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 8"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r9 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 9"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r10 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 10"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r11 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 11"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r12 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 12"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r13 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 13"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r14 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 14"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r15 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 15"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r16 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 16"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r17 type="group" role="member" sticky=false unread=0 mentions=1 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 17"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r18 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 18"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r19 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 19"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r20 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 20"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r21 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 21"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r22 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 22"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r23 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 23"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r24 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 24"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r25 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 25"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r26 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 26"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r27 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 27"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r28 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 28"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r29 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 29"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r30 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 30"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r31 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 31"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r32 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 32"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r33 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 33"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r34 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 34"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r35 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 35"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r36 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 36"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r37 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 37"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r38 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 38"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r39 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 39"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r40 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 40"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r41 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 41"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r42 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=2 messages=0 files=0 tasks=2 updated=0
+      name untrusted="Synthetic Room 42"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r43 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 43"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r44 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 44"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r45 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 45"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r46 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 46"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r47 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 47"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r48 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 48"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r49 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 49"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r50 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 50"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r51 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 51"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r52 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 52"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r53 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 53"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r54 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 54"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r55 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 55"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r56 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 56"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r57 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 57"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r58 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 58"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r59 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 59"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r60 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 60"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r61 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 61"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r62 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 62"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r63 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 63"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r64 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 64"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r65 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 65"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r66 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 66"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r67 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 67"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r68 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 68"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r69 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 69"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r70 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 70"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r71 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 71"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r72 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 72"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r73 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 73"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r74 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 74"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r75 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 75"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r76 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 76"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r77 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 77"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r78 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 78"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r79 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 79"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r80 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 80"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r81 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 81"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r82 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 82"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r83 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 83"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r84 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 84"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r85 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 85"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r86 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 86"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r87 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 87"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r88 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 88"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r89 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 89"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r90 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 90"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r91 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 91"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r92 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 92"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r93 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 93"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r94 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 94"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r95 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 95"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r96 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 96"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r97 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 97"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r98 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 98"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r99 type="group" role="member" sticky=false unread=0 mentions=1 my-tasks=1 messages=0 files=0 tasks=1 updated=0
+      name untrusted="Synthetic Room 99"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"
+    r100 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Room 100"
+      description untrusted=""
+      icon-url untrusted="CANARY_UNDECLARED_ROOM_ICON"

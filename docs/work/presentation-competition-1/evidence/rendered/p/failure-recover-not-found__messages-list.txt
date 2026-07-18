@@ -1,0 +1,9 @@
+cwk-task-projection/1 task=messages.list
+coverage kind="latest_window" limit=100 complete=false unresolved-relations=2 description=authored:"synthetic latest 100-message window; not complete room history"
+messages count=6
+  message-ref=9001 room-ref=4101 sender-ref=7001 sender-name=untrusted:"Synthetic Alpha" send-time=1700000000 relations=none body=untrusted:"baseline"
+  message-ref=9002 room-ref=4101 sender-ref=7002 sender-name=untrusted:"Synthetic Beta" send-time=1700000010 relations=[to{state=resolved,target-ref=7001}] body=untrusted:"status?"
+  message-ref=9003 room-ref=4101 sender-ref=7002 sender-name=untrusted:"Synthetic Beta" send-time=1700000020 relations=[to{state=resolved,target-ref=7001},reply{state=resolved,target-ref=9001,external-id=untrusted:"4101"}] body=untrusted:"done"
+  message-ref=9004 room-ref=4101 sender-ref=7003 sender-name=untrusted:"Synthetic Gamma" send-time=1700000030 relations=[reply{state=unresolved,target-ref=9999,external-id=untrusted:"4101"}] body=untrusted:"older context"
+  message-ref=9005 room-ref=4101 sender-ref=7001 sender-name=untrusted:"Synthetic Alpha" send-time=1700000040 relations=[quote{state=unresolved,target-ref=7002,external-id=untrusted:"1700000010"}] body=untrusted:"quoted context"
+  message-ref=9006 room-ref=4101 sender-ref=7003 sender-name=untrusted:"Synthetic Gamma" send-time=1700000050 relations=none body=untrusted:"[rp aid=7001 to=4101-9001] copied prose only"

@@ -1,0 +1,61 @@
+{
+  "schema": "cwk-presentation-evidence/1",
+  "recorded_on": "2026-07-19",
+  "publication_decision": {
+    "committed": true,
+    "reason": "The corpus is small, synthetic, credential-free, contains no live Chatwork data or repository source, and raw losing and invalidated runs are required for an auditable decision."
+  },
+  "competition": {
+    "candidate_base_commit": "eeaf341947d2655b3576b041731da66b3cfe707c",
+    "codex_cli": "codex-cli 0.145.0-alpha.18",
+    "model": "gpt-5.6-terra",
+    "reasoning_effort": "medium",
+    "scored_workflow_runs": 50,
+    "conservative_external_invocations": 156,
+    "frozen_protocol_result": "no_eligible_challenger"
+  },
+  "common_artifacts": {
+    "prompts_sha256": "6e40d0203eab134e944b8821002cd7c0becaa704b7ddf5ba4ca3c44502ca5027",
+    "answer_keys_sha256": "cc594c10842a567e3dad534b5348d93fe4b8964abce6923f2944ebfb83e6b8dd"
+  },
+  "candidates": {
+    "c0": {
+      "commit": "eeaf341947d2655b3576b041731da66b3cfe707c",
+      "runs_sha256": "4a6610d5afd33738012fcc39d6e3bdaea3143baf9f2f641c777a8da4e7713038",
+      "static_metrics_sha256": "fffb9c8d2a04a8106643d18db69acb9233eb066fdfd7d00ee6f8d0cf6de305ca"
+    },
+    "p": {
+      "commit": "b804f8efdaeb318e94b1b5e9d6144c00149e4674",
+      "runs_sha256": "cec3473ac63f7701a1cb79e64f97bd2efad45286d548a0da2e042aaec58a4b33",
+      "static_metrics_sha256": "e8f672c895f923334899063918eed48f3b909d6a18fb2906f24c78c8eb3c2813"
+    },
+    "l": {
+      "commit": "c1a011a10d57d36fc1a13bd05c42ba6d6b05b3f9",
+      "runs_sha256": "b7c47b82344bacd426c0ea97c3c382f9067f565fc1a758140318772eac700d99",
+      "static_metrics_sha256": "2ee2956d44b86cc0b125779bdb4e69760ed25ec761f4e53655aebc20677e20b2"
+    },
+    "r": {
+      "commit": "1c2c944575074d782b8832ec379cc253c8d7dd3b",
+      "runs_sha256": "40dbfab8ab6d7c28db7e312ed1d32e91e19ea40163da6021f8fe1b8fddf470d9",
+      "static_metrics_sha256": "b94030367d5a6d424edb8fe1335e8a52dae7e0ba20b6d46108599ad0034c948c"
+    },
+    "j": {
+      "commit": "528c3bcf97971bdd3b9922d39e87bc86fbc35327",
+      "runs_sha256": "d13cef2d138528ca13609c6dc8d73e00a80d74e50297eb63a2d0ad6b6d212905",
+      "static_metrics_sha256": "7b142c4692bd7dd3acfad564cda8e1aa7880e6360e310984b9c6eaa576a0ede0"
+    }
+  },
+  "decision": {
+    "benchmark_winner": null,
+    "owner_selected_direction": "simple_subtractive_task_projection",
+    "selection_basis": "explicit_product_and_compatibility_decision_after_inconclusive_benchmark",
+    "selected_schema": "cwk-task-projection/1"
+  },
+  "invalidated_runner_v1": {
+    "submission_count": 5,
+    "c0_sha256": "0f4ba2530c88b6e5d5ebbde9f73553ae0cca428287613ce3353ac02d73e1e857",
+    "l_sha256": "848da4c440c94267c79d31d9f223a983b69437ecd0627b7f98d86b595118db48",
+    "p_sha256": "6976b4f599ebaf262bf734a97aa58a095e1bbc8f357e3f32dc78eae13a3605d1",
+    "r_sha256": "18a6444cacaefa80aac5c9d10d8137cf6de9603c242405516bff65242dc8b3ab"
+  }
+}

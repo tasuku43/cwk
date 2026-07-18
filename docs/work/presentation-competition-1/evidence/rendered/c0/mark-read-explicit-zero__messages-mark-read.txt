@@ -1,0 +1,7 @@
+cwk-context-capsule/1
+task messages.mark-read
+alias-policy display-only; command-input=canonical-reference
+coverage kind="single_operation" limit=0 complete=true unresolved-relations=0 description="one synthetic operation returned a complete task result"
+refs 0
+result
+  read-state unread=0 mentions=0

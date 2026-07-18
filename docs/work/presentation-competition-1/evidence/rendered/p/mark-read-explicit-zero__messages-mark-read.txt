@@ -1,0 +1,2 @@
+cwk-task-projection/1 task=messages.mark-read
+read-state unread=0 mentions=0

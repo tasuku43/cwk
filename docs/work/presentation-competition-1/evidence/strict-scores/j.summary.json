@@ -1,0 +1,1 @@
+{"schema":"cwk-presentation-score/1","run_count":10,"exact_answer_runs":7,"critical_pass_runs":6,"workflow_pass_runs":7,"usage_pass_runs":10,"total_tokens":855075,"median_presentation_input_token_delta":612,"eligible":false,"reasons":["not every run had an exact semantic answer","not every run passed critical semantic and workflow gates"]}

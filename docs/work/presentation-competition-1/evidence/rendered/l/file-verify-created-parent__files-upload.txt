@@ -1,0 +1,7 @@
+cwk-ledger/1
+task=files.upload canonical-refs=command-input local-keys=display-only
+absence scalar=- list=[]
+coverage columns=[kind(authored),limit,complete,unresolved-relations,description(authored)]
+"single_operation"|0|true|0|"one synthetic operation returned a complete task result"
+creation count=1 columns=[file-ref,room-ref]
+6102|4101

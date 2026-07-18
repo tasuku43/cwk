@@ -1,0 +1,27 @@
+cwk-context-capsule/1
+task rooms.list
+alias-policy display-only; command-input=canonical-reference
+coverage kind="provider_collection" limit=0 complete=true unresolved-relations=0 description="synthetic complete room collection"
+refs 4
+  r1 kind=chatwork-room canonical=4101
+  r2 kind=chatwork-room canonical=4102
+  r3 kind=chatwork-room canonical=4103
+  r4 kind=chatwork-room canonical=4104
+result
+  rooms 4
+    r1 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=1 messages=0 files=0 tasks=1 updated=0
+      name untrusted="Synthetic Lab"
+      description untrusted=""
+      icon-url untrusted=""
+    r2 type="group" role="member" sticky=false unread=5 mentions=2 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Incident"
+      description untrusted=""
+      icon-url untrusted=""
+    r3 type="group" role="member" sticky=false unread=0 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Archive"
+      description untrusted=""
+      icon-url untrusted=""
+    r4 type="group" role="member" sticky=false unread=1 mentions=0 my-tasks=0 messages=0 files=0 tasks=0 updated=0
+      name untrusted="Synthetic Follow-up"
+      description untrusted=""
+      icon-url untrusted=""

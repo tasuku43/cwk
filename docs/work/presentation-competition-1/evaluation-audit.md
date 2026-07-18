@@ -155,12 +155,12 @@ which is also the value recorded by all five static manifests. This is a
 checksum-encoding documentation defect; the prompt itself did not differ
 between candidates.
 
-The static render manifests record candidate labels, schema, runtime, and raw
-measurements but not exact candidate commits. Every one of the 11 static
-output hashes for each candidate appears in that candidate's scored
-transcripts, so the bytes are cross-checked. The latency measurements remain
-provisional for a formal promotion gate because their manifests do not bind
-the performance sample to an exact commit.
+The original static render manifests record candidate labels, schema, runtime,
+and raw measurements but not exact candidate commits. Every one of the 11
+static output hashes for each candidate appears in that candidate's scored
+transcripts, so the bytes are cross-checked. The committed evidence manifest
+now binds each copied metrics digest to the reviewed candidate commit, while
+retaining the original provenance limitation rather than rewriting it.
 
 ## Corrected descriptive resource calculations
 
@@ -199,9 +199,11 @@ recovery dominate several runs.
 
 ## Immutable evidence anchors
 
-The evidence remains outside the public repository, as required for large
-model-derived artifacts. The following digests identify the exact files used
-by this audit without embedding local absolute paths or model transcripts.
+The reviewed publication decision commits this evidence under `evidence/`.
+The complete corpus is small and synthetic, contains no credential, live
+Chatwork data, repository source, or local absolute path, and is required to
+retain losing and invalidated runs rather than only a winner summary. The
+following digests identify the exact files used by this audit.
 
 ### Amended raw runs
 

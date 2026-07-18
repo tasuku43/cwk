@@ -1,0 +1,55 @@
+cwk-context-capsule/1
+task messages.list
+alias-policy display-only; command-input=canonical-reference
+coverage kind="latest_window" limit=100 complete=false unresolved-relations=2 description="synthetic latest 100-message window; not complete room history"
+refs 11
+  a1 kind=chatwork-account canonical=7001
+  a2 kind=chatwork-account canonical=7002
+  a3 kind=chatwork-account canonical=7003
+  r1 kind=chatwork-room canonical=4101
+  m1 kind=chatwork-message canonical=9001
+  m2 kind=chatwork-message canonical=9002
+  m3 kind=chatwork-message canonical=9003
+  m4 kind=chatwork-message canonical=9004
+  m5 kind=chatwork-message canonical=9005
+  m6 kind=chatwork-message canonical=9006
+  m7 kind=chatwork-message canonical=9999
+result
+  messages 6
+    m1 room=r1 sender=a1 sent=1700000000 updated=0
+      sender-name untrusted="Synthetic Alpha"
+      to []
+      reply absent
+      quotes 0
+      body untrusted="baseline"
+    m2 room=r1 sender=a2 sent=1700000010 updated=0
+      sender-name untrusted="Synthetic Beta"
+      to [a1]
+      reply absent
+      quotes 0
+      body untrusted="status?"
+    m3 room=r1 sender=a2 sent=1700000020 updated=0
+      sender-name untrusted="Synthetic Beta"
+      to [a1]
+      reply kind="reply" state=resolved target=m1 external-id=untrusted:"4101"
+      quotes 0
+      body untrusted="done"
+    m4 room=r1 sender=a3 sent=1700000030 updated=0
+      sender-name untrusted="Synthetic Gamma"
+      to []
+      reply kind="reply" state=unresolved target=m7 external-id=untrusted:"4101"
+      quotes 0
+      body untrusted="older context"
+    m5 room=r1 sender=a1 sent=1700000040 updated=0
+      sender-name untrusted="Synthetic Alpha"
+      to []
+      reply absent
+      quotes 1
+        quote[1] kind="quote" state=unresolved target=a2 external-id=untrusted:"1700000010"
+      body untrusted="quoted context"
+    m6 room=r1 sender=a3 sent=1700000050 updated=0
+      sender-name untrusted="Synthetic Gamma"
+      to []
+      reply absent
+      quotes 0
+      body untrusted="[rp aid=7001 to=4101-9001] copied prose only"

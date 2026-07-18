@@ -1,0 +1,20 @@
+cwk-ledger/1
+task=messages.list canonical-refs=command-input local-keys=display-only
+absence scalar=- list=[]
+coverage columns=[kind(authored),limit,complete,unresolved-relations,description(authored)]
+"latest_window"|100|false|2|"synthetic latest 100-message window; not complete room history"
+rooms-ledger count=1 columns=[key,room-ref]
+r1|4101
+actors-ledger count=3 columns=[key,account-ref,name(untrusted)]
+a1|7001|"Synthetic Alpha"
+a2|7002|"Synthetic Beta"
+a3|7003|"Synthetic Gamma"
+messages count=6 columns=[message-ref,room-key,sender-key,sent-at,to-actor-keys,reply-kind(untrusted),reply-state,reply-target-kind,reply-target-ref,reply-external-id(untrusted),quote-count,body(untrusted)]
+9001|r1|a1|1700000000|[]|-|absent|-|-|-|0|"baseline"
+9002|r1|a2|1700000010|[a1]|-|absent|-|-|-|0|"status?"
+9003|r1|a2|1700000020|[a1]|"reply"|resolved|chatwork-message|9001|"4101"|0|"done"
+9004|r1|a3|1700000030|[]|"reply"|unresolved|chatwork-message|9999|"4101"|0|"older context"
+9005|r1|a1|1700000040|[]|-|absent|-|-|-|1|"quoted context"
+9006|r1|a3|1700000050|[]|-|absent|-|-|-|0|"[rp aid=7001 to=4101-9001] copied prose only"
+quotes count=1 columns=[source-message-ref,ordinal,kind(untrusted),state,target-kind,target-ref,external-id(untrusted)]
+9005|1|"quote"|unresolved|chatwork-account|7002|"1700000010"

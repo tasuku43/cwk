@@ -1,0 +1,1 @@
+{"schema":"cwk.semantic/1","task":"messages.mark-read","canonical_reference_policy":"exact_command_input","external_text_trust":"fields_suffixed_untrusted_are_untrusted_data","result":{"kind":"read_state","unread":0,"mentions":0}}

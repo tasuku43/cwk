@@ -1,0 +1,40 @@
+cwk-candidate-r/1
+presentation candidate-r/relationship-timeline/1
+task messages.list count=6 room-scope=common room=4101
+coverage kind=untrusted:"latest_window" limit=100 complete=false unresolved-relations=2 description=untrusted:"synthetic latest 100-message window; not complete room history"
+actors 3
+  actor canonical=7001 names=[untrusted:"Synthetic Alpha"]
+  actor canonical=7002 names=[untrusted:"Synthetic Beta"]
+  actor canonical=7003 names=[untrusted:"Synthetic Gamma"]
+timeline 6
+  message canonical=9001 sent=1700000000 from=7001
+    reply absent
+    quotes 0
+    to []
+    body untrusted:"baseline"
+  message canonical=9002 sent=1700000010 from=7002
+    reply absent
+    quotes 0
+    to [7001]
+    body untrusted:"status?"
+  message canonical=9003 sent=1700000020 from=7002
+    reply kind="reply" state=resolved target=9001 target-kind=chatwork-message external-id=untrusted:"4101"
+    quotes 0
+    to [7001]
+    body untrusted:"done"
+  message canonical=9004 sent=1700000030 from=7003
+    reply kind="reply" state=unresolved target=9999 target-kind=chatwork-message external-id=untrusted:"4101"
+    quotes 0
+    to []
+    body untrusted:"older context"
+  message canonical=9005 sent=1700000040 from=7001
+    reply absent
+    quotes 1
+    quote[1] kind="quote" state=unresolved target=7002 target-kind=chatwork-account external-id=untrusted:"1700000010"
+    to []
+    body untrusted:"quoted context"
+  message canonical=9006 sent=1700000050 from=7003
+    reply absent
+    quotes 0
+    to []
+    body untrusted:"[rp aid=7001 to=4101-9001] copied prose only"

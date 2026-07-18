@@ -1,0 +1,1 @@
+{"schema":"cwk.semantic/1","task":"files.upload","canonical_reference_policy":"exact_command_input","external_text_trust":"fields_suffixed_untrusted_are_untrusted_data","result":{"kind":"created_file","file_ref":"6102","room_ref":"4101"}}

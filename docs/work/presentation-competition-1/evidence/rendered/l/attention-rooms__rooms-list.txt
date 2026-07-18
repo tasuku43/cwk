@@ -1,0 +1,10 @@
+cwk-ledger/1
+task=rooms.list canonical-refs=command-input local-keys=display-only
+absence scalar=- list=[]
+coverage columns=[kind(authored),limit,complete,unresolved-relations,description(authored)]
+"provider_collection"|0|true|0|"synthetic complete room collection"
+rooms count=4 columns=[room-ref,name(untrusted),type(untrusted),role(untrusted),unread,mentions,tasks]
+4101|"Synthetic Lab"|"group"|"member"|0|0|1
+4102|"Synthetic Incident"|"group"|"member"|5|2|0
+4103|"Synthetic Archive"|"group"|"member"|0|0|0
+4104|"Synthetic Follow-up"|"group"|"member"|1|0|0
