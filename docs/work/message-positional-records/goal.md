@@ -1,6 +1,6 @@
 # Work Goal: Remove redundant labels from fixed message records
 
-- Status: Accepted
+- Status: Complete
 - Owner: Project owner and Codex
 - Target: Current implementation cycle
 - Related ADRs: None; this refines the accepted flat adjacency contract
@@ -39,3 +39,7 @@ reference reuse.
 The work ends when the renderer, schema, tests, active evidence, token record,
 and public documentation agree on one positional grammar and the full repository
 gate passes.
+
+Completed on 2026-07-19. The fixed schema is active, the positional reference
+round trip and readiness fixture pass, and the final full repository gate is
+green.

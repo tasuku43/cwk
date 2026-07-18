@@ -8,4 +8,4 @@
 - [x] Update active readiness and golden evidence.
 - [x] Re-run and record the pinned tokenizer measurement.
 - [x] Update durable documentation.
-- [ ] Run `task check`, review the diff, commit, and close the packet.
+- [x] Run `task check`, review the diff, commit, and close the packet.

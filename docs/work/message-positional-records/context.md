@@ -37,3 +37,7 @@ accepted by commands.
 - `tiktoken==0.13.0` with `o200k_base` counts 330 tokens for the positional
   output, versus 365 for the labeled adjacency and 541 for the repeated
   baseline. Exact hashes and byte counts are in `token-measurement.md`.
+- Final `task check` passed on 2026-07-19, including hygiene, architecture,
+  contracts, unit/race tests, security, vulnerability, release, and public gates.
+- Final review found no live Chatwork data, credentials, temporary diagnostics,
+  or unrelated working-tree changes.
