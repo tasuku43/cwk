@@ -92,14 +92,26 @@ func (s *FileStore) Load(ctx context.Context) (PublicConfig, error) {
 		return PublicConfig{}, err
 	}
 	appDirectory := filepath.Join(base, applicationDirectory)
-	if err := validateDirectoryForLoad(base, false); err != nil {
+	if _, err := validateDirectoryForLoad(base, false); err != nil {
 		return PublicConfig{}, err
 	}
-	if err := validateDirectoryForLoad(appDirectory, true); err != nil {
+	appInfo, err := validateDirectoryForLoad(appDirectory, true)
+	if err != nil {
 		return PublicConfig{}, err
 	}
-	path := filepath.Join(appDirectory, configurationFile)
-	info, err := os.Lstat(path)
+	root, err := os.OpenRoot(appDirectory)
+	if err != nil {
+		return PublicConfig{}, unavailable("application configuration directory open")
+	}
+	defer func() { _ = root.Close() }()
+	openedDirectoryInfo, err := root.Stat(".")
+	if err != nil {
+		return PublicConfig{}, unavailable("application configuration directory metadata")
+	}
+	if !openedDirectoryInfo.IsDir() || !os.SameFile(appInfo, openedDirectoryInfo) {
+		return PublicConfig{}, invalid("application configuration directory changed during read")
+	}
+	info, err := root.Lstat(configurationFile)
 	if errors.Is(err, fs.ErrNotExist) {
 		return PublicConfig{}, ErrConfigNotFound
 	}
@@ -112,7 +124,7 @@ func (s *FileStore) Load(ctx context.Context) (PublicConfig, error) {
 	if info.Size() < 1 || info.Size() > maxConfigBytes {
 		return PublicConfig{}, invalid("configuration size")
 	}
-	file, err := os.Open(path)
+	file, err := root.Open(configurationFile)
 	if err != nil {
 		return PublicConfig{}, unavailable("configuration read")
 	}
@@ -331,21 +343,21 @@ func (s *FileStore) baseDirectory() (string, error) {
 	return filepath.Clean(base), nil
 }
 
-func validateDirectoryForLoad(path string, application bool) error {
+func validateDirectoryForLoad(path string, application bool) (fs.FileInfo, error) {
 	info, err := os.Lstat(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		return ErrConfigNotFound
+		return nil, ErrConfigNotFound
 	}
 	if err != nil {
-		return unavailable("configuration directory metadata")
+		return nil, unavailable("configuration directory metadata")
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return invalid("configuration directory contract")
+		return nil, invalid("configuration directory contract")
 	}
 	if application && !restrictedPermissions(info.Mode()) {
-		return invalid("configuration directory permissions")
+		return nil, invalid("configuration directory permissions")
 	}
-	return nil
+	return info, nil
 }
 
 func ensureBaseDirectory(path string) error {
@@ -386,6 +398,8 @@ func ensureApplicationDirectory(path string) error {
 		return invalid("application configuration directory contract")
 	}
 	if runtime.GOOS != "windows" {
+		// #nosec G302 -- path is the application configuration directory;
+		// directory mode 0700 is the least-privilege searchable mode.
 		if err := os.Chmod(path, 0o700); err != nil {
 			return unavailable("application configuration directory permissions")
 		}
