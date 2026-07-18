@@ -1,6 +1,6 @@
 # Work Goal: Select the next agent presentation by evidence
 
-- Status: Proposed
+- Status: In progress; implementation integrated, required gates pending
 - Owner: Project owner
 - Target: First post-completion presentation competition
 - Related ADRs: None
@@ -8,10 +8,17 @@
 ## Outcome
 
 `cwk` has one reviewed default presentation that preserves every task-relevant
-semantic fact and exact canonical reference while reducing agent task cost
-relative to the accepted context-capsule baseline. The decision is supported
-by reproducible, per-run evidence from isolated candidate worktrees rather
-than by visual preference.
+semantic fact and exact canonical reference while removing task-irrelevant
+output from the accepted context-capsule baseline. Competition 1 retained all
+candidate evidence but selected no eligible challenger. The project owner
+therefore chose the simple subtractive task projection as an explicit product
+and compatibility decision, using candidate P only as an implementation seed.
+
+The decision, frozen result, and retained evidence are recorded in
+[decision.md](decision.md), [evaluation-audit.md](evaluation-audit.md), and
+[evidence/manifest.json](evidence/manifest.json). The work remains incomplete
+until the required repository, security, and public-boundary gates pass and
+the final cleanup is verified.
 
 ## Why now
 
@@ -45,12 +52,13 @@ repairing those meaning gaps would reward an incomplete contract.
   bounds, uncertainty, stdout/stderr/exit behavior, and deterministic bytes.
 - [ ] Agent evaluation requires no `jq`, `grep`, parser, manual join, source
   inspection, or undocumented provider call.
-- [ ] A candidate is promoted only by the predeclared quality and resource
-  gates in `protocol.md`; inconclusive evidence leaves the baseline unchanged.
+- [ ] The frozen benchmark conclusion is recorded without promoting an
+  ineligible challenger, and any separate product compatibility decision is
+  explicitly outside the benchmark gate.
 - [ ] The selected contract, compatibility impact, tests, and migration note
   are reviewed before its implementation is merged.
-- [ ] `task check` passes; `task public:check` also passes for publishable
-  fixture or public-document changes.
+- [ ] `task check`, `task security`, and `task public:check` pass for the
+  integrated implementation and publishable evidence.
 
 ## Governing documents
 
@@ -65,8 +73,8 @@ repairing those meaning gaps would reward an incomplete contract.
 
 This work is complete only when the shared contract gaps are repaired, the
 protocol and fixtures are frozen, all candidate runs and raw measurements are
-retained, one result is explicitly accepted or the baseline is explicitly
-retained, the accepted public contract is implemented with compatibility
-tests, required gates pass, and temporary credentials and diagnostics are
-removed. It does not continue into unrelated command, authentication, or API
-coverage work.
+retained, the inconclusive benchmark conclusion and separate owner decision
+are recorded, the selected public contract is implemented with compatibility
+tests, required gates pass, and temporary credentials, diagnostics, and
+candidate worktrees are cleaned up. It does not continue into a competition
+rerun or unrelated command, authentication, or API coverage work.

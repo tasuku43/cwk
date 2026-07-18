@@ -20,7 +20,9 @@
   score calculation, and promotion thresholds.
 - [x] Decide whether the competition may select a task-family hybrid or must
   select one universal grammar.
-- [ ] Record the accepted compatibility decision after evaluation.
+- [x] Record the owner-selected compatibility decision after the inconclusive
+  evaluation. Evidence: [decision.md](decision.md),
+  [evaluation-audit.md](evaluation-audit.md).
 
 ## Repair shared correctness
 
@@ -40,20 +42,34 @@
 - [x] Freeze a base commit containing shared correctness repairs, fixtures,
   answer keys, evaluator, frozen protocol, and passing gates.
 - [x] Implement C0 measurement without behavior changes.
-- [ ] Implement P, L, R, and J behind the presentation boundary only.
-- [ ] Prove semantic, identity, trust, bounds, determinism, and output-boundary
-  eligibility before scoring resource efficiency.
-- [ ] Run pinned agent tasks and retain raw per-run results.
-- [ ] Calculate quality, token, byte, tool-step, latency, and maintenance
-  results without discarding failed runs.
-- [ ] Accept one candidate, an explicitly scoped hybrid, or retain C0.
+- [x] Implement P, L, R, and J behind the presentation boundary only.
+- [x] Evaluate semantic, identity, trust, bounds, determinism, and
+  output-boundary eligibility without promoting an ineligible candidate.
+  Evidence: the strict scorer selected no eligible challenger in
+  [evaluation-audit.md](evaluation-audit.md).
+- [x] Run pinned agent tasks and retain raw per-run results, losing candidates,
+  and invalidated attempts. Evidence:
+  [evidence/manifest.json](evidence/manifest.json).
+- [x] Calculate and audit quality, token, byte, tool-step, latency, and
+  maintenance results without discarding failed runs. Evidence:
+  [evaluation-audit.md](evaluation-audit.md).
+- [x] Record the frozen outcome as no eligible challenger, then keep the
+  owner's separate product decision outside the benchmark gate. Evidence:
+  [decision.md](decision.md).
 
 ## Integrate and verify
 
-- [ ] Implement only the reviewed result on the integration branch.
-- [ ] Update schema version, compatibility notes, goldens, and agent tests.
-- [ ] Run focused tests. Evidence:
+- [x] Implement the reviewed subtractive task projection from the P seed on
+  the integration branch, with shared semantic kind hardening and redundant
+  coverage prose removed. Evidence: `258087d`, `3751fec`, `a832f69`, and
+  `4669d41`.
+- [x] Update the schema version, compatibility decision, goldens, and
+  subtractive projection contract tests. Evidence: `07e6961` and
+  [decision.md](decision.md).
+- [x] Run focused domain and presentation tests during integration. Evidence:
+  focused suites accompanied the integration and contract-test commits above.
 - [ ] Run `task check`. Evidence:
+- [ ] Run `task security`. Evidence:
 - [ ] Run `task public:check` for publishable changes. Evidence:
 - [ ] Remove temporary credentials and diagnostics. Evidence:
 - [ ] Confirm repository status and candidate-worktree cleanup. Evidence:
@@ -62,6 +78,7 @@
 
 - [ ] Acceptance criteria have evidence.
 - [ ] Durable decisions are promoted to governing documentation.
-- [ ] Raw competition evidence identifies exact commits and tool versions.
+- [x] Raw competition evidence identifies exact commits and tool versions.
+  Evidence: [evidence/manifest.json](evidence/manifest.json).
 - [ ] Follow-up work is finite and does not reopen unrelated API coverage or
   authentication goals.
