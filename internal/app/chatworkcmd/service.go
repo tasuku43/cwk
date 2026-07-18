@@ -43,7 +43,9 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 	if s == nil || portcheck.IsNil(s.port) {
 		return chatwork.Result{}, fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork task adapter is not configured", false)
 	}
-	result, err := s.port.Execute(ctx, binding, request)
+	providerRequest := request
+	providerRequest.MessageFilter = chatwork.MessageFilter{}
+	result, err := s.port.Execute(ctx, binding, providerRequest)
 	if err != nil {
 		if structured, ok := fault.PublicCopy(err); ok {
 			return chatwork.Result{}, structured
@@ -56,8 +58,26 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 	if err := ctx.Err(); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled after execution", true, err)
 	}
-	if result.Task != request.Task {
+	if result.Task != providerRequest.Task {
 		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_result_mismatch", "Chatwork task adapter returned a result for a different task", false)
+	}
+	if err := result.ValidateFor(providerRequest); err != nil {
+		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, err)
+	}
+	switch request.Task {
+	case chatwork.TaskMessagesList:
+		messages, selection, selectionErr := assembleMessageWindow(result.Messages, request.MessageFilter)
+		if selectionErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, selectionErr)
+		}
+		result.Messages = messages
+		result.MessageSelection = selection
+	case chatwork.TaskMessagesShow:
+		messages, resolutionErr := ResolveMessageRelations(result.Messages)
+		if resolutionErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, resolutionErr)
+		}
+		result.Messages = messages
 	}
 	if err := result.ValidateFor(request); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, err)

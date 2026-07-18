@@ -1,6 +1,9 @@
 package chatwork
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestReferencePreservesCanonicalDecimalIdentity(t *testing.T) {
 	ref, err := NewReference(ReferenceMessage, "1928374655918273645")
@@ -306,5 +309,242 @@ func TestMessageListBindsEveryMessageAndRequestToExactRoom(t *testing.T) {
 
 	if err := valid.ValidateFor(Request{Task: TaskMessagesList, Room: otherRoom}); err == nil {
 		t.Fatal("message window bound to a different requested room passed")
+	}
+}
+
+func TestRequestValidatesMessageFilter(t *testing.T) {
+	sender := Reference{Kind: ReferenceAccount, Value: "7"}
+	valid := Request{Task: TaskMessagesList, MessageFilter: MessageFilter{
+		Senders: []Reference{sender}, Context: MessageContextNone,
+	}}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid sender filter failed: %v", err)
+	}
+	valid.MessageFilter.Context = MessageContextReplies
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid reply-context filter failed: %v", err)
+	}
+
+	hundred := make([]Reference, 100)
+	for index := range hundred {
+		hundred[index] = Reference{Kind: ReferenceAccount, Value: fmt.Sprint(index + 1)}
+	}
+	if err := (Request{Task: TaskMessagesList, MessageFilter: MessageFilter{
+		Senders: hundred, Context: MessageContextNone,
+	}}).Validate(); err != nil {
+		t.Fatalf("100-sender boundary failed: %v", err)
+	}
+
+	tests := map[string]MessageFilter{
+		"context without sender": {Context: MessageContextNone},
+		"sender without context": {Senders: []Reference{sender}},
+		"unknown context": {
+			Senders: []Reference{sender}, Context: MessageContext("thread"),
+		},
+		"wrong sender kind": {
+			Senders: []Reference{{Kind: ReferenceRoom, Value: "7"}}, Context: MessageContextNone,
+		},
+		"malformed sender": {
+			Senders: []Reference{{Kind: ReferenceAccount, Value: "07"}}, Context: MessageContextNone,
+		},
+		"duplicate sender": {
+			Senders: []Reference{sender, sender}, Context: MessageContextNone,
+		},
+		"too many senders": {
+			Senders: append(hundred, Reference{Kind: ReferenceAccount, Value: "101"}), Context: MessageContextNone,
+		},
+	}
+	for name, filter := range tests {
+		t.Run(name, func(t *testing.T) {
+			if err := (Request{Task: TaskMessagesList, MessageFilter: filter}).Validate(); err == nil {
+				t.Fatal("invalid message filter passed")
+			}
+		})
+	}
+
+	if err := (Request{Task: TaskRoomsList, MessageFilter: MessageFilter{
+		Senders: []Reference{sender}, Context: MessageContextNone,
+	}}).Validate(); err == nil {
+		t.Fatal("message filter on another task passed")
+	}
+	if err := (Request{Task: TaskRoomsList, MessageFilter: MessageFilter{Senders: []Reference{}}}).Validate(); err != nil {
+		t.Fatalf("semantic zero filter on another task failed: %v", err)
+	}
+}
+
+func TestResultValidatesFilteredMessageSelection(t *testing.T) {
+	valid := validFilteredMessageResult()
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid filtered selection failed: %v", err)
+	}
+
+	withoutContext := validFilteredMessageResult()
+	withoutContext.MessageSelection.Filter.Context = MessageContextNone
+	withoutContext.MessageSelection.Filter.Senders = []Reference{
+		{Kind: ReferenceAccount, Value: "7"},
+		{Kind: ReferenceAccount, Value: "8"},
+	}
+	withoutContext.MessageSelection.AnchorSequences = []int{2, 4}
+	if err := withoutContext.Validate(); err != nil {
+		t.Fatalf("valid context-free selection failed: %v", err)
+	}
+
+	empty := validFilteredMessageResult()
+	empty.Messages = []Message{}
+	empty.MessageSelection.SourceCount = 0
+	empty.MessageSelection.SourceSequences = []int{}
+	empty.MessageSelection.AnchorSequences = []int{}
+	if err := empty.Validate(); err != nil {
+		t.Fatalf("valid empty filtered selection failed: %v", err)
+	}
+	empty.MessageSelection.SourceSequences = nil
+	if err := empty.Validate(); err == nil {
+		t.Fatal("empty filtered selection accepted nil source provenance")
+	}
+	empty.MessageSelection.SourceSequences = []int{}
+	empty.MessageSelection.AnchorSequences = nil
+	if err := empty.Validate(); err == nil {
+		t.Fatal("empty filtered selection accepted nil anchor provenance")
+	}
+
+	tests := map[string]func(*Result){
+		"inactive filter": func(result *Result) {
+			result.MessageSelection.Filter = MessageFilter{}
+		},
+		"non-positive source limit": func(result *Result) {
+			result.Coverage.Limit = 0
+		},
+		"fewer source messages than displayed": func(result *Result) {
+			result.MessageSelection.SourceCount = 1
+		},
+		"source count above limit": func(result *Result) {
+			result.MessageSelection.SourceCount = 101
+		},
+		"unaligned source sequences": func(result *Result) {
+			result.MessageSelection.SourceSequences = []int{2}
+		},
+		"zero source sequence": func(result *Result) {
+			result.MessageSelection.SourceSequences = []int{0, 4}
+		},
+		"source sequence above count": func(result *Result) {
+			result.MessageSelection.SourceSequences = []int{2, 5}
+		},
+		"decreasing source sequences": func(result *Result) {
+			result.MessageSelection.SourceSequences = []int{4, 2}
+		},
+		"duplicate source sequences": func(result *Result) {
+			result.MessageSelection.SourceSequences = []int{2, 2}
+		},
+		"decreasing anchors": func(result *Result) {
+			result.MessageSelection.AnchorSequences = []int{4, 2}
+		},
+		"anchor outside display": func(result *Result) {
+			result.MessageSelection.AnchorSequences = []int{3}
+		},
+		"context-free non-anchor display": func(result *Result) {
+			result.MessageSelection.Filter.Context = MessageContextNone
+			result.MessageSelection.AnchorSequences = []int{2}
+		},
+		"anchor sender mismatch": func(result *Result) {
+			result.MessageSelection.AnchorSequences = []int{4}
+		},
+		"unrelated non-anchor context": func(result *Result) {
+			result.Messages[1].Reply = nil
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			result := validFilteredMessageResult()
+			mutate(&result)
+			if err := result.Validate(); err == nil {
+				t.Fatal("invalid message selection passed")
+			}
+		})
+	}
+
+	otherTask := Result{
+		Task: TaskRoomsList, Rooms: []Room{},
+		MessageSelection: valid.MessageSelection,
+	}
+	if err := otherTask.Validate(); err == nil {
+		t.Fatal("message selection on another result task passed")
+	}
+}
+
+func TestFilteredMessageSelectionBindsExactlyToRequest(t *testing.T) {
+	result := validFilteredMessageResult()
+	request := Request{
+		Task: TaskMessagesList, Room: result.MessageRoom,
+		MessageFilter: result.MessageSelection.Filter,
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatalf("exact filtered request binding failed: %v", err)
+	}
+
+	missing := result
+	missing.MessageSelection = nil
+	if err := missing.ValidateFor(request); err == nil {
+		t.Fatal("filtered request accepted a result without selection metadata")
+	}
+
+	differentSender := request
+	differentSender.MessageFilter.Senders = []Reference{{Kind: ReferenceAccount, Value: "8"}}
+	if err := result.ValidateFor(differentSender); err == nil {
+		t.Fatal("selection bound to a different sender filter")
+	}
+
+	differentContext := request
+	differentContext.MessageFilter.Context = MessageContextNone
+	if err := result.ValidateFor(differentContext); err == nil {
+		t.Fatal("selection bound to a different context filter")
+	}
+
+	unfilteredResult := result
+	unfilteredResult.MessageSelection = nil
+	unfilteredRequest := request
+	unfilteredRequest.MessageFilter = MessageFilter{}
+	if err := unfilteredResult.ValidateFor(unfilteredRequest); err != nil {
+		t.Fatalf("unfiltered result binding failed: %v", err)
+	}
+	if err := result.ValidateFor(unfilteredRequest); err == nil {
+		t.Fatal("unfiltered request accepted selection metadata")
+	}
+
+	ordered := validFilteredMessageResult()
+	second := Reference{Kind: ReferenceAccount, Value: "8"}
+	ordered.MessageSelection.Filter.Senders = append(ordered.MessageSelection.Filter.Senders, second)
+	ordered.MessageSelection.AnchorSequences = []int{2, 4}
+	orderedRequest := request
+	orderedRequest.MessageFilter = ordered.MessageSelection.Filter
+	if err := ordered.ValidateFor(orderedRequest); err != nil {
+		t.Fatalf("ordered multi-sender binding failed: %v", err)
+	}
+	reversed := orderedRequest
+	reversed.MessageFilter.Senders = []Reference{second, request.MessageFilter.Senders[0]}
+	if err := ordered.ValidateFor(reversed); err == nil {
+		t.Fatal("selection sender order was not bound exactly")
+	}
+}
+
+func validFilteredMessageResult() Result {
+	room := Reference{Kind: ReferenceRoom, Value: "1"}
+	sender := Reference{Kind: ReferenceAccount, Value: "7"}
+	return Result{
+		Task: TaskMessagesList, MessageRoom: room,
+		Coverage: Coverage{Kind: "latest_window", Limit: 100, Complete: false},
+		Messages: []Message{
+			{Ref: Reference{Kind: ReferenceMessage, Value: "101"}, Room: room, Sender: Account{Ref: sender}},
+			{
+				Ref: Reference{Kind: ReferenceMessage, Value: "102"}, Room: room,
+				Sender: Account{Ref: Reference{Kind: ReferenceAccount, Value: "8"}},
+				Reply: &Relation{
+					Kind: "reply", Target: Reference{Kind: ReferenceMessage, Value: "101"}, ExternalID: "1", Resolved: true,
+				},
+			},
+		},
+		MessageSelection: &MessageSelection{
+			Filter:      MessageFilter{Senders: []Reference{sender}, Context: MessageContextReplies},
+			SourceCount: 4, SourceSequences: []int{2, 4}, AnchorSequences: []int{2},
+		},
 	}
 }

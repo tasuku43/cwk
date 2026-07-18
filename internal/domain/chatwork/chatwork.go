@@ -100,6 +100,23 @@ const (
 	TaskContactRequestsReject Task = "contact-requests.reject"
 )
 
+// MessageContext selects the bounded typed reply context added around messages
+// that directly match a message filter. The zero value means that no filter is
+// active; an active filter must choose one of the declared policies.
+type MessageContext string
+
+const (
+	MessageContextNone    MessageContext = "none"
+	MessageContextReplies MessageContext = "replies"
+)
+
+// MessageFilter selects messages authored by any of the exact canonical
+// accounts. Context is applied only after direct matches have been identified.
+type MessageFilter struct {
+	Senders []Reference
+	Context MessageContext
+}
+
 // Request is the typed union consumed by the application task boundary.
 // Fields unused by the selected Task must remain zero; Validate enforces this
 // incrementally as task implementations are added.
@@ -136,6 +153,7 @@ type Request struct {
 	InviteApprovalSet   bool
 	FilePath            string
 	FileMessage         string
+	MessageFilter       MessageFilter
 }
 
 func (r Request) Validate() error {
@@ -184,7 +202,46 @@ func (r Request) Validate() error {
 			return err
 		}
 	}
+	if r.Task != TaskMessagesList && messageFilterActive(r.MessageFilter) {
+		return fmt.Errorf("message filter is only valid for messages.list")
+	}
+	if err := validateMessageFilter(r.MessageFilter); err != nil {
+		return err
+	}
 	return nil
+}
+
+func validateMessageFilter(filter MessageFilter) error {
+	if len(filter.Senders) == 0 {
+		if filter.Context != "" {
+			return fmt.Errorf("message context requires at least one sender filter")
+		}
+		return nil
+	}
+	if len(filter.Senders) > 100 {
+		return fmt.Errorf("message filter supports at most 100 sender references")
+	}
+	if filter.Context != MessageContextNone && filter.Context != MessageContextReplies {
+		return fmt.Errorf("message filter context is missing or invalid")
+	}
+	seen := make(map[Reference]struct{}, len(filter.Senders))
+	for _, sender := range filter.Senders {
+		if sender.Kind != ReferenceAccount {
+			return fmt.Errorf("message filter senders must be account references")
+		}
+		if err := ValidateReference(sender.Kind, sender.Value); err != nil {
+			return fmt.Errorf("message filter sender reference is invalid: %w", err)
+		}
+		if _, exists := seen[sender]; exists {
+			return fmt.Errorf("message filter sender references must be unique")
+		}
+		seen[sender] = struct{}{}
+	}
+	return nil
+}
+
+func messageFilterActive(filter MessageFilter) bool {
+	return len(filter.Senders) > 0 || filter.Context != ""
 }
 
 func (t Task) Valid() bool {
@@ -357,6 +414,17 @@ type Coverage struct {
 	Description string
 }
 
+// MessageSelection records how an application-owned filter projected one
+// provider message window. Source sequences retain their original one-based
+// positions even when filtering creates gaps. Anchor sequences identify the
+// direct filter matches; other displayed sequences are bounded reply context.
+type MessageSelection struct {
+	Filter          MessageFilter
+	SourceCount     int
+	SourceSequences []int
+	AnchorSequences []int
+}
+
 // Result is a typed semantic union. Only fields relevant to Task are populated.
 type Result struct {
 	Task     Task
@@ -380,6 +448,7 @@ type Result struct {
 	ReadState        *ReadState
 	Acknowledgement  *Acknowledgement
 	MembershipCounts *MembershipCounts
+	MessageSelection *MessageSelection
 }
 
 // Validate proves that the semantic union uses the one result variant owned by
@@ -392,6 +461,9 @@ func (r Result) Validate() error {
 	}
 	if r.Task != TaskMessagesList && r.MessageRoom != (Reference{}) {
 		return fmt.Errorf("Chatwork result message room is only valid for messages.list")
+	}
+	if r.Task != TaskMessagesList && r.MessageSelection != nil {
+		return fmt.Errorf("Chatwork result message selection is only valid for messages.list")
 	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
@@ -475,6 +547,16 @@ func (r Result) ValidateFor(request Request) error {
 	case TaskMessagesList:
 		if r.MessageRoom != request.Room {
 			return fmt.Errorf("Chatwork result message room does not match the request")
+		}
+		if messageFilterActive(request.MessageFilter) {
+			if r.MessageSelection == nil {
+				return fmt.Errorf("Chatwork filtered message result is missing selection metadata")
+			}
+			if !equalMessageFilters(r.MessageSelection.Filter, request.MessageFilter) {
+				return fmt.Errorf("Chatwork result message filter does not match the request")
+			}
+		} else if r.MessageSelection != nil {
+			return fmt.Errorf("Chatwork unfiltered message result must not contain selection metadata")
 		}
 	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
 		if r.CreatedInRoom.ParentRoom != request.Room {
@@ -582,6 +664,11 @@ func (r Result) validateVariantFacts() error {
 				return fmt.Errorf("Chatwork result message[%d] room does not match the message window", index)
 			}
 		}
+		if r.Task == TaskMessagesList && r.MessageSelection != nil {
+			if err := validateMessageSelection(*r.MessageSelection, r.Messages, r.Coverage); err != nil {
+				return err
+			}
+		}
 	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
 		accountOptional := r.Task == TaskPersonalTasksList
 		for index, task := range r.Tasks {
@@ -646,6 +733,116 @@ func (r Result) validateVariantFacts() error {
 		}
 	}
 	return nil
+}
+
+func validateMessageSelection(selection MessageSelection, messages []Message, coverage Coverage) error {
+	if !messageFilterActive(selection.Filter) {
+		return fmt.Errorf("Chatwork message selection requires an active filter")
+	}
+	if err := validateMessageFilter(selection.Filter); err != nil {
+		return fmt.Errorf("Chatwork message selection filter is invalid: %w", err)
+	}
+	if coverage.Limit <= 0 {
+		return fmt.Errorf("Chatwork message selection requires a positive source limit")
+	}
+	if selection.SourceCount < len(messages) || selection.SourceCount > coverage.Limit {
+		return fmt.Errorf("Chatwork message selection source count is outside its declared bound")
+	}
+	if selection.SourceSequences == nil || selection.AnchorSequences == nil {
+		return fmt.Errorf("Chatwork message selection provenance must be explicit")
+	}
+	if len(selection.SourceSequences) != len(messages) {
+		return fmt.Errorf("Chatwork message selection sequence count does not match displayed messages")
+	}
+	previous := 0
+	sequenceSet := make(map[int]struct{}, len(selection.SourceSequences))
+	for _, sequence := range selection.SourceSequences {
+		if sequence <= previous || sequence > selection.SourceCount {
+			return fmt.Errorf("Chatwork message source sequences must be strictly increasing within the source window")
+		}
+		previous = sequence
+		sequenceSet[sequence] = struct{}{}
+	}
+	previous = 0
+	anchorSet := make(map[int]struct{}, len(selection.AnchorSequences))
+	for _, sequence := range selection.AnchorSequences {
+		if sequence <= previous {
+			return fmt.Errorf("Chatwork message anchor sequences must be strictly increasing")
+		}
+		if _, exists := sequenceSet[sequence]; !exists {
+			return fmt.Errorf("Chatwork message anchor sequence is not displayed")
+		}
+		previous = sequence
+		anchorSet[sequence] = struct{}{}
+	}
+	if selection.Filter.Context == MessageContextNone && !equalSequences(selection.AnchorSequences, selection.SourceSequences) {
+		return fmt.Errorf("Chatwork message selection without context must mark every displayed message as an anchor")
+	}
+
+	senderSet := make(map[Reference]struct{}, len(selection.Filter.Senders))
+	for _, sender := range selection.Filter.Senders {
+		senderSet[sender] = struct{}{}
+	}
+	anchorRefs := make(map[Reference]struct{}, len(anchorSet))
+	anchorMessages := make([]Message, 0, len(anchorSet))
+	for index, message := range messages {
+		_, senderMatches := senderSet[message.Sender.Ref]
+		_, markedAnchor := anchorSet[selection.SourceSequences[index]]
+		if senderMatches != markedAnchor {
+			return fmt.Errorf("Chatwork message selection anchor does not match its sender filter")
+		}
+		if markedAnchor {
+			anchorRefs[message.Ref] = struct{}{}
+			anchorMessages = append(anchorMessages, message)
+		}
+	}
+	if selection.Filter.Context == MessageContextReplies {
+		for index, message := range messages {
+			if _, anchor := anchorSet[selection.SourceSequences[index]]; anchor {
+				continue
+			}
+			direct := message.Reply != nil && message.Reply.Resolved
+			if direct {
+				_, direct = anchorRefs[message.Reply.Target]
+			}
+			if !direct {
+				for _, anchor := range anchorMessages {
+					if anchor.Reply != nil && anchor.Reply.Resolved && anchor.Reply.Target == message.Ref {
+						direct = true
+						break
+					}
+				}
+			}
+			if !direct {
+				return fmt.Errorf("Chatwork message selection context is not a direct resolved reply neighbor of an anchor")
+			}
+		}
+	}
+	return nil
+}
+
+func equalSequences(left, right []int) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func equalMessageFilters(left, right MessageFilter) bool {
+	if left.Context != right.Context || len(left.Senders) != len(right.Senders) {
+		return false
+	}
+	for index := range left.Senders {
+		if left.Senders[index] != right.Senders[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func validateResultReference(field string, ref Reference, kind ReferenceKind, optional bool) error {

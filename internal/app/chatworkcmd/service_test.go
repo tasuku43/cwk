@@ -11,14 +11,16 @@ import (
 )
 
 type fakePort struct {
-	calls  int
-	result chatwork.Result
-	err    error
-	cancel context.CancelFunc
+	calls   int
+	request chatwork.Request
+	result  chatwork.Result
+	err     error
+	cancel  context.CancelFunc
 }
 
 func (p *fakePort) Execute(_ context.Context, _ authn.BindingID, request chatwork.Request) (chatwork.Result, error) {
 	p.calls++
+	p.request = request
 	if p.cancel != nil {
 		p.cancel()
 	}
@@ -26,6 +28,98 @@ func (p *fakePort) Execute(_ context.Context, _ authn.BindingID, request chatwor
 		p.result.Task = request.Task
 	}
 	return p.result, p.err
+}
+
+func TestExecuteSelectsMessagesAfterOneFilterFreePortCall(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
+	port := &fakePort{result: chatwork.Result{
+		MessageRoom: room,
+		Coverage:    chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+		Messages: []chatwork.Message{
+			{Ref: relationshipReference(t, chatwork.ReferenceMessage, "101"), Room: room, Sender: chatwork.Account{Ref: b}},
+			{Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room, Sender: chatwork.Account{Ref: a}},
+		},
+	}}
+	request := chatwork.Request{
+		Task: chatwork.TaskMessagesList,
+		Room: room,
+		MessageFilter: chatwork.MessageFilter{
+			Senders: []chatwork.Reference{a},
+			Context: chatwork.MessageContextNone,
+		},
+	}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port.calls != 1 {
+		t.Fatalf("port calls = %d, want 1", port.calls)
+	}
+	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" {
+		t.Fatalf("local filter leaked to port: %+v", port.request.MessageFilter)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].Ref.Value != "102" {
+		t.Fatalf("selected messages = %+v", result.Messages)
+	}
+	if result.MessageSelection == nil || result.MessageSelection.SourceCount != 2 ||
+		len(result.MessageSelection.SourceSequences) != 1 || result.MessageSelection.SourceSequences[0] != 2 ||
+		len(result.MessageSelection.AnchorSequences) != 1 || result.MessageSelection.AnchorSequences[0] != 2 {
+		t.Fatalf("selection = %+v", result.MessageSelection)
+	}
+}
+
+func TestExecuteResolvesUnfilteredMessageWindowWithoutSelection(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	parent := relationshipReference(t, chatwork.ReferenceMessage, "101")
+	port := &fakePort{result: chatwork.Result{
+		MessageRoom: room,
+		Messages: []chatwork.Message{
+			{Ref: parent, Room: room, Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "7")}},
+			{
+				Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room,
+				Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8")},
+				Reply:  &chatwork.Relation{Kind: "reply", Target: parent, ExternalID: room.Value},
+			},
+		},
+	}}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{Task: chatwork.TaskMessagesList, Room: room})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessageSelection != nil {
+		t.Fatalf("unfiltered selection = %+v, want nil", result.MessageSelection)
+	}
+	if result.Messages[1].Reply == nil || !result.Messages[1].Reply.Resolved {
+		t.Fatalf("unfiltered reply = %+v, want resolved", result.Messages[1].Reply)
+	}
+}
+
+func TestExecuteKeepsMessagesShowRelationValidationAfterCLIOwnershipMove(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	message := chatwork.Message{
+		Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room,
+		Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8")},
+		Reply: &chatwork.Relation{
+			Kind: "reply", Target: relationshipReference(t, chatwork.ReferenceMessage, "101"),
+			ExternalID: room.Value, Resolved: true,
+		},
+	}
+	port := &fakePort{result: chatwork.Result{Messages: []chatwork.Message{message}}}
+	request := chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room,
+		Message: relationshipReference(t, chatwork.ReferenceMessage, "102"),
+	}
+
+	if _, err := New(port).Execute(context.Background(), testBinding(t), request); err == nil {
+		t.Fatal("messages.show accepted a resolved reply whose parent is absent from the result")
+	}
+	if port.calls != 1 {
+		t.Fatalf("port calls = %d, want 1", port.calls)
+	}
 }
 
 func testBinding(t *testing.T) authn.BindingID {

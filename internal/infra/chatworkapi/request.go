@@ -113,6 +113,9 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		setOptional(form, "members_readonly_ids", joinRefs(input.ReadonlyMembers))
 		return formRequest(http.MethodPut, path, form), nil
 	case chatwork.TaskMessagesList:
+		if len(input.MessageFilter.Senders) != 0 || input.MessageFilter.Context != "" {
+			return requestSpec{}, invalidRequest("message selection must be applied before the Chatwork request boundary")
+		}
 		path, err := roomPath("/messages")
 		if err != nil {
 			return requestSpec{}, err

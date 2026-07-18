@@ -128,3 +128,15 @@ func TestInviteMutationUsesInviteReferenceNotRoomFallback(t *testing.T) {
 		t.Fatalf("path = %q", spec.path)
 	}
 }
+
+func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) {
+	input := completeRequest(chatwork.TaskMessagesList)
+	input.MessageFilter = chatwork.MessageFilter{
+		Senders: []chatwork.Reference{testRef(chatwork.ReferenceAccount, "1")},
+		Context: chatwork.MessageContextReplies,
+	}
+
+	if _, err := (&Client{}).buildRequest(input); err == nil {
+		t.Fatal("application-owned message selection crossed the Chatwork request boundary")
+	}
+}
