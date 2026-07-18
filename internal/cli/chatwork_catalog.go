@@ -80,9 +80,14 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is replaced."), repeatedRefFlag("--admin", true, account, "Administrator account; repeat for more."), repeatedRefFlag("--member", false, account, "Member account; repeat for more."), repeatedRefFlag("--readonly", false, account, "Read-only account; repeat for more."), confirmFlag(confirmAccessChange)},
 			fields(integerField("administrators", "Resulting administrator count."), integerField("members", "Resulting member count."), integerField("readonly", "Resulting read-only count.")), chatwork.TaskMembersReplace, confirmAccessChange, "members list",
 			writeMutation(room, "--room", "", operation.CardinalityMany, yes, yes, yes)),
-		chatworkRead("messages list", "Get a bounded message window from one room", "--room <room-ref> [--window changes|recent]", RoleAct,
-			"chatwork.messages.manage", "Get this room's bounded provider-order message window through one fixed schema with canonical references and typed To, reply, quote, and coverage semantics",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose messages are read."), enumFlag("--window", false, "Choose provider differential changes or the latest bounded window.", "changes", "recent")}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
+		chatworkRead("messages list", "Get a bounded, optionally sender-focused message window", "--room <room-ref> [--window changes|recent] [--sender <account-ref>] [--context none|replies]", RoleAct,
+			"chatwork.messages.manage", "Get this room's bounded provider-order message window, optionally filtered by exact senders with one-hop explicit reply context, while preserving canonical references and typed To, reply, quote, and coverage semantics",
+			[]CommandInput{
+				refFlag("--room", true, room, "Exact room whose messages are read."),
+				enumFlag("--window", false, "Choose provider differential changes or the latest bounded window.", "changes", "recent"),
+				repeatedRefFlag("--sender", false, account, "Filter by an exact sender account within the bounded provider window; repeat to match any listed sender (OR), up to 100 exact references."),
+				enumFlag("--context", false, "With --sender, include no related records (none, default) or one-hop explicit reply parents and children from the bounded provider window (replies).", "none", "replies"),
+			}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
 		chatworkMutation("messages send", "Send a message to one exact room", "--room <room-ref> --body <text> [--self-unread]", RoleAct,
 			"chatwork.messages.manage", "Send one exact message body to the selected room",
 			[]CommandInput{refFlag("--room", true, room, "Exact destination room."), textFlag("--body", true, "Message body, including reviewed Chatwork notation when intended."), boolFlag("--self-unread", "Leave the sent message unread for the authenticated account.")},
@@ -291,7 +296,9 @@ func refFlag(name string, required bool, kind, description string) CommandInput 
 	return CommandInput{Name: name, Source: InputSourceFlag, Required: required, Description: description, AllowedValues: []string{}, ReferenceKind: kind}
 }
 func repeatedRefFlag(name string, required bool, kind, description string) CommandInput {
-	return refFlag(name, required, kind, description)
+	input := refFlag(name, required, kind, description)
+	input.Repeatable = true
+	return input
 }
 func textFlag(name string, required bool, description string) CommandInput {
 	return CommandInput{Name: name, Source: InputSourceFlag, Required: required, Description: description, AllowedValues: []string{}}
@@ -353,11 +360,15 @@ func messageFields(room, message, account string, collection bool) []OutputField
 	result := fields(refField("message_ref", message, messageDescription), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", bodyDescription), integerField("send_time", sendDescription), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."})
 	if collection {
 		result = append(result,
-			integerField("sequence", "One-based position in the provider-returned message window."),
+			integerField("sequence", "One-based position in the original provider-returned message window; filtered output may contain gaps."),
 			textField("actor_alias", "Deterministic document-local sender alias; never a command identity."),
 			textField("window", "Requested recent or differential message window."),
 			limitField(), completeField(),
 			integerField("unresolved_relations", "Typed relations whose canonical target could not be resolved."),
+			integerField("source_count", "Provider-returned message count before an active sender filter; absent when no filter was requested."),
+			OutputField{Name: "filter_senders", Type: OutputFieldTypeArray, Description: "Exact canonical sender account references used as OR anchors; absent when no filter was requested."},
+			textField("filter_context", "Effective none or replies context policy for an active sender filter; absent when no filter was requested."),
+			OutputField{Name: "anchor_sequences", Type: OutputFieldTypeArray, Description: "Original provider sequences that directly matched an active sender filter; displayed non-anchor sequences are reply context."},
 		)
 	}
 	return result

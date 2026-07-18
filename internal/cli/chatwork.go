@@ -87,13 +87,6 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 		return c.fail(ctx, err)
 	}
 
-	if result.Messages != nil {
-		resolved, resolveErr := chatworkcmd.ResolveMessageRelations(result.Messages)
-		if resolveErr != nil {
-			return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "The Chatwork semantic result could not be projected safely.", false))
-		}
-		result.Messages = resolved
-	}
 	output, err := capsule.Render(result)
 	if err != nil {
 		return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "The Chatwork task projection could not be encoded.", false))
@@ -153,7 +146,7 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 		if !hasValue || value == "" {
 			return nil, fmt.Errorf("%s requires a non-empty value", name)
 		}
-		if len(parsed[name]) > 0 && !chatworkRepeatedFlag(command.chatwork, name) {
+		if len(parsed[name]) > 0 && !input.Repeatable {
 			return nil, fmt.Errorf("%s may be specified only once", name)
 		}
 		if name != "--confirm" && len(input.AllowedValues) > 0 && !containsExact(input.AllowedValues, value) {
@@ -210,6 +203,8 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 				request.Request = refs[0]
 			case "--account", "--owner":
 				request.Account = refs[0]
+			case "--sender":
+				request.MessageFilter.Senders = refs
 			case "--assigned-by":
 				request.AssignedBy = refs[0]
 			case "--admin":
@@ -248,6 +243,8 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			request.LimitType = value
 		case "--window":
 			request.ForceRecent = value == "recent"
+		case "--context":
+			request.MessageFilter.Context = chatwork.MessageContext(value)
 		case "--self-unread":
 			request.SelfUnread = true
 		case "--create-download-url":
@@ -269,6 +266,9 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 	}
 	if request.Task == chatwork.TaskRoomsCreate && (arguments.first("--invite-code") != "" || arguments.first("--invite-approval") != "") {
 		request.InviteEnabled = true
+	}
+	if request.Task == chatwork.TaskMessagesList && len(request.MessageFilter.Senders) > 0 && request.MessageFilter.Context == "" {
+		request.MessageFilter.Context = chatwork.MessageContextNone
 	}
 	return request, nil
 }
@@ -303,20 +303,6 @@ func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, a
 
 func chatworkBooleanFlag(name string) bool {
 	return name == "--self-unread" || name == "--create-download-url"
-}
-
-func chatworkRepeatedFlag(definition *chatworkCommandDefinition, name string) bool {
-	if definition == nil {
-		return false
-	}
-	switch definition.Task {
-	case chatwork.TaskRoomsCreate, chatwork.TaskMembersReplace:
-		return name == "--admin" || name == "--member" || name == "--readonly"
-	case chatwork.TaskRoomTasksCreate:
-		return name == "--assignee"
-	default:
-		return false
-	}
 }
 
 func containsExact(values []string, wanted string) bool {

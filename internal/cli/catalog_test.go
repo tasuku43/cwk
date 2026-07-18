@@ -232,6 +232,7 @@ func TestArgumentSyntaxRequiredAndAllowedValuesMatchAgentInputs(t *testing.T) {
 		"optional flag declared required":       func(spec *CommandSpec) { spec.Agent.Inputs[0].Required = true },
 		"required positional declared optional": func(spec *CommandSpec) { spec.Agent.Inputs[1].Required = false },
 		"optional positional declared required": func(spec *CommandSpec) { spec.Agent.Inputs[2].Required = true },
+		"repeatable positional":                 func(spec *CommandSpec) { spec.Agent.Inputs[1].Repeatable = true },
 		"enum order differs":                    func(spec *CommandSpec) { spec.Agent.Inputs[0].AllowedValues = []string{"safe", "fast"} },
 		"enum set differs":                      func(spec *CommandSpec) { spec.Agent.Inputs[0].AllowedValues = []string{"fast"} },
 		"free form claims enumeration":          func(spec *CommandSpec) { spec.Agent.Inputs[1].AllowedValues = []string{"fixed"} },

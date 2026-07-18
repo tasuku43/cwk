@@ -60,7 +60,7 @@ func Render(result chatwork.Result) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, window); err != nil {
+		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, window, result.MessageSelection); err != nil {
 			return "", err
 		}
 	case chatwork.TaskMessagesShow:
@@ -167,17 +167,36 @@ func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) 
 		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 }
 
-func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, window string) error {
+func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, window string, selection *chatwork.MessageSelection) error {
 	actors, actorByRef, err := messageActors(messages)
 	if err != nil {
 		return err
 	}
+	sequences := make([]int, len(messages))
+	if selection != nil {
+		if len(selection.SourceSequences) != len(messages) {
+			return fmt.Errorf("task projection message selection sequence count does not match the selected messages")
+		}
+		copy(sequences, selection.SourceSequences)
+	} else {
+		for index := range messages {
+			sequences[index] = index + 1
+		}
+	}
 	sequenceByRef := make(map[string]int, len(messages))
+	seenSequences := make(map[int]struct{}, len(messages))
 	for index, message := range messages {
 		if _, exists := sequenceByRef[message.Ref.Value]; exists {
 			return fmt.Errorf("task projection message window contains a duplicate canonical message reference")
 		}
-		sequenceByRef[message.Ref.Value] = index + 1
+		if sequences[index] <= 0 {
+			return fmt.Errorf("task projection message selection contains an invalid source sequence")
+		}
+		if _, exists := seenSequences[sequences[index]]; exists {
+			return fmt.Errorf("task projection message selection contains a duplicate source sequence")
+		}
+		seenSequences[sequences[index]] = struct{}{}
+		sequenceByRef[message.Ref.Value] = sequences[index]
 	}
 
 	fmt.Fprintf(output, "messages room-ref=%s count=%d window=%s", ref(room), len(messages), window)
@@ -185,6 +204,10 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		fmt.Fprintf(output, " limit=%d", coverage.Limit)
 	}
 	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
+	if selection != nil {
+		line(output, "selection source-count=%d senders=%s context=%s anchors=%s",
+			selection.SourceCount, bracketedReferences(selection.Filter.Senders), string(selection.Filter.Context), bracketedSequences(selection.AnchorSequences))
+	}
 	line(output, "external-text=untrusted escaped")
 	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"")
 	line(output, "actors")
@@ -192,7 +215,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		line(output, "  a%d account-ref=%s name=%s", index+1, ref(actor.Ref), quoted(actor.Name))
 	}
 	for index, message := range messages {
-		fmt.Fprintf(output, "#%d %s %s %d", index+1, ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
+		fmt.Fprintf(output, "#%d %s %s %d", sequences[index], ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
 		if message.Reply != nil {
 			value, relationErr := messageReply(*message.Reply, sequenceByRef)
 			if relationErr != nil {
@@ -213,6 +236,22 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		line(output, " %s", quoted(message.Body))
 	}
 	return nil
+}
+
+func bracketedReferences(values []chatwork.Reference) string {
+	items := make([]string, len(values))
+	for index, value := range values {
+		items[index] = ref(value)
+	}
+	return "[" + strings.Join(items, ",") + "]"
+}
+
+func bracketedSequences(values []int) string {
+	items := make([]string, len(values))
+	for index, value := range values {
+		items[index] = "#" + strconv.Itoa(value)
+	}
+	return "[" + strings.Join(items, ",") + "]"
 }
 
 func messageActors(messages []chatwork.Message) ([]chatwork.Account, map[string]string, error) {

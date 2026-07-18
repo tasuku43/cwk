@@ -97,6 +97,7 @@ type CommandInput struct {
 	Name          string      `json:"name"`
 	Source        InputSource `json:"source"`
 	Required      bool        `json:"required"`
+	Repeatable    bool        `json:"repeatable,omitempty"`
 	Description   string      `json:"description"`
 	AllowedValues []string    `json:"allowed_values"`
 	ReferenceKind string      `json:"reference_kind,omitempty"`
@@ -602,6 +603,9 @@ func validateAgentContract(command CommandSpec) error {
 		}
 		if err := validateInputName(input); err != nil {
 			return fmt.Errorf("agent input %d: %w", index, err)
+		}
+		if input.Repeatable && input.Source != InputSourceFlag {
+			return fmt.Errorf("agent input %q may be repeatable only when it is a flag", input.Name)
 		}
 		if err := validateContractText("input description", input.Description); err != nil {
 			return fmt.Errorf("agent input %q: %w", input.Name, err)

@@ -109,7 +109,7 @@ func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 		"contacts list":           {"account_ref", "room_ref", "name", "organization", "complete"},
 		"rooms list":              {"room_ref", "name", "type", "role", "unread", "mentions", "tasks", "complete"},
 		"members list":            {"account_ref", "name", "role", "complete"},
-		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "sequence", "actor_alias", "window", "limit", "complete", "unresolved_relations"},
+		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "sequence", "actor_alias", "window", "limit", "complete", "unresolved_relations", "source_count", "filter_senders", "filter_context", "anchor_sequences"},
 		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations"},
 		"messages send":           {"message_ref", "room_ref"},
 		"room-tasks create":       {"task_ref", "room_ref"},

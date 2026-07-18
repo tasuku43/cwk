@@ -2,6 +2,7 @@ package cli
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -43,5 +44,39 @@ func TestPresentationChangesKeepSuccessFormatsTextOnly(t *testing.T) {
 			command.Agent.Output.JSONSchemaVersion != 0 || command.Agent.Output.JSONEnvelope != "" {
 			t.Fatalf("%s success output contract changed: %+v", command.Path, command.Agent.Output)
 		}
+	}
+}
+
+func TestMessageListCatalogPublishesBoundedSenderFilter(t *testing.T) {
+	var messages CommandSpec
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path == "messages list" {
+			messages = command
+			break
+		}
+	}
+	if messages.Path == "" {
+		t.Fatal("messages list is absent from the Chatwork catalog")
+	}
+	wantUsage := "cwk messages list --room <room-ref> [--window changes|recent] [--sender <account-ref>] [--context none|replies]"
+	if messages.Usage() != wantUsage {
+		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
+	}
+
+	inputs := make(map[string]CommandInput, len(messages.Agent.Inputs))
+	for _, input := range messages.Agent.Inputs {
+		inputs[input.Name] = input
+	}
+	sender := inputs["--sender"]
+	if sender.Required || !sender.Repeatable || sender.ReferenceKind != "chatwork-account" ||
+		!strings.Contains(sender.Description, "repeat") || !strings.Contains(sender.Description, "OR") ||
+		!strings.Contains(sender.Description, "bounded provider window") || !strings.Contains(sender.Description, "100") {
+		t.Fatalf("sender input contract = %+v", sender)
+	}
+	context := inputs["--context"]
+	if context.Required || !reflect.DeepEqual(context.AllowedValues, []string{"none", "replies"}) ||
+		!strings.Contains(context.Description, "one-hop") || !strings.Contains(context.Description, "default") ||
+		!strings.Contains(context.Description, "parents and children") {
+		t.Fatalf("context input contract = %+v", context)
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -83,6 +84,102 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	for _, want := range []string{"#1 10 ", "#2 11 ", "reply=#1"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, stdout.String())
+		}
+	}
+}
+
+func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	account := func(value, name string) chatwork.Account {
+		return chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, value), Name: name}
+	}
+	message := func(value string, sender chatwork.Account, body string) chatwork.Message {
+		return chatwork.Message{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, value), Room: room, Sender: sender, Body: body}
+	}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		unrelated := message("9", account("4", "Omitted"), "unrelated before")
+		parent := message("10", account("1", "Aki"), "anchor parent")
+		child := message("11", account("2", "Beni"), "anchor reply")
+		child.Reply = &chatwork.Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}
+		contextChild := message("12", account("3", "Chika"), "direct reply context")
+		contextChild.Reply = &chatwork.Relation{Kind: "reply", Target: child.Ref, ExternalID: room.Value}
+		trailing := message("13", account("4", "Omitted"), "unrelated after")
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: request.Room,
+			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{unrelated, parent, child, contextChild, trailing},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", "7", "--window=recent", "--sender", "1", "--sender=2", "--context", "replies",
+	})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
+	}
+	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" {
+		t.Fatalf("local message filter crossed the provider port: %+v", port.request.MessageFilter)
+	}
+	for _, want := range []string{
+		"selection source-count=5 senders=[1,2] context=replies anchors=[#2,#3]",
+		"#2 10 ", "#3 11 ", "reply=#2", "#4 12 ", "reply=#3",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("filtered output does not contain %q:\n%s", want, stdout.String())
+		}
+	}
+	for _, forbidden := range []string{"#1 9 ", "#5 13 ", `name="Omitted"`} {
+		if strings.Contains(stdout.String(), forbidden) {
+			t.Errorf("filtered output contains omitted source data %q:\n%s", forbidden, stdout.String())
+		}
+	}
+}
+
+func TestBuildChatworkMessageFilterDefaultsContextAndPreservesSenderOrder(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	parsed, err := parseChatworkArguments(spec, []string{"--room", "7", "--sender", "2", "--sender=1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := buildChatworkRequest(spec, parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(request.MessageFilter.Senders) != 2 ||
+		request.MessageFilter.Senders[0].Value != "2" || request.MessageFilter.Senders[1].Value != "1" ||
+		request.MessageFilter.Context != chatwork.MessageContextNone {
+		t.Fatalf("message filter = %+v", request.MessageFilter)
+	}
+}
+
+func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	cases := [][]string{
+		{"--room", "7", "--context", "replies"},
+		{"--room", "7", "--context", "none"},
+		{"--room", "7", "--sender", "1", "--sender", "1"},
+		{"--room", "7", "--sender", "07"},
+		{"--room", "7", "--sender", "1", "--context", "thread"},
+	}
+	excessive := []string{"--room", "7"}
+	for sender := 1; sender <= 101; sender++ {
+		excessive = append(excessive, "--sender", strconv.Itoa(sender))
+	}
+	cases = append(cases, excessive)
+	for _, args := range cases {
+		port := &chatworkRuntimePort{}
+		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
+		code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), args)
+		if code != ExitUsage || !strings.Contains(stderr.String(), "code: invalid_arguments") {
+			t.Errorf("args %v: code = %d, stderr = %s", args, code, stderr.String())
+		}
+		if authenticator.calls != 0 || port.calls != 0 {
+			t.Errorf("args %v: calls = auth %d, port %d; want zero", args, authenticator.calls, port.calls)
 		}
 	}
 }

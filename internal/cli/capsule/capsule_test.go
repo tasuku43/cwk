@@ -24,6 +24,114 @@ func TestRenderMessageProjectionGolden(t *testing.T) {
 	}
 }
 
+func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t *testing.T) {
+	result := messageFixture()
+	result.MessageSelection = &chatwork.MessageSelection{
+		Filter: chatwork.MessageFilter{
+			Senders: []chatwork.Reference{reference(chatwork.ReferenceAccount, "8")},
+			Context: chatwork.MessageContextReplies,
+		},
+		SourceCount:     6,
+		SourceSequences: []int{2, 5},
+		AnchorSequences: []int{5},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantGolden, err := os.ReadFile("testdata/messages-filtered.golden")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != string(wantGolden) {
+		t.Fatalf("filtered Render() mismatch\n--- got ---\n%s--- want ---\n%s", got, wantGolden)
+	}
+	for _, want := range []string{
+		"messages room-ref=42 count=2 window=recent limit=100 complete=false unresolved-relations=1\n",
+		"selection source-count=6 senders=[8] context=replies anchors=[#5]\n",
+		`schema: #sequence message-ref actor sent [reply] [to] [quote] "body"`,
+		`#2 100 a1 1720000000`,
+		`#5 101 a2 1720000010 reply=#2`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("filtered output does not contain %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "#1 100 ") || strings.Contains(got, "#2 101 ") || strings.Contains(got, " context ") {
+		t.Fatalf("filtered output renumbered records or added per-record selection state:\n%s", got)
+	}
+
+	for _, outputLine := range strings.Split(got, "\n") {
+		if !strings.HasPrefix(outputLine, "#5 ") {
+			continue
+		}
+		fields := strings.Fields(outputLine)
+		if len(fields) < 2 {
+			t.Fatalf("filtered message record has no canonical reference: %q", outputLine)
+		}
+		if _, err := chatwork.NewReference(chatwork.ReferenceMessage, fields[1]); err != nil {
+			t.Fatalf("filtered record message reference does not round trip: %v", err)
+		}
+		return
+	}
+	t.Fatal("filtered anchor record was not rendered")
+}
+
+func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
+	result := chatwork.Result{
+		Task: chatwork.TaskMessagesList, MessageRoom: reference(chatwork.ReferenceRoom, "42"),
+		Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+		Messages: []chatwork.Message{},
+		MessageSelection: &chatwork.MessageSelection{
+			Filter: chatwork.MessageFilter{
+				Senders: []chatwork.Reference{reference(chatwork.ReferenceAccount, "7"), reference(chatwork.ReferenceAccount, "8")},
+				Context: chatwork.MessageContextNone,
+			},
+			SourceCount:     3,
+			SourceSequences: []int{},
+			AnchorSequences: []int{},
+		},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"messages room-ref=42 count=0 window=recent limit=100 complete=false unresolved-relations=0\n",
+		"selection source-count=3 senders=[7,8] context=none anchors=[]\n",
+		"actors\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("empty filtered output does not contain %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderFilteredMessagesKeepsOmittedReplyParentCanonical(t *testing.T) {
+	result := messageFixture()
+	result.Messages = result.Messages[1:]
+	result.Messages[0].Reply.Resolved = false
+	result.MessageSelection = &chatwork.MessageSelection{
+		Filter: chatwork.MessageFilter{
+			Senders: []chatwork.Reference{reference(chatwork.ReferenceAccount, "8")},
+			Context: chatwork.MessageContextNone,
+		},
+		SourceCount:     5,
+		SourceSequences: []int{5},
+		AnchorSequences: []int{5},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `#5 101 a1 1720000010 reply=?100`) {
+		t.Fatalf("filtered output lost the omitted reply parent's canonical reference:\n%s", got)
+	}
+}
+
 func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 	tests := []struct {
 		task chatwork.Task
