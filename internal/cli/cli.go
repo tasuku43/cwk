@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	appauthn "github.com/tasuku43/cwk/internal/app/authn"
@@ -17,6 +16,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
+	"github.com/tasuku43/cwk/internal/infra/chatworkconfig"
 	"github.com/tasuku43/cwk/internal/infra/chatworkoauth"
 	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
@@ -39,8 +39,6 @@ type CLI struct {
 	chatworkInitErr error
 }
 
-const chatworkAuthMethodEnvironment = "CWK_AUTH_METHOD"
-
 // New builds the production CLI with the fixed Chatwork adapters. OAuth
 // lifecycle commands remain available even when an API authentication method
 // has not yet been selected or configured.
@@ -59,7 +57,7 @@ func New(in io.Reader, out, errOut io.Writer) *CLI {
 		cli.chatworkOAuth = chatworkauthcmd.New(manager)
 	}
 
-	client, err := selectedChatworkClient(os.Getenv(chatworkAuthMethodEnvironment), configured, manager.configErr)
+	client, err := selectedChatworkClient(chatworkconfig.AuthMethod(), configured, manager.configErr)
 	if err != nil {
 		cli.chatworkInitErr = err
 		return cli
@@ -122,7 +120,7 @@ func selectedChatworkClient(method string, oauth *chatworkoauth.Manager, oauthEr
 }
 
 func oauthClientConfigurationFault() error {
-	if os.Getenv(chatworkoauth.ClientIDEnvironment) == "" || os.Getenv(chatworkoauth.RedirectEnvironment) == "" {
+	if !chatworkconfig.OAuthRegistrationComplete() {
 		return fault.New(fault.KindInvalidInput, "oauth_client_configuration_missing", "Chatwork OAuth public-client configuration is missing.", false)
 	}
 	return fault.New(fault.KindInvalidInput, "oauth_client_configuration_invalid", "Chatwork OAuth public-client configuration is invalid.", false)

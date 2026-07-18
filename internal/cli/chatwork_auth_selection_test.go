@@ -9,6 +9,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/chatworkauth"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
+	"github.com/tasuku43/cwk/internal/infra/chatworkconfig"
 	"github.com/tasuku43/cwk/internal/infra/chatworkoauth"
 )
 
@@ -59,7 +60,7 @@ func TestSelectedOAuthDoesNotFallBackToPAT(t *testing.T) {
 }
 
 func TestProductionAuthDiscoveryWorksBeforeMethodSelection(t *testing.T) {
-	t.Setenv(chatworkAuthMethodEnvironment, "")
+	t.Setenv(chatworkconfig.AuthMethodEnvironment, "")
 	t.Setenv(chatworkoauth.ClientIDEnvironment, "")
 	t.Setenv(chatworkoauth.RedirectEnvironment, "")
 	var stdout, stderr bytes.Buffer
