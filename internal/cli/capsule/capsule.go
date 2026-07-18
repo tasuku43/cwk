@@ -15,9 +15,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
-const Schema = "cwk-task-projection/1"
-
-// Render returns the deterministic candidate-P projection of result.
+// Render returns the deterministic task projection of result.
 func Render(result chatwork.Result) (string, error) {
 	if err := result.Validate(); err != nil {
 		return "", fmt.Errorf("task projection result: %w", err)
@@ -30,139 +28,170 @@ func Render(result chatwork.Result) (string, error) {
 	}
 
 	var output strings.Builder
-	line(&output, "%s task=%s", Schema, result.Task)
-	if taskHasCoverage(result.Task) {
-		renderCoverage(&output, result)
-	}
-
 	switch result.Task {
 	case chatwork.TaskAccountShow:
 		renderOwnAccount(&output, *result.Account)
 	case chatwork.TaskAccountStatus:
 		renderStatus(&output, *result.Status)
 	case chatwork.TaskPersonalTasksList:
-		renderPersonalTasks(&output, result.Tasks)
+		renderPersonalTasks(&output, result.Tasks, result.Coverage)
 	case chatwork.TaskContactsList:
-		renderContacts(&output, result.Accounts)
-	case chatwork.TaskRoomsList, chatwork.TaskRoomsShow:
-		renderRooms(&output, result.Rooms)
+		renderContacts(&output, result.Accounts, result.Coverage)
+	case chatwork.TaskRoomsList:
+		renderRooms(&output, result.Rooms, result.Coverage)
+	case chatwork.TaskRoomsShow:
+		renderRoom(&output, result.Rooms[0])
 	case chatwork.TaskRoomsCreate:
 		line(&output, "created room-ref=%s", ref(result.Created[0]))
 	case chatwork.TaskRoomsUpdate:
 		line(&output, "updated room-ref=%s", ref(result.Affected[0]))
-	case chatwork.TaskRoomsLeave, chatwork.TaskRoomsDelete:
-		renderAcknowledgement(&output, *result.Acknowledgement)
+	case chatwork.TaskRoomsLeave:
+		line(&output, "left room-ref=%s", ref(result.Acknowledgement.Target))
+	case chatwork.TaskRoomsDelete:
+		line(&output, "deleted room-ref=%s", ref(result.Acknowledgement.Target))
 	case chatwork.TaskMembersList:
-		renderMembers(&output, result.Accounts)
+		renderMembers(&output, result.Accounts, result.Coverage)
 	case chatwork.TaskMembersReplace:
 		renderMembershipCounts(&output, *result.MembershipCounts)
-	case chatwork.TaskMessagesList, chatwork.TaskMessagesShow:
-		renderMessages(&output, result.Messages)
+	case chatwork.TaskMessagesList:
+		window, err := messageWindow(result.Coverage.Kind)
+		if err != nil {
+			return "", err
+		}
+		renderMessages(&output, result.Messages, result.Coverage, window)
+	case chatwork.TaskMessagesShow:
+		renderMessage(&output, result.Messages[0])
 	case chatwork.TaskMessagesSend:
 		line(&output, "created message-ref=%s room-ref=%s", ref(result.CreatedInRoom.Refs[0]), ref(result.CreatedInRoom.ParentRoom))
-	case chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread:
-		line(&output, "read-state unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
+	case chatwork.TaskMessagesMarkRead:
+		line(&output, "marked-read unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
+	case chatwork.TaskMessagesMarkUnread:
+		line(&output, "marked-unread unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
 	case chatwork.TaskMessagesUpdate:
 		line(&output, "updated message-ref=%s", ref(result.Affected[0]))
 	case chatwork.TaskMessagesDelete:
 		line(&output, "deleted message-ref=%s", ref(result.Affected[0]))
-	case chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksShow:
-		renderRoomTasks(&output, result.Tasks)
+	case chatwork.TaskRoomTasksList:
+		renderRoomTasks(&output, result.Tasks, result.Coverage)
+	case chatwork.TaskRoomTasksShow:
+		renderRoomTask(&output, result.Tasks[0])
 	case chatwork.TaskRoomTasksCreate:
 		renderCreatedTasks(&output, *result.CreatedInRoom)
 	case chatwork.TaskRoomTasksSetStatus:
 		line(&output, "updated task-ref=%s", ref(result.Affected[0]))
-	case chatwork.TaskFilesList, chatwork.TaskFilesShow:
-		renderFiles(&output, result.Files)
+	case chatwork.TaskFilesList:
+		renderFiles(&output, result.Files, result.Coverage)
+	case chatwork.TaskFilesShow:
+		renderFile(&output, result.Files[0], true)
 	case chatwork.TaskFilesUpload:
 		line(&output, "created file-ref=%s room-ref=%s", ref(result.CreatedInRoom.Refs[0]), ref(result.CreatedInRoom.ParentRoom))
-	case chatwork.TaskInviteLinkShow, chatwork.TaskInviteLinkCreate, chatwork.TaskInviteLinkUpdate, chatwork.TaskInviteLinkDelete:
-		renderInviteLink(&output, *result.InviteLink)
+	case chatwork.TaskInviteLinkShow:
+		renderInviteLink(&output, "invite-link", *result.InviteLink)
+	case chatwork.TaskInviteLinkCreate:
+		renderInviteLink(&output, "created invite-link", *result.InviteLink)
+	case chatwork.TaskInviteLinkUpdate:
+		renderInviteLink(&output, "updated invite-link", *result.InviteLink)
+	case chatwork.TaskInviteLinkDelete:
+		renderInviteLink(&output, "deleted invite-link", *result.InviteLink)
 	case chatwork.TaskContactRequestsList:
-		renderContactRequests(&output, result.Requests)
+		renderContactRequests(&output, result.Requests, result.Coverage)
 	case chatwork.TaskContactRequestsAccept:
 		line(&output, "accepted account-ref=%s room-ref=%s", ref(result.Account.Ref), ref(result.Account.Room))
 	case chatwork.TaskContactRequestsReject:
-		renderAcknowledgement(&output, *result.Acknowledgement)
+		line(&output, "rejected request-ref=%s", ref(result.Acknowledgement.Target))
 	default:
 		return "", fmt.Errorf("task projection has no route for %s", result.Task)
 	}
 	return output.String(), nil
 }
 
-func taskHasCoverage(task chatwork.Task) bool {
-	switch task {
-	case chatwork.TaskPersonalTasksList, chatwork.TaskContactsList,
-		chatwork.TaskRoomsList, chatwork.TaskRoomsShow,
-		chatwork.TaskMembersList,
-		chatwork.TaskMessagesList, chatwork.TaskMessagesShow,
-		chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksShow,
-		chatwork.TaskFilesList, chatwork.TaskFilesShow,
-		chatwork.TaskContactRequestsList:
-		return true
-	default:
-		return false
+func renderCollectionHeader(output *strings.Builder, noun string, count int, coverage chatwork.Coverage) {
+	fmt.Fprintf(output, "%s count=%d", noun, count)
+	if coverage.Limit > 0 {
+		fmt.Fprintf(output, " limit=%d", coverage.Limit)
 	}
-}
-
-func renderCoverage(output *strings.Builder, result chatwork.Result) {
-	fmt.Fprintf(output, "coverage kind=%s", atom(result.Coverage.Kind))
-	if result.Coverage.Limit > 0 {
-		fmt.Fprintf(output, " limit=%d", result.Coverage.Limit)
-	}
-	fmt.Fprintf(output, " complete=%t", result.Coverage.Complete)
-	if result.Task == chatwork.TaskMessagesList || result.Task == chatwork.TaskMessagesShow {
-		fmt.Fprintf(output, " unresolved-relations=%d", countUnresolved(result.Messages))
-	}
-	output.WriteByte('\n')
+	fmt.Fprintf(output, " complete=%t\n", coverage.Complete)
 }
 
 func renderOwnAccount(output *strings.Builder, account chatwork.Account) {
-	line(output, "account account-ref=%s name=untrusted:%s organization=%s",
-		ref(account.Ref), quoted(account.Name), organization(account))
+	fmt.Fprintf(output, "account account-ref=%s name=untrusted:%s", ref(account.Ref), quoted(account.Name))
+	renderOrganization(output, account)
+	output.WriteByte('\n')
 }
 
 func renderStatus(output *strings.Builder, status chatwork.Status) {
 	line(output, "status unread=%d mentions=%d tasks=%d", status.Unread, status.Mentions, status.Tasks)
 }
 
-func renderContacts(output *strings.Builder, accounts []chatwork.Account) {
-	line(output, "contacts count=%d", len(accounts))
+func renderContacts(output *strings.Builder, accounts []chatwork.Account, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "contacts", len(accounts), coverage)
 	for _, account := range accounts {
-		line(output, "  account-ref=%s room-ref=%s name=untrusted:%s organization=%s",
-			ref(account.Ref), ref(account.Room), quoted(account.Name), organization(account))
+		fmt.Fprintf(output, "  account-ref=%s room-ref=%s name=untrusted:%s", ref(account.Ref), ref(account.Room), quoted(account.Name))
+		renderOrganization(output, account)
+		output.WriteByte('\n')
 	}
 }
 
-func renderMembers(output *strings.Builder, accounts []chatwork.Account) {
-	line(output, "members count=%d", len(accounts))
+func renderMembers(output *strings.Builder, accounts []chatwork.Account, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "members", len(accounts), coverage)
 	for _, account := range accounts {
 		line(output, "  account-ref=%s name=untrusted:%s role=%s",
 			ref(account.Ref), quoted(account.Name), atom(account.Role))
 	}
 }
 
-func renderRooms(output *strings.Builder, rooms []chatwork.Room) {
-	line(output, "rooms count=%d", len(rooms))
+func renderRooms(output *strings.Builder, rooms []chatwork.Room, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "rooms", len(rooms), coverage)
 	for _, room := range rooms {
-		line(output, "  room-ref=%s name=untrusted:%s type=%s role=%s unread=%d mentions=%d tasks=%d",
-			ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
+		renderRoomLine(output, "  ", room)
 	}
 }
 
-func renderMessages(output *strings.Builder, messages []chatwork.Message) {
-	line(output, "messages count=%d", len(messages))
+func renderRoom(output *strings.Builder, room chatwork.Room) {
+	renderRoomLine(output, "room ", room)
+}
+
+func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) {
+	line(output, "%sroom-ref=%s name=untrusted:%s type=%s role=%s unread=%d mentions=%d tasks=%d",
+		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
+}
+
+func renderMessages(output *strings.Builder, messages []chatwork.Message, coverage chatwork.Coverage, window string) {
+	fmt.Fprintf(output, "messages count=%d window=%s", len(messages), window)
+	if coverage.Limit > 0 {
+		fmt.Fprintf(output, " limit=%d", coverage.Limit)
+	}
+	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
 	for _, message := range messages {
-		line(output, "  message-ref=%s room-ref=%s sender-ref=%s sender-name=untrusted:%s send-time=%d relations=%s body=untrusted:%s",
-			ref(message.Ref), ref(message.Room), ref(message.Sender.Ref), quoted(message.Sender.Name),
-			message.SendTime, relations(message), quoted(message.Body))
+		renderMessageLine(output, "  ", message)
+	}
+}
+
+func renderMessage(output *strings.Builder, message chatwork.Message) {
+	renderMessageLine(output, "message ", message)
+}
+
+func renderMessageLine(output *strings.Builder, prefix string, message chatwork.Message) {
+	line(output, "%smessage-ref=%s room-ref=%s sender-ref=%s sender-name=untrusted:%s send-time=%d relations=%s body=untrusted:%s",
+		prefix, ref(message.Ref), ref(message.Room), ref(message.Sender.Ref), quoted(message.Sender.Name),
+		message.SendTime, relations(message), quoted(message.Body))
+}
+
+func messageWindow(kind string) (string, error) {
+	switch kind {
+	case "latest_window", "recent-window":
+		return "recent", nil
+	case "differential_window", "changes-window":
+		return "changes", nil
+	default:
+		return "", fmt.Errorf("task projection unknown message window %q", kind)
 	}
 }
 
 func relations(message chatwork.Message) string {
 	values := make([]string, 0, len(message.Recipients)+1+len(message.Quotes))
 	for _, recipient := range message.Recipients {
-		values = append(values, fmt.Sprintf("to{state=resolved,target-ref=%s}", ref(recipient)))
+		values = append(values, fmt.Sprintf("to{target-ref=%s}", ref(recipient)))
 	}
 	if message.Reply != nil {
 		values = append(values, relation("reply", *message.Reply))
@@ -181,24 +210,31 @@ func relation(kind string, value chatwork.Relation) string {
 	if value.Resolved {
 		state = "resolved"
 	}
-	return fmt.Sprintf("%s{state=%s,target-ref=%s,external-id=untrusted:%s}",
-		kind, state, ref(value.Target), quoted(value.ExternalID))
+	return fmt.Sprintf("%s{state=%s,target-ref=%s}", kind, state, ref(value.Target))
 }
 
-func renderPersonalTasks(output *strings.Builder, tasks []chatwork.WorkTask) {
-	line(output, "personal-tasks count=%d", len(tasks))
+func renderPersonalTasks(output *strings.Builder, tasks []chatwork.WorkTask, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "personal-tasks", len(tasks), coverage)
 	for _, task := range tasks {
 		line(output, "  task-ref=%s room-ref=%s assigned-by-ref=%s message-ref=%s body=untrusted:%s status=%s",
 			ref(task.Ref), ref(task.Room.Ref), ref(task.AssignedBy.Ref), ref(task.Message), quoted(task.Body), atom(task.Status))
 	}
 }
 
-func renderRoomTasks(output *strings.Builder, tasks []chatwork.WorkTask) {
-	line(output, "room-tasks count=%d", len(tasks))
+func renderRoomTasks(output *strings.Builder, tasks []chatwork.WorkTask, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "room-tasks", len(tasks), coverage)
 	for _, task := range tasks {
-		line(output, "  task-ref=%s room-ref=%s account-ref=%s message-ref=%s body=untrusted:%s status=%s limit-time=%d",
-			ref(task.Ref), ref(task.Room.Ref), ref(task.Account.Ref), ref(task.Message), quoted(task.Body), atom(task.Status), task.LimitTime)
+		renderRoomTaskLine(output, "  ", task)
 	}
+}
+
+func renderRoomTask(output *strings.Builder, task chatwork.WorkTask) {
+	renderRoomTaskLine(output, "room-task ", task)
+}
+
+func renderRoomTaskLine(output *strings.Builder, prefix string, task chatwork.WorkTask) {
+	line(output, "%stask-ref=%s room-ref=%s account-ref=%s message-ref=%s body=untrusted:%s status=%s limit-time=%d",
+		prefix, ref(task.Ref), ref(task.Room.Ref), ref(task.Account.Ref), ref(task.Message), quoted(task.Body), atom(task.Status), task.LimitTime)
 }
 
 func renderCreatedTasks(output *strings.Builder, creation chatwork.RoomScopedCreation) {
@@ -208,29 +244,49 @@ func renderCreatedTasks(output *strings.Builder, creation chatwork.RoomScopedCre
 	}
 }
 
-func renderFiles(output *strings.Builder, files []chatwork.File) {
-	line(output, "files count=%d", len(files))
+func renderFiles(output *strings.Builder, files []chatwork.File, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "files", len(files), coverage)
 	for _, file := range files {
-		line(output, "  file-ref=%s room-ref=%s account-ref=%s message-ref=%s name=untrusted:%s size=%d download-url=untrusted:%s",
-			ref(file.Ref), ref(file.Room), ref(file.Account.Ref), ref(file.Message), quoted(file.Name), file.Size, quoted(file.DownloadURL))
+		renderFile(output, file, false)
 	}
 }
 
-func renderInviteLink(output *strings.Builder, invite chatwork.InviteLink) {
-	line(output, "invite-link invite-ref=%s public=%t url=untrusted:%s needs-approval=%t description=untrusted:%s",
-		ref(invite.Ref), invite.Public, quoted(invite.URL), invite.NeedsApproval, quoted(invite.Description))
+func renderFile(output *strings.Builder, file chatwork.File, show bool) {
+	prefix := "  "
+	if show {
+		prefix = "file "
+	}
+	fmt.Fprintf(output, "%sfile-ref=%s room-ref=%s account-ref=%s message-ref=%s name=untrusted:%s size=%d",
+		prefix, ref(file.Ref), ref(file.Room), ref(file.Account.Ref), ref(file.Message), quoted(file.Name), file.Size)
+	if show && file.DownloadURL != "" {
+		fmt.Fprintf(output, " download-url=untrusted:%s", quoted(file.DownloadURL))
+	}
+	output.WriteByte('\n')
 }
 
-func renderContactRequests(output *strings.Builder, requests []chatwork.ContactRequest) {
-	line(output, "contact-requests count=%d", len(requests))
+func renderInviteLink(output *strings.Builder, label string, invite chatwork.InviteLink) {
+	fmt.Fprintf(output, "%s invite-ref=%s public=%t", label, ref(invite.Ref), invite.Public)
+	if invite.Public {
+		if invite.URL != "" {
+			fmt.Fprintf(output, " url=untrusted:%s", quoted(invite.URL))
+		}
+		fmt.Fprintf(output, " needs-approval=%t", invite.NeedsApproval)
+		if invite.Description != "" {
+			fmt.Fprintf(output, " description=untrusted:%s", quoted(invite.Description))
+		}
+	}
+	output.WriteByte('\n')
+}
+
+func renderContactRequests(output *strings.Builder, requests []chatwork.ContactRequest, coverage chatwork.Coverage) {
+	renderCollectionHeader(output, "contact-requests", len(requests), coverage)
 	for _, request := range requests {
-		line(output, "  request-ref=%s account-ref=%s name=untrusted:%s message=untrusted:%s",
-			ref(request.Ref), ref(request.Account.Ref), quoted(request.Account.Name), quoted(request.Message))
+		fmt.Fprintf(output, "  request-ref=%s account-ref=%s name=untrusted:%s", ref(request.Ref), ref(request.Account.Ref), quoted(request.Account.Name))
+		if request.Message != "" {
+			fmt.Fprintf(output, " message=untrusted:%s", quoted(request.Message))
+		}
+		output.WriteByte('\n')
 	}
-}
-
-func renderAcknowledgement(output *strings.Builder, acknowledgement chatwork.Acknowledgement) {
-	line(output, "acknowledgement acknowledged=%t target-ref=%s", acknowledgement.Acknowledged, ref(acknowledgement.Target))
 }
 
 func renderMembershipCounts(output *strings.Builder, counts chatwork.MembershipCounts) {
@@ -238,9 +294,20 @@ func renderMembershipCounts(output *strings.Builder, counts chatwork.MembershipC
 		counts.Administrators, counts.Members, counts.Readonly)
 }
 
-func organization(account chatwork.Account) string {
-	return fmt.Sprintf("{id=untrusted:%s,name=untrusted:%s,department=untrusted:%s}",
-		quoted(account.OrganizationID), quoted(account.OrganizationName), quoted(account.Department))
+func renderOrganization(output *strings.Builder, account chatwork.Account) {
+	if account.OrganizationName == "" && account.Department == "" {
+		return
+	}
+	output.WriteString(" organization={")
+	separator := ""
+	if account.OrganizationName != "" {
+		fmt.Fprintf(output, "name=untrusted:%s", quoted(account.OrganizationName))
+		separator = ","
+	}
+	if account.Department != "" {
+		fmt.Fprintf(output, "%sdepartment=untrusted:%s", separator, quoted(account.Department))
+	}
+	output.WriteByte('}')
 }
 
 func ref(value chatwork.Reference) string {

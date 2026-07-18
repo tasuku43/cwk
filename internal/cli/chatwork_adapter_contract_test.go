@@ -104,17 +104,17 @@ func TestChatworkAdapterContractBindsEveryTypedTask(t *testing.T) {
 
 func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 	want := map[string][]string{
-		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "coverage"},
-		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "coverage"},
+		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "window", "limit", "complete", "unresolved_relations"},
+		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations"},
 		"messages send":           {"message_ref", "room_ref"},
 		"room-tasks create":       {"task_ref", "room_ref"},
 		"files upload":            {"file_ref", "room_ref"},
 		"messages mark-read":      {"unread", "mentions"},
 		"messages mark-unread":    {"unread", "mentions"},
-		"rooms leave":             {"acknowledged", "target_ref"},
-		"rooms delete":            {"acknowledged", "target_ref"},
-		"contact-requests reject": {"acknowledged", "target_ref"},
-		"contact-requests list":   {"request_ref", "account_ref", "name", "message", "coverage"},
+		"rooms leave":             {"room_ref"},
+		"rooms delete":            {"room_ref"},
+		"contact-requests reject": {"request_ref"},
+		"contact-requests list":   {"request_ref", "account_ref", "name", "message", "limit", "complete"},
 		"members replace":         {"administrators", "members", "readonly"},
 	}
 	for _, spec := range chatworkCommandSpecs() {

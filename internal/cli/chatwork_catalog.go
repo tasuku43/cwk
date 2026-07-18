@@ -37,20 +37,20 @@ func chatworkCommandSpecs() []CommandSpec {
 	return []CommandSpec{
 		chatworkRead("account show", "Show the authenticated Chatwork account", "", RoleDiscover,
 			"chatwork.account.inspect", "Read the exact account bound to the configured Chatwork token",
-			nil, fields(refField("account_ref", account, "Canonical account reference accepted by room creation and account filters."), textField("name", "Account display name."), textField("organization", "Organization and department facts.")), chatwork.TaskAccountShow),
+			nil, fields(refField("account_ref", account, "Canonical account reference accepted by room creation and account filters."), textField("name", "Account display name."), textField("organization", "Non-empty human-readable organization and department facts, when present.")), chatwork.TaskAccountShow),
 		chatworkRead("account status", "Show unread, mention, and task counts", "", RoleUtility,
 			"chatwork.account.inspect", "Read the authenticated account's aggregate Chatwork status",
 			nil, fields(integerField("unread", "Total unread messages."), integerField("mentions", "Total unread mentions."), integerField("tasks", "Total incomplete tasks.")), chatwork.TaskAccountStatus),
 		chatworkRead("personal-tasks list", "List tasks assigned to the authenticated account", "[--assigned-by <account-ref>] [--status open|done]", RoleDiscover,
 			"chatwork.personal-tasks.inspect", "List the bounded personal task collection with canonical task, room, account, and message references",
 			[]CommandInput{refFlag("--assigned-by", false, account, "Filter by one exact assigning account reference."), enumFlag("--status", false, "Filter by task status.", "open", "done")},
-			fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical room reference."), refField("assigned_by_ref", account, "Canonical assigning account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task status."), coverageField()), chatwork.TaskPersonalTasksList),
+			fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical room reference."), refField("assigned_by_ref", account, "Canonical assigning account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task status."), limitField(), completeField()), chatwork.TaskPersonalTasksList),
 		chatworkRead("contacts list", "Discover Chatwork contacts", "", RoleDiscover,
 			"chatwork.contacts.discover", "List contacts with exact account and direct-room references",
-			nil, fields(refField("account_ref", account, "Canonical contact account reference."), refField("room_ref", room, "Canonical direct-room reference."), textField("name", "Contact display name."), textField("organization", "Organization and department facts."), coverageField()), chatwork.TaskContactsList),
+			nil, fields(refField("account_ref", account, "Canonical contact account reference."), refField("room_ref", room, "Canonical direct-room reference."), textField("name", "Contact display name."), textField("organization", "Non-empty human-readable organization and department facts, when present."), completeField()), chatwork.TaskContactsList),
 		chatworkRead("rooms list", "Discover joined Chatwork rooms", "", RoleDiscover,
 			"chatwork.rooms.manage", "List joined rooms with exact room references and task-relevant status",
-			nil, roomFields(room), chatwork.TaskRoomsList),
+			nil, roomFields(room, true), chatwork.TaskRoomsList),
 		chatworkMutation("rooms create", "Create a group room with exact members", "--owner <account-ref> --name <text> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] [--description <text>] [--icon <preset>] [--invite-code <code>] [--invite-approval required|not-required] --confirm=access-change", RoleAct,
 			"chatwork.rooms.manage", "Create one group room in the authenticated account scope with explicit membership and access impact",
 			[]CommandInput{refFlag("--owner", true, account, "Bind room creation to the exact authenticated account reference."), textFlag("--name", true, "Room name."), repeatedRefFlag("--admin", true, account, "Add one administrator; repeat for additional administrators."), repeatedRefFlag("--member", false, account, "Add one member; repeat for additional members."), repeatedRefFlag("--readonly", false, account, "Add one read-only member; repeat for additional members."), textFlag("--description", false, "Room description."), textFlag("--icon", false, "Documented Chatwork icon preset."), textFlag("--invite-code", false, "Create an invitation link atomically with this optional code."), enumFlag("--invite-approval", false, "Create an invitation link with this approval requirement.", "required", "not-required"), confirmFlag(confirmAccessChange)},
@@ -58,7 +58,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			createMutation("chatwork-room", "--owner", operation.CardinalityMany, yes, yes, no)),
 		chatworkRead("rooms show", "Show one exact room", "--room <room-ref>", RoleAct,
 			"chatwork.rooms.manage", "Read one exact room without display-name rediscovery",
-			[]CommandInput{refFlag("--room", true, room, "Pass a room_ref from room discovery unchanged.")}, roomFields(room), chatwork.TaskRoomsShow),
+			[]CommandInput{refFlag("--room", true, room, "Pass a room_ref from room discovery unchanged.")}, roomFields(room, false), chatwork.TaskRoomsShow),
 		chatworkMutation("rooms update", "Update one exact room's descriptive facts", "--room <room-ref> [--name <text>] [--description <text>] [--icon <preset>]", RoleAct,
 			"chatwork.rooms.manage", "Update the selected room name, description, or icon without changing membership",
 			[]CommandInput{refFlag("--room", true, room, "Exact room to update."), textFlag("--name", false, "Replacement room name."), textFlag("--description", false, "Replacement room description."), textFlag("--icon", false, "Replacement documented icon preset.")},
@@ -66,15 +66,15 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityOne, no, no, no)),
 		chatworkMutation("rooms leave", "Leave one exact group room", "--room <room-ref> --confirm=destructive", RoleAct,
 			"chatwork.rooms.manage", "Leave the selected group room with explicit destructive and access impact",
-			[]CommandInput{refFlag("--room", true, room, "Exact room to leave."), confirmFlag(confirmDestructive)}, ackFields(room), chatwork.TaskRoomsLeave, confirmDestructive, "rooms show",
+			[]CommandInput{refFlag("--room", true, room, "Exact room to leave."), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "Canonical room that was left.")), chatwork.TaskRoomsLeave, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityMany, no, yes, yes)),
 		chatworkMutation("rooms delete", "Permanently delete one exact group room", "--room <room-ref> --confirm=destructive", RoleAct,
 			"chatwork.rooms.manage", "Permanently delete the selected group room and its contained data",
-			[]CommandInput{refFlag("--room", true, room, "Exact room to delete."), confirmFlag(confirmDestructive)}, ackFields(room), chatwork.TaskRoomsDelete, confirmDestructive, "rooms show",
+			[]CommandInput{refFlag("--room", true, room, "Exact room to delete."), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "Canonical room that was deleted.")), chatwork.TaskRoomsDelete, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityUnbounded, no, yes, yes)),
 		chatworkRead("members list", "List members of one exact room", "--room <room-ref>", RoleAct,
 			"chatwork.members.manage", "List member identities and roles in one exact room",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is read.")}, fields(refField("account_ref", account, "Canonical member account reference."), textField("name", "Member display name."), textField("role", "Member role."), coverageField()), chatwork.TaskMembersList),
+			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is read.")}, fields(refField("account_ref", account, "Canonical member account reference."), textField("name", "Member display name."), textField("role", "Member role."), completeField()), chatwork.TaskMembersList),
 		chatworkMutation("members replace", "Replace one room's complete membership", "--room <room-ref> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] --confirm=access-change", RoleAct,
 			"chatwork.members.manage", "Replace the selected room's complete role membership with explicit access impact",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is replaced."), repeatedRefFlag("--admin", true, account, "Administrator account; repeat for more."), repeatedRefFlag("--member", false, account, "Member account; repeat for more."), repeatedRefFlag("--readonly", false, account, "Read-only account; repeat for more."), confirmFlag(confirmAccessChange)},
@@ -82,7 +82,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation(room, "--room", "", operation.CardinalityMany, yes, yes, yes)),
 		chatworkRead("messages list", "Get a bounded message window from one room", "--room <room-ref> [--window changes|recent]", RoleAct,
 			"chatwork.messages.manage", "Get this room's bounded message window with sender, To, reply, quote, and coverage semantics",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose messages are read."), enumFlag("--window", false, "Choose provider differential changes or the latest bounded window.", "changes", "recent")}, messageFields(room, message, account), chatwork.TaskMessagesList),
+			[]CommandInput{refFlag("--room", true, room, "Exact room whose messages are read."), enumFlag("--window", false, "Choose provider differential changes or the latest bounded window.", "changes", "recent")}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
 		chatworkMutation("messages send", "Send a message to one exact room", "--room <room-ref> --body <text> [--self-unread]", RoleAct,
 			"chatwork.messages.manage", "Send one exact message body to the selected room",
 			[]CommandInput{refFlag("--room", true, room, "Exact destination room."), textFlag("--body", true, "Message body, including reviewed Chatwork notation when intended."), boolFlag("--self-unread", "Leave the sent message unread for the authenticated account.")},
@@ -98,7 +98,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation(message, "--message", "--room", operation.CardinalityMany, no, no, no)),
 		chatworkRead("messages show", "Show one exact message", "--room <room-ref> --message <message-ref>", RoleAct,
 			"chatwork.messages.manage", "Read one exact message with typed relationship facts",
-			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--message", true, message, "Exact message to read.")}, messageFields(room, message, account), chatwork.TaskMessagesShow),
+			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--message", true, message, "Exact message to read.")}, messageFields(room, message, account, false), chatwork.TaskMessagesShow),
 		chatworkMutation("messages update", "Update one exact message", "--room <room-ref> --message <message-ref> --body <text>", RoleAct,
 			"chatwork.messages.manage", "Replace the body of one exact message",
 			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--message", true, message, "Exact message to update."), textFlag("--body", true, "Replacement message body.")}, fields(refField("message_ref", message, "Canonical updated message reference.")), chatwork.TaskMessagesUpdate, "", "messages show",
@@ -109,28 +109,28 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation("chatwork-message", "--message", "--room", operation.CardinalityOne, no, no, yes)),
 		chatworkRead("room-tasks list", "List tasks in one exact room", "--room <room-ref> [--account <account-ref>] [--assigned-by <account-ref>] [--status open|done]", RoleAct,
 			"chatwork.room-tasks.manage", "List a bounded room task collection with exact task and account references",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose tasks are read."), refFlag("--account", false, account, "Filter by exact assignee account."), refFlag("--assigned-by", false, account, "Filter by exact assigning account."), enumFlag("--status", false, "Filter by task status.", "open", "done")}, taskFields(room, task, account, message), chatwork.TaskRoomTasksList),
+			[]CommandInput{refFlag("--room", true, room, "Exact room whose tasks are read."), refFlag("--account", false, account, "Filter by exact assignee account."), refFlag("--assigned-by", false, account, "Filter by exact assigning account."), enumFlag("--status", false, "Filter by task status.", "open", "done")}, taskFields(room, task, account, message, true), chatwork.TaskRoomTasksList),
 		chatworkMutation("room-tasks create", "Create tasks for exact assignees in one room", "--room <room-ref> --body <text> --assignee <account-ref> [--limit <unix-time>] [--limit-type date|time]", RoleAct,
 			"chatwork.room-tasks.manage", "Create the selected task body for exact account assignees in one room",
 			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), textFlag("--body", true, "Task body."), repeatedRefFlag("--assignee", true, account, "Exact assignee; repeat for additional assignees."), integerFlag("--limit", false, "Optional Unix deadline."), enumFlag("--limit-type", false, "Interpret the deadline as a date or time.", "date", "time")}, fields(refField("task_ref", task, "Canonical created task reference."), refField("room_ref", room, "Canonical parent room reference.")), chatwork.TaskRoomTasksCreate, "", "room-tasks list",
 			createMutation("chatwork-task", "--room", operation.CardinalityMany, yes, no, no)),
 		chatworkRead("room-tasks show", "Show one exact room task", "--room <room-ref> --task <task-ref>", RoleAct,
 			"chatwork.room-tasks.manage", "Read one exact task without rediscovery",
-			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--task", true, task, "Exact task to read.")}, taskFields(room, task, account, message), chatwork.TaskRoomTasksShow),
+			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--task", true, task, "Exact task to read.")}, taskFields(room, task, account, message, false), chatwork.TaskRoomTasksShow),
 		chatworkMutation("room-tasks set-status", "Set one exact task's completion status", "--room <room-ref> --task <task-ref> --status open|done", RoleAct,
 			"chatwork.room-tasks.manage", "Set the selected exact task to open or done",
 			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--task", true, task, "Exact task to change."), enumFlag("--status", true, "Replacement task status.", "open", "done")}, fields(refField("task_ref", task, "Canonical updated task reference.")), chatwork.TaskRoomTasksSetStatus, "", "room-tasks show",
 			writeMutation("chatwork-task", "--task", "--room", operation.CardinalityOne, yes, no, no)),
 		chatworkRead("files list", "List files in one exact room", "--room <room-ref> [--account <account-ref>]", RoleAct,
 			"chatwork.files.manage", "List a bounded room file collection with exact file, uploader, and message references",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose files are read."), refFlag("--account", false, account, "Filter by exact uploader account.")}, fileFields(room, file, account, message), chatwork.TaskFilesList),
+			[]CommandInput{refFlag("--room", true, room, "Exact room whose files are read."), refFlag("--account", false, account, "Filter by exact uploader account.")}, fileFields(room, file, account, message, true), chatwork.TaskFilesList),
 		chatworkMutation("files upload", "Upload one bounded file to one exact room", "--room <room-ref> --path <file> [--message <text>]", RoleAct,
 			"chatwork.files.manage", "Upload one local file of at most 5 MiB to the selected room",
 			[]CommandInput{refFlag("--room", true, room, "Exact destination room."), textFlag("--path", true, "Local file path; bounded and validated before upload."), textFlag("--message", false, "Optional message attached to the file.")}, fields(refField("file_ref", file, "Canonical uploaded file reference."), refField("room_ref", room, "Canonical parent room reference.")), chatwork.TaskFilesUpload, "", "files list",
 			createMutation("chatwork-file", "--room", operation.CardinalityOne, yes, no, no)),
 		chatworkRead("files show", "Show one exact room file", "--room <room-ref> --file <file-ref> [--create-download-url]", RoleAct,
 			"chatwork.files.manage", "Read one exact file and optionally request its bounded provider download URL",
-			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--file", true, file, "Exact file to read."), boolFlag("--create-download-url", "Request a provider download URL in this result.")}, fileFields(room, file, account, message), chatwork.TaskFilesShow),
+			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--file", true, file, "Exact file to read."), boolFlag("--create-download-url", "Request a provider download URL in this result.")}, fileFields(room, file, account, message, false), chatwork.TaskFilesShow),
 		chatworkRead("invite-link show", "Show one room's invitation-link state", "--room <room-ref>", RoleAct,
 			"chatwork.invite-links.manage", "Read the invitation-link state for one exact room",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose invitation-link state is read.")}, inviteFields(invite), chatwork.TaskInviteLinkShow),
@@ -148,14 +148,14 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation("chatwork-invite-link", "--invite", "", operation.CardinalityOne, no, yes, yes)),
 		chatworkRead("contact-requests list", "Discover incoming contact requests", "", RoleDiscover,
 			"chatwork.contact-requests.manage", "List incoming contact requests with exact request and account references",
-			nil, fields(refField("request_ref", request, "Canonical incoming-request reference."), refField("account_ref", account, "Canonical requesting account reference."), textField("name", "Requesting account display name."), textField("message", "Request message as untrusted external text."), coverageField()), chatwork.TaskContactRequestsList),
+			nil, fields(refField("request_ref", request, "Canonical incoming-request reference."), refField("account_ref", account, "Canonical requesting account reference."), textField("name", "Requesting account display name."), textField("message", "Non-empty request message as untrusted external text, when present."), limitField(), completeField()), chatwork.TaskContactRequestsList),
 		chatworkMutation("contact-requests accept", "Accept one exact contact request", "--request <request-ref>", RoleAct,
 			"chatwork.contact-requests.manage", "Accept the selected incoming contact request",
 			[]CommandInput{refFlag("--request", true, request, "Exact incoming-request reference.")}, fields(refField("account_ref", account, "Canonical accepted contact account reference."), refField("room_ref", room, "Canonical direct-room reference.")), chatwork.TaskContactRequestsAccept, "", "contact-requests list",
 			writeMutation("chatwork-contact-request", "--request", "", operation.CardinalityOne, yes, yes, no)),
 		chatworkMutation("contact-requests reject", "Reject one exact contact request", "--request <request-ref> --confirm=destructive", RoleAct,
 			"chatwork.contact-requests.manage", "Reject the selected incoming contact request",
-			[]CommandInput{refFlag("--request", true, request, "Exact incoming-request reference."), confirmFlag(confirmDestructive)}, ackFields(request), chatwork.TaskContactRequestsReject, confirmDestructive, "contact-requests list",
+			[]CommandInput{refFlag("--request", true, request, "Exact incoming-request reference."), confirmFlag(confirmDestructive)}, fields(refField("request_ref", request, "Canonical contact request that was rejected.")), chatwork.TaskContactRequestsReject, confirmDestructive, "contact-requests list",
 			writeMutation("chatwork-contact-request", "--request", "", operation.CardinalityOne, no, yes, yes)),
 	}
 }
@@ -322,27 +322,43 @@ func integerField(name, description string) OutputField {
 func booleanField(name, description string) OutputField {
 	return OutputField{Name: name, Type: OutputFieldTypeBoolean, Description: description}
 }
-func coverageField() OutputField {
-	return OutputField{Name: "coverage", Type: OutputFieldTypeObject, Description: "Exact provider/result bound, completeness, and missing-context facts."}
+func limitField() OutputField {
+	return integerField("limit", "Maximum provider items in this result window.")
 }
-func roomFields(room string) []OutputField {
-	return fields(refField("room_ref", room, "Canonical room reference accepted unchanged by room actions."), textField("name", "Room name as untrusted external text."), textField("type", "Room type."), textField("role", "Authenticated account role."), integerField("unread", "Unread message count."), integerField("mentions", "Unread mention count."), integerField("tasks", "Incomplete task count."), coverageField())
+func completeField() OutputField {
+	return booleanField("complete", "Whether this output is the complete documented collection for the operation.")
 }
-func messageFields(room, message, account string) []OutputField {
-	return fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."}, coverageField())
+func roomFields(room string, collection bool) []OutputField {
+	result := fields(refField("room_ref", room, "Canonical room reference accepted unchanged by room actions."), textField("name", "Room name as untrusted external text."), textField("type", "Room type."), textField("role", "Authenticated account role."), integerField("unread", "Unread message count."), integerField("mentions", "Unread mention count."), integerField("tasks", "Incomplete task count."))
+	if collection {
+		result = append(result, completeField())
+	}
+	return result
 }
-func taskFields(room, task, account, message string) []OutputField {
-	return fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical assignee account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task completion status."), integerField("limit_time", "Unix deadline or zero."), coverageField())
+func messageFields(room, message, account string, collection bool) []OutputField {
+	result := fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."})
+	if collection {
+		result = append(result, textField("window", "Requested recent or differential message window."), limitField(), completeField(), integerField("unresolved_relations", "Typed relations whose canonical target could not be resolved."))
+	}
+	return result
 }
-func fileFields(room, file, account, message string) []OutputField {
-	return fields(refField("file_ref", file, "Canonical file reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical uploader account reference."), refField("message_ref", message, "Canonical file-message reference."), textField("name", "File name as untrusted external text."), integerField("size", "File size in bytes."), textField("download_url", "Explicitly requested provider download URL, or empty."), coverageField())
+func taskFields(room, task, account, message string, collection bool) []OutputField {
+	result := fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical assignee account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task completion status."), integerField("limit_time", "Unix deadline or zero."))
+	if collection {
+		result = append(result, limitField(), completeField())
+	}
+	return result
+}
+func fileFields(room, file, account, message string, collection bool) []OutputField {
+	result := fields(refField("file_ref", file, "Canonical file reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical uploader account reference."), refField("message_ref", message, "Canonical file-message reference."), textField("name", "File name as untrusted external text."), integerField("size", "File size in bytes."))
+	if collection {
+		return append(result, limitField(), completeField())
+	}
+	return append(result, textField("download_url", "Requested provider download URL when one is returned."))
 }
 func inviteFields(invite string) []OutputField {
-	return fields(refField("invite_ref", invite, "Canonical invitation-link reference accepted unchanged by update/delete."), booleanField("public", "Whether the invitation link is enabled."), textField("url", "Invitation URL when enabled."), booleanField("needs_approval", "Whether an administrator must approve joining."), textField("description", "Provider invitation description."))
+	return fields(refField("invite_ref", invite, "Canonical invitation-link reference accepted unchanged by update/delete."), booleanField("public", "Whether the invitation link is enabled."), textField("url", "Invitation URL when enabled and non-empty."), booleanField("needs_approval", "Whether an administrator must approve joining; emitted when enabled."), textField("description", "Non-empty provider invitation description when enabled."))
 }
 func unreadFields() []OutputField {
 	return fields(integerField("unread", "Resulting room unread count."), integerField("mentions", "Resulting room unread mention count."))
-}
-func ackFields(kind string) []OutputField {
-	return fields(booleanField("acknowledged", "Provider confirmed the mutation."), refField("target_ref", kind, "Exact canonical target supplied by the caller."))
 }

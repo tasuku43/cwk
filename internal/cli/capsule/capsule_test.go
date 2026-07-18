@@ -33,35 +33,35 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskAccountStatus, "status unread=0 mentions=0 tasks=0"},
 		{chatwork.TaskPersonalTasksList, "personal-tasks count=1"},
 		{chatwork.TaskContactsList, "contacts count=1"},
-		{chatwork.TaskRoomsList, "rooms count=1"},
+		{chatwork.TaskRoomsList, "rooms count=1 complete=true"},
 		{chatwork.TaskRoomsCreate, "created room-ref=42"},
-		{chatwork.TaskRoomsShow, "rooms count=1"},
+		{chatwork.TaskRoomsShow, "room room-ref=42"},
 		{chatwork.TaskRoomsUpdate, "updated room-ref=42"},
-		{chatwork.TaskRoomsLeave, "acknowledgement acknowledged=true target-ref=42"},
-		{chatwork.TaskRoomsDelete, "acknowledgement acknowledged=true target-ref=42"},
+		{chatwork.TaskRoomsLeave, "left room-ref=42"},
+		{chatwork.TaskRoomsDelete, "deleted room-ref=42"},
 		{chatwork.TaskMembersList, "members count=1"},
 		{chatwork.TaskMembersReplace, "membership-counts administrators=0 members=0 readonly=0"},
-		{chatwork.TaskMessagesList, "messages count=1"},
+		{chatwork.TaskMessagesList, "messages count=1 window=recent limit=100 complete=false unresolved-relations=0"},
 		{chatwork.TaskMessagesSend, "created message-ref=100 room-ref=42"},
-		{chatwork.TaskMessagesMarkRead, "read-state unread=0 mentions=0"},
-		{chatwork.TaskMessagesMarkUnread, "read-state unread=0 mentions=0"},
-		{chatwork.TaskMessagesShow, "messages count=1"},
+		{chatwork.TaskMessagesMarkRead, "marked-read unread=0 mentions=0"},
+		{chatwork.TaskMessagesMarkUnread, "marked-unread unread=0 mentions=0"},
+		{chatwork.TaskMessagesShow, "message message-ref=100"},
 		{chatwork.TaskMessagesUpdate, "updated message-ref=100"},
 		{chatwork.TaskMessagesDelete, "deleted message-ref=100"},
 		{chatwork.TaskRoomTasksList, "room-tasks count=1"},
 		{chatwork.TaskRoomTasksCreate, "created-tasks count=1 room-ref=42"},
-		{chatwork.TaskRoomTasksShow, "room-tasks count=1"},
+		{chatwork.TaskRoomTasksShow, "room-task task-ref=200"},
 		{chatwork.TaskRoomTasksSetStatus, "updated task-ref=200"},
 		{chatwork.TaskFilesList, "files count=1"},
 		{chatwork.TaskFilesUpload, "created file-ref=300 room-ref=42"},
-		{chatwork.TaskFilesShow, "files count=1"},
+		{chatwork.TaskFilesShow, "file file-ref=300"},
 		{chatwork.TaskInviteLinkShow, "invite-link invite-ref=400 public=false"},
-		{chatwork.TaskInviteLinkCreate, "invite-link invite-ref=400 public=false"},
-		{chatwork.TaskInviteLinkUpdate, "invite-link invite-ref=400 public=false"},
-		{chatwork.TaskInviteLinkDelete, "invite-link invite-ref=400 public=false"},
+		{chatwork.TaskInviteLinkCreate, "created invite-link invite-ref=400 public=false"},
+		{chatwork.TaskInviteLinkUpdate, "updated invite-link invite-ref=400 public=false"},
+		{chatwork.TaskInviteLinkDelete, "deleted invite-link invite-ref=400 public=false"},
 		{chatwork.TaskContactRequestsList, "contact-requests count=1"},
 		{chatwork.TaskContactRequestsAccept, "accepted account-ref=7 room-ref=42"},
-		{chatwork.TaskContactRequestsReject, "acknowledgement acknowledged=true target-ref=500"},
+		{chatwork.TaskContactRequestsReject, "rejected request-ref=500"},
 	}
 	if len(tests) != 33 {
 		t.Fatalf("task route count = %d, want 33", len(tests))
@@ -72,11 +72,13 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Render() error = %v", err)
 			}
-			if !strings.HasPrefix(got, Schema+" task="+string(test.task)+"\n") {
-				t.Errorf("missing task-bound schema header:\n%s", got)
-			}
 			if !strings.Contains(got, test.want) {
 				t.Errorf("output does not contain %q:\n%s", test.want, got)
+			}
+			for _, forbidden := range []string{"cwk-task-projection/", " task=", "coverage ", " kind="} {
+				if strings.Contains(got, forbidden) {
+					t.Errorf("output contains removed presentation metadata %q:\n%s", forbidden, got)
+				}
 			}
 		})
 	}
@@ -161,8 +163,8 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				}
 				return result
 			}(),
-			wantLine:  `coverage kind="provider-collection" complete=true`,
-			forbidden: []string{"limit=0", "description=", "zero-limit-description-canary"},
+			wantLine:  `rooms count=1 complete=true`,
+			forbidden: []string{"coverage ", "kind=", "limit=0", "description=", "zero-limit-description-canary"},
 		},
 		{
 			name: "positive limit",
@@ -174,8 +176,8 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				}
 				return result
 			}(),
-			wantLine:  `coverage kind="recent-window" limit=100 complete=false unresolved-relations=0`,
-			forbidden: []string{"description=", "positive-limit-description-canary"},
+			wantLine:  `messages count=1 window=recent limit=100 complete=false unresolved-relations=0`,
+			forbidden: []string{"coverage ", "kind=", "description=", "positive-limit-description-canary"},
 		},
 	}
 
@@ -186,11 +188,11 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				t.Fatal(err)
 			}
 			if !strings.Contains(got, test.wantLine+"\n") {
-				t.Errorf("output does not contain exact coverage line %q:\n%s", test.wantLine, got)
+				t.Errorf("output does not contain exact collection line %q:\n%s", test.wantLine, got)
 			}
 			for _, forbidden := range test.forbidden {
 				if strings.Contains(got, forbidden) {
-					t.Errorf("coverage leaked %q:\n%s", forbidden, got)
+					t.Errorf("collection metadata leaked %q:\n%s", forbidden, got)
 				}
 			}
 		})
@@ -317,16 +319,16 @@ func TestRenderPreservesZeroFalseEmptyAndAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, `message-ref=absent name=untrusted:"" size=0 download-url=untrusted:""`) {
-		t.Fatalf("empty file facts were not explicit:\n%s", got)
+	if !strings.Contains(got, `message-ref=absent name=untrusted:"" size=0`) || strings.Contains(got, "download-url=") {
+		t.Fatalf("file absence facts or conditional download URL were wrong:\n%s", got)
 	}
 
 	invite, err := Render(resultForTask(chatwork.TaskInviteLinkShow))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(invite, `public=false url=untrusted:"" needs-approval=false description=untrusted:""`) {
-		t.Fatalf("false and empty invite facts were not explicit:\n%s", invite)
+	if invite != "invite-link invite-ref=400 public=false\n" {
+		t.Fatalf("disabled invitation state was not minimal:\n%s", invite)
 	}
 
 	message := resultForTask(chatwork.TaskMessagesList)
@@ -335,8 +337,90 @@ func TestRenderPreservesZeroFalseEmptyAndAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(messageOutput, `reply{state=unresolved,target-ref=absent,external-id=untrusted:"missing"}`) {
+	if !strings.Contains(messageOutput, `reply{state=unresolved,target-ref=absent}`) || strings.Contains(messageOutput, "external-id=") {
 		t.Fatalf("absent unresolved relation target was not explicit:\n%s", messageOutput)
+	}
+}
+
+func TestRenderKeepsUsefulOptionalFactsOnlyWhenPresent(t *testing.T) {
+	emptyOrganization := resultForTask(chatwork.TaskAccountShow)
+	emptyOrganization.Account.OrganizationID = "private-provider-id-only"
+	emptyOrganizationOutput, err := Render(emptyOrganization)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(emptyOrganizationOutput, "organization=") || strings.Contains(emptyOrganizationOutput, "private-provider-id-only") {
+		t.Fatalf("empty organization shell or provider ID was emitted:\n%s", emptyOrganizationOutput)
+	}
+
+	account := resultForTask(chatwork.TaskAccountShow)
+	account.Account.OrganizationID = "private-provider-id"
+	account.Account.OrganizationName = "Example Org"
+	account.Account.Department = "Research"
+	accountOutput, err := Render(account)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(accountOutput, `organization={name=untrusted:"Example Org",department=untrusted:"Research"}`) || strings.Contains(accountOutput, "private-provider-id") {
+		t.Fatalf("organization projection was not human-readable and minimal:\n%s", accountOutput)
+	}
+
+	fileList := resultForTask(chatwork.TaskFilesList)
+	fileList.Files[0].DownloadURL = "https://example.com/list-canary"
+	listOutput, err := Render(fileList)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(listOutput, "download-url=") || strings.Contains(listOutput, "list-canary") {
+		t.Fatalf("file list leaked a non-task download URL:\n%s", listOutput)
+	}
+
+	fileShow := resultForTask(chatwork.TaskFilesShow)
+	fileShow.Files[0].DownloadURL = "https://example.com/download"
+	showOutput, err := Render(fileShow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(showOutput, `download-url=untrusted:"https://example.com/download"`) {
+		t.Fatalf("file show lost its requested download URL:\n%s", showOutput)
+	}
+
+	invite := resultForTask(chatwork.TaskInviteLinkShow)
+	invite.InviteLink.Public = true
+	invite.InviteLink.URL = "https://example.com/invite"
+	invite.InviteLink.NeedsApproval = false
+	inviteOutput, err := Render(invite)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(inviteOutput, `invite-ref=400 public=true url=untrusted:"https://example.com/invite" needs-approval=false`) {
+		t.Fatalf("enabled invitation lost actionable state:\n%s", inviteOutput)
+	}
+
+	request := resultForTask(chatwork.TaskContactRequestsList)
+	requestOutput, err := Render(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(requestOutput, "message=") {
+		t.Fatalf("empty optional request message was emitted:\n%s", requestOutput)
+	}
+}
+
+func TestRenderNamesMessageWindowWithoutProviderCoverageKind(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesList)
+	result.Coverage.Kind = "differential_window"
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "messages count=1 window=changes limit=100 complete=false") || strings.Contains(got, "differential_window") {
+		t.Fatalf("message window was not task-oriented:\n%s", got)
+	}
+
+	result.Coverage.Kind = "provider_window"
+	if _, err := Render(result); err == nil {
+		t.Fatal("unknown message window kind was accepted")
 	}
 }
 
@@ -374,6 +458,16 @@ func resultForTask(task chatwork.Task) chatwork.Result {
 	request := chatwork.ContactRequest{Ref: reference(chatwork.ReferenceRequest, "500"), Account: account}
 
 	result := chatwork.Result{Task: task}
+	switch task {
+	case chatwork.TaskPersonalTasksList, chatwork.TaskRoomTasksList, chatwork.TaskFilesList, chatwork.TaskContactRequestsList:
+		result.Coverage = chatwork.Coverage{Kind: "provider_window", Limit: 100, Complete: false}
+	case chatwork.TaskMessagesList:
+		result.Coverage = chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false}
+	case chatwork.TaskContactsList, chatwork.TaskRoomsList, chatwork.TaskMembersList:
+		result.Coverage = chatwork.Coverage{Kind: "provider_collection", Complete: true}
+	default:
+		result.Coverage = chatwork.Coverage{Kind: "single_operation", Complete: true}
+	}
 	switch task {
 	case chatwork.TaskAccountShow, chatwork.TaskContactRequestsAccept:
 		result.Account = &account
