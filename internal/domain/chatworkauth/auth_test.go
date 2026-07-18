@@ -1,6 +1,9 @@
 package chatworkauth
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestProfileReferenceAcceptsOnlyDiscoveredExactValue(t *testing.T) {
 	ref, err := NewProfileReference(PublicClientProfileReference)
@@ -53,6 +56,19 @@ func TestProfileValidationKeepsProjectionSecretFreeAndConsistent(t *testing.T) {
 	for _, profile := range tests {
 		if err := profile.Validate(); err == nil {
 			t.Errorf("invalid profile accepted: %+v", profile)
+		}
+	}
+}
+
+func TestCredentialStatusHasOnlyTheReviewedSecretFreeFields(t *testing.T) {
+	statusType := reflect.TypeOf(CredentialStatus{})
+	want := []string{"Authenticated", "ExpiresAt"}
+	if statusType.NumField() != len(want) {
+		t.Fatalf("CredentialStatus field count = %d, want %d", statusType.NumField(), len(want))
+	}
+	for index, name := range want {
+		if statusType.Field(index).Name != name {
+			t.Fatalf("CredentialStatus field %d = %q, want %q", index, statusType.Field(index).Name, name)
 		}
 	}
 }

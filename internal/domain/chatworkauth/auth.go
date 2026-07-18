@@ -3,7 +3,10 @@
 // deliberately remain infrastructure details.
 package chatworkauth
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+)
 
 const (
 	// OAuthProfileReferenceKind joins profile discovery to every action without
@@ -86,6 +89,13 @@ type Profile struct {
 	Method    string
 	State     ProfileState
 	ExpiresAt int64
+}
+
+// CredentialStatus is the minimal secret-free result shared by the OAuth
+// manager and authentication use case. It cannot carry protocol or store data.
+type CredentialStatus struct {
+	Authenticated bool
+	ExpiresAt     time.Time
 }
 
 func (p Profile) Validate() error {
