@@ -42,14 +42,14 @@ func chatworkCommandSpecs() []CommandSpec {
 			"chatwork.account.inspect", "Read the authenticated account's aggregate Chatwork status",
 			nil, fields(integerField("unread", "Total unread messages."), integerField("mentions", "Total unread mentions."), integerField("tasks", "Total incomplete tasks.")), chatwork.TaskAccountStatus),
 		chatworkRead("personal-tasks list", "List tasks assigned to the authenticated account", "[--assigned-by <account-ref>] [--status open|done]", RoleDiscover,
-			"chatwork.personal-tasks.inspect", "List the bounded personal task collection with canonical task, room, account, and message references",
+			"chatwork.personal-tasks.inspect", "List the bounded personal task collection in one fixed positional schema with canonical task, room, account, and message references",
 			[]CommandInput{refFlag("--assigned-by", false, account, "Filter by one exact assigning account reference."), enumFlag("--status", false, "Filter by task status.", "open", "done")},
-			fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical room reference."), refField("assigned_by_ref", account, "Canonical assigning account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task status."), limitField(), completeField()), chatwork.TaskPersonalTasksList),
+			fields(refField("task_ref", task, "Canonical task reference in position one."), refField("room_ref", room, "Canonical room reference in position two."), refField("assigned_by_ref", account, "Canonical assigning account reference in position three."), refField("message_ref", message, "Canonical task-message reference in position four."), textField("body", "Terminal-safe quoted task body in position five."), textField("status", "Task status in position six."), limitField(), completeField()), chatwork.TaskPersonalTasksList),
 		chatworkRead("contacts list", "Discover Chatwork contacts", "", RoleDiscover,
-			"chatwork.contacts.discover", "List contacts with exact account and direct-room references",
-			nil, fields(refField("account_ref", account, "Canonical contact account reference."), refField("room_ref", room, "Canonical direct-room reference."), textField("name", "Contact display name."), textField("organization", "Non-empty human-readable organization and department facts, when present."), completeField()), chatwork.TaskContactsList),
+			"chatwork.contacts.discover", "List contacts in one fixed positional schema with exact account and direct-room references",
+			nil, fields(refField("account_ref", account, "Canonical contact account reference in position one."), refField("room_ref", room, "Canonical direct-room reference in position two."), textField("name", "Terminal-safe quoted contact display name in position three."), textField("organization", "Optional final organization suffix with non-empty name or department facts."), completeField()), chatwork.TaskContactsList),
 		chatworkRead("rooms list", "Discover joined Chatwork rooms", "", RoleDiscover,
-			"chatwork.rooms.manage", "List joined rooms with exact room references and task-relevant status",
+			"chatwork.rooms.manage", "List joined rooms in one fixed positional schema with exact room references and task-relevant status",
 			nil, roomFields(room, true), chatwork.TaskRoomsList),
 		chatworkMutation("rooms create", "Create a group room with exact members", "--owner <account-ref> --name <text> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] [--description <text>] [--icon <preset>] [--invite-code <code>] [--invite-approval required|not-required] --confirm=access-change", RoleAct,
 			"chatwork.rooms.manage", "Create one group room in the authenticated account scope with explicit membership and access impact",
@@ -73,8 +73,8 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--room", true, room, "Exact room to delete."), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "Canonical room that was deleted.")), chatwork.TaskRoomsDelete, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityUnbounded, no, yes, yes)),
 		chatworkRead("members list", "List members of one exact room", "--room <room-ref>", RoleAct,
-			"chatwork.members.manage", "List member identities and roles in one exact room",
-			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is read.")}, fields(refField("account_ref", account, "Canonical member account reference."), textField("name", "Member display name."), textField("role", "Member role."), completeField()), chatwork.TaskMembersList),
+			"chatwork.members.manage", "List member identities and roles in one fixed positional schema for one exact room",
+			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is read.")}, fields(refField("account_ref", account, "Canonical member account reference in position one."), textField("name", "Terminal-safe quoted member display name in position two."), textField("role", "Member role in position three."), completeField()), chatwork.TaskMembersList),
 		chatworkMutation("members replace", "Replace one room's complete membership", "--room <room-ref> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] --confirm=access-change", RoleAct,
 			"chatwork.members.manage", "Replace the selected room's complete role membership with explicit access impact",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose membership is replaced."), repeatedRefFlag("--admin", true, account, "Administrator account; repeat for more."), repeatedRefFlag("--member", false, account, "Member account; repeat for more."), repeatedRefFlag("--readonly", false, account, "Read-only account; repeat for more."), confirmFlag(confirmAccessChange)},
@@ -108,7 +108,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--message", true, message, "Exact message to delete."), confirmFlag(confirmDestructive)}, fields(refField("message_ref", message, "Canonical deleted message reference.")), chatwork.TaskMessagesDelete, confirmDestructive, "messages show",
 			writeMutation("chatwork-message", "--message", "--room", operation.CardinalityOne, no, no, yes)),
 		chatworkRead("room-tasks list", "List tasks in one exact room", "--room <room-ref> [--account <account-ref>] [--assigned-by <account-ref>] [--status open|done]", RoleAct,
-			"chatwork.room-tasks.manage", "List a bounded room task collection with exact task and account references",
+			"chatwork.room-tasks.manage", "List a bounded room task collection in one fixed positional schema with exact task and account references",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose tasks are read."), refFlag("--account", false, account, "Filter by exact assignee account."), refFlag("--assigned-by", false, account, "Filter by exact assigning account."), enumFlag("--status", false, "Filter by task status.", "open", "done")}, taskFields(room, task, account, message, true), chatwork.TaskRoomTasksList),
 		chatworkMutation("room-tasks create", "Create tasks for exact assignees in one room", "--room <room-ref> --body <text> --assignee <account-ref> [--limit <unix-time>] [--limit-type date|time]", RoleAct,
 			"chatwork.room-tasks.manage", "Create the selected task body for exact account assignees in one room",
@@ -122,7 +122,7 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--room", true, room, "Exact parent room."), refFlag("--task", true, task, "Exact task to change."), enumFlag("--status", true, "Replacement task status.", "open", "done")}, fields(refField("task_ref", task, "Canonical updated task reference.")), chatwork.TaskRoomTasksSetStatus, "", "room-tasks show",
 			writeMutation("chatwork-task", "--task", "--room", operation.CardinalityOne, yes, no, no)),
 		chatworkRead("files list", "List files in one exact room", "--room <room-ref> [--account <account-ref>]", RoleAct,
-			"chatwork.files.manage", "List a bounded room file collection with exact file, uploader, and message references",
+			"chatwork.files.manage", "List a bounded room file collection in one fixed positional schema; pass positions one and two unchanged to files show",
 			[]CommandInput{refFlag("--room", true, room, "Exact room whose files are read."), refFlag("--account", false, account, "Filter by exact uploader account.")}, fileFields(room, file, account, message, true), chatwork.TaskFilesList),
 		chatworkMutation("files upload", "Upload one bounded file to one exact room", "--room <room-ref> --path <file> [--message <text>]", RoleAct,
 			"chatwork.files.manage", "Upload one local file of at most 5 MiB to the selected room",
@@ -147,8 +147,8 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--invite", true, invite, "Exact invitation-link reference."), confirmFlag(confirmDestructive)}, inviteFields(invite), chatwork.TaskInviteLinkDelete, confirmDestructive, "invite-link show",
 			writeMutation("chatwork-invite-link", "--invite", "", operation.CardinalityOne, no, yes, yes)),
 		chatworkRead("contact-requests list", "Discover incoming contact requests", "", RoleDiscover,
-			"chatwork.contact-requests.manage", "List incoming contact requests with exact request and account references",
-			nil, fields(refField("request_ref", request, "Canonical incoming-request reference."), refField("account_ref", account, "Canonical requesting account reference."), textField("name", "Requesting account display name."), textField("message", "Non-empty request message as untrusted external text, when present."), limitField(), completeField()), chatwork.TaskContactRequestsList),
+			"chatwork.contact-requests.manage", "List incoming contact requests in one fixed positional schema with exact request and account references",
+			nil, fields(refField("request_ref", request, "Canonical incoming-request reference in position one."), refField("account_ref", account, "Canonical requesting account reference in position two."), textField("name", "Terminal-safe quoted requesting account name in position three."), textField("message", "Optional terminal-safe quoted request message in the final position."), limitField(), completeField()), chatwork.TaskContactRequestsList),
 		chatworkMutation("contact-requests accept", "Accept one exact contact request", "--request <request-ref>", RoleAct,
 			"chatwork.contact-requests.manage", "Accept the selected incoming contact request",
 			[]CommandInput{refFlag("--request", true, request, "Exact incoming-request reference.")}, fields(refField("account_ref", account, "Canonical accepted contact account reference."), refField("room_ref", room, "Canonical direct-room reference.")), chatwork.TaskContactRequestsAccept, "", "contact-requests list",
@@ -329,7 +329,13 @@ func completeField() OutputField {
 	return booleanField("complete", "Whether this output is the complete documented collection for the operation.")
 }
 func roomFields(room string, collection bool) []OutputField {
-	result := fields(refField("room_ref", room, "Canonical room reference accepted unchanged by room actions."), textField("name", "Room name as untrusted external text."), textField("type", "Room type."), textField("role", "Authenticated account role."), integerField("unread", "Unread message count."), integerField("mentions", "Unread mention count."), integerField("tasks", "Incomplete task count."))
+	roomDescription := "Canonical room reference accepted unchanged by room actions."
+	nameDescription := "Room name as untrusted external text."
+	if collection {
+		roomDescription = "Canonical room reference in position one; pass it unchanged to room actions."
+		nameDescription = "Terminal-safe quoted room name in position two."
+	}
+	result := fields(refField("room_ref", room, roomDescription), textField("name", nameDescription), textField("type", "Room type."), textField("role", "Authenticated account role."), integerField("unread", "Unread message count."), integerField("mentions", "Unread mention count."), integerField("tasks", "Incomplete task count."))
 	if collection {
 		result = append(result, completeField())
 	}
@@ -357,14 +363,38 @@ func messageFields(room, message, account string, collection bool) []OutputField
 	return result
 }
 func taskFields(room, task, account, message string, collection bool) []OutputField {
-	result := fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical assignee account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task completion status."), integerField("limit_time", "Unix deadline or zero."))
+	taskDescription := "Canonical task reference."
+	roomDescription := "Canonical parent room reference."
+	accountDescription := "Canonical assignee account reference."
+	messageDescription := "Canonical task-message reference."
+	bodyDescription := "Task body as untrusted external text."
+	if collection {
+		taskDescription = "Canonical task reference in position one."
+		roomDescription = "Canonical parent room reference in position two."
+		accountDescription = "Canonical assignee account reference in position three."
+		messageDescription = "Canonical task-message reference in position four."
+		bodyDescription = "Terminal-safe quoted task body in position five."
+	}
+	result := fields(refField("task_ref", task, taskDescription), refField("room_ref", room, roomDescription), refField("account_ref", account, accountDescription), refField("message_ref", message, messageDescription), textField("body", bodyDescription), textField("status", "Task completion status."), integerField("limit_time", "Unix deadline or zero."))
 	if collection {
 		result = append(result, limitField(), completeField())
 	}
 	return result
 }
 func fileFields(room, file, account, message string, collection bool) []OutputField {
-	result := fields(refField("file_ref", file, "Canonical file reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical uploader account reference."), refField("message_ref", message, "Canonical file-message reference."), textField("name", "File name as untrusted external text."), integerField("size", "File size in bytes."))
+	fileDescription := "Canonical file reference."
+	roomDescription := "Canonical parent room reference."
+	accountDescription := "Canonical uploader account reference."
+	messageDescription := "Canonical file-message reference."
+	nameDescription := "File name as untrusted external text."
+	if collection {
+		fileDescription = "Canonical file reference in position one; pass it unchanged to files show --file."
+		roomDescription = "Canonical parent room reference in position two; pass it unchanged to files show --room."
+		accountDescription = "Canonical uploader account reference in position three."
+		messageDescription = "Position four is a canonical file-message reference when present or the literal absent; never pass absent as a reference."
+		nameDescription = "Terminal-safe quoted file name in position five."
+	}
+	result := fields(refField("file_ref", file, fileDescription), refField("room_ref", room, roomDescription), refField("account_ref", account, accountDescription), refField("message_ref", message, messageDescription), textField("name", nameDescription), integerField("size", "File size in bytes."))
 	if collection {
 		return append(result, limitField(), completeField())
 	}

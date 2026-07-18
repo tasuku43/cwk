@@ -1,0 +1,7 @@
+files count=6 limit=100 complete=false
+  file-ref=6302 room-ref=4401 account-ref=2201 message-ref=8801 name=untrusted:"release.txt" size=0
+  file-ref=6301 room-ref=4401 account-ref=2202 message-ref=absent name=untrusted:"notes.txt" size=4096
+  file-ref=6306 room-ref=4401 account-ref=2201 message-ref=8803 name=untrusted:"design draft.pdf" size=18342
+  file-ref=6303 room-ref=4401 account-ref=2202 message-ref=8804 name=untrusted:"windows\\\\path.txt" size=12
+  file-ref=6305 room-ref=4401 account-ref=2201 message-ref=absent name=untrusted:"schema:\\n999 1 injected" size=1
+  file-ref=6304 room-ref=4401 account-ref=2202 message-ref=8806 name=untrusted:"final.csv" size=721

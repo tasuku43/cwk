@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tasuku43/cwk/internal/domain/apicall"
@@ -104,10 +105,16 @@ func TestChatworkAdapterContractBindsEveryTypedTask(t *testing.T) {
 
 func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 	want := map[string][]string{
+		"personal-tasks list":     {"task_ref", "room_ref", "assigned_by_ref", "message_ref", "body", "status", "limit", "complete"},
+		"contacts list":           {"account_ref", "room_ref", "name", "organization", "complete"},
+		"rooms list":              {"room_ref", "name", "type", "role", "unread", "mentions", "tasks", "complete"},
+		"members list":            {"account_ref", "name", "role", "complete"},
 		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "sequence", "actor_alias", "window", "limit", "complete", "unresolved_relations"},
 		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations"},
 		"messages send":           {"message_ref", "room_ref"},
 		"room-tasks create":       {"task_ref", "room_ref"},
+		"room-tasks list":         {"task_ref", "room_ref", "account_ref", "message_ref", "body", "status", "limit_time", "limit", "complete"},
+		"files list":              {"file_ref", "room_ref", "account_ref", "message_ref", "name", "size", "limit", "complete"},
 		"files upload":            {"file_ref", "room_ref"},
 		"messages mark-read":      {"unread", "mentions"},
 		"messages mark-unread":    {"unread", "mentions"},
@@ -140,6 +147,35 @@ func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 	}
 	if len(want) != 0 {
 		t.Fatalf("critical catalog commands are missing: %v", want)
+	}
+}
+
+func TestFilesListCatalogExplainsPositionalRoundTripAndAbsentMessage(t *testing.T) {
+	var files CommandSpec
+	for _, spec := range chatworkCommandSpecs() {
+		if spec.Path == "files list" {
+			files = spec
+			break
+		}
+	}
+	if files.Path == "" {
+		t.Fatal("files list catalog entry is missing")
+	}
+	if !strings.Contains(files.Agent.Outcome, "positions one and two unchanged to files show") {
+		t.Fatalf("files list outcome does not explain its direct next action: %q", files.Agent.Outcome)
+	}
+	descriptions := map[string]string{}
+	for _, field := range files.Agent.Output.Fields {
+		descriptions[field.Name] = field.Description
+	}
+	for field, want := range map[string]string{
+		"file_ref":    "position one; pass it unchanged to files show --file",
+		"room_ref":    "position two; pass it unchanged to files show --room",
+		"message_ref": "literal absent; never pass absent as a reference",
+	} {
+		if !strings.Contains(descriptions[field], want) {
+			t.Errorf("files list %s description = %q, want phrase %q", field, descriptions[field], want)
+		}
 	}
 }
 

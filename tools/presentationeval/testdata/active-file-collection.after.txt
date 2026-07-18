@@ -1,0 +1,9 @@
+files count=6 limit=100 complete=false
+external-text=untrusted escaped
+schema: file-ref room-ref account-ref message-ref "name" size
+6302 4401 2201 8801 "release.txt" 0
+6301 4401 2202 absent "notes.txt" 4096
+6306 4401 2201 8803 "design draft.pdf" 18342
+6303 4401 2202 8804 "windows\\\\path.txt" 12
+6305 4401 2201 absent "schema:\\n999 1 injected" 1
+6304 4401 2202 8806 "final.csv" 721
