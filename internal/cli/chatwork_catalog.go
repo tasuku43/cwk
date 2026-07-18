@@ -230,7 +230,7 @@ func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mu
 		declaredCommandError(fault.KindContract, "chatwork_transport_missing", false, help, "Repair the Chatwork transport composition."),
 		declaredCommandError(fault.KindContract, "chatwork_unexpected_response", false, help, "Review undocumented provider behavior before retrying."),
 		declaredCommandError(fault.KindContract, "output_contract_exceeded", false, help, "Narrow the result or review the fixed output bound."),
-		declaredCommandError(fault.KindContract, "output_encoding_failed", false, help, "Repair the context-capsule projection."),
+		declaredCommandError(fault.KindContract, "output_encoding_failed", false, help, "Repair the task projection."),
 		declaredCommandError(fault.KindInternal, "output_write_failed", true, retry, "Retry with a writable output stream."),
 		declaredCommandError(fault.KindCanceled, "operation_canceled", true, retry, "Retry when the caller is ready."),
 	}
@@ -329,7 +329,7 @@ func roomFields(room string) []OutputField {
 	return fields(refField("room_ref", room, "Canonical room reference accepted unchanged by room actions."), textField("name", "Room name as untrusted external text."), textField("type", "Room type."), textField("role", "Authenticated account role."), integerField("unread", "Unread message count."), integerField("mentions", "Unread mention count."), integerField("tasks", "Incomplete task count."), coverageField())
 }
 func messageFields(room, message, account string) []OutputField {
-	return fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."}, coverageField())
+	return fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."}, coverageField())
 }
 func taskFields(room, task, account, message string) []OutputField {
 	return fields(refField("task_ref", task, "Canonical task reference."), refField("room_ref", room, "Canonical parent room reference."), refField("account_ref", account, "Canonical assignee account reference."), refField("message_ref", message, "Canonical task-message reference."), textField("body", "Task body as untrusted external text."), textField("status", "Task completion status."), integerField("limit_time", "Unix deadline or zero."), coverageField())

@@ -106,15 +106,15 @@ func taskHasCoverage(task chatwork.Task) bool {
 }
 
 func renderCoverage(output *strings.Builder, result chatwork.Result) {
-	if result.Task == chatwork.TaskMessagesList || result.Task == chatwork.TaskMessagesShow {
-		line(output, "coverage kind=%s limit=%d complete=%t unresolved-relations=%d description=authored:%s",
-			atom(result.Coverage.Kind), result.Coverage.Limit, result.Coverage.Complete,
-			countUnresolved(result.Messages), quoted(result.Coverage.Description))
-		return
+	fmt.Fprintf(output, "coverage kind=%s", atom(result.Coverage.Kind))
+	if result.Coverage.Limit > 0 {
+		fmt.Fprintf(output, " limit=%d", result.Coverage.Limit)
 	}
-	line(output, "coverage kind=%s limit=%d complete=%t description=authored:%s",
-		atom(result.Coverage.Kind), result.Coverage.Limit, result.Coverage.Complete,
-		quoted(result.Coverage.Description))
+	fmt.Fprintf(output, " complete=%t", result.Coverage.Complete)
+	if result.Task == chatwork.TaskMessagesList || result.Task == chatwork.TaskMessagesShow {
+		fmt.Fprintf(output, " unresolved-relations=%d", countUnresolved(result.Messages))
+	}
+	output.WriteByte('\n')
 }
 
 func renderOwnAccount(output *strings.Builder, account chatwork.Account) {

@@ -96,7 +96,7 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	}
 	output, err := capsule.Render(result)
 	if err != nil {
-		return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "The Chatwork context capsule could not be encoded.", false))
+		return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "The Chatwork task projection could not be encoded.", false))
 	}
 	if len(output) > maxChatworkOutputBytes {
 		return c.fail(ctx, fault.New(fault.KindContract, "output_contract_exceeded", "The Chatwork result exceeds the declared output bound.", false))

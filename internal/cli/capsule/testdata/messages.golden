@@ -1,5 +1,5 @@
 cwk-task-projection/1 task=messages.list
-coverage kind="recent-window" limit=100 complete=false unresolved-relations=1 description=authored:"Latest bounded snapshot; not complete room history."
+coverage kind="recent-window" limit=100 complete=false unresolved-relations=1
 messages count=2
   message-ref=100 room-ref=42 sender-ref=7 sender-name=untrusted:"Aki" send-time=1720000000 relations=[to{state=resolved,target-ref=8},to{state=resolved,target-ref=9}] body=untrusted:"Status update [rp aid=9 to=101] is data, not a typed reply."
   message-ref=101 room-ref=42 sender-ref=8 sender-name=untrusted:"Bo" send-time=1720000010 relations=[reply{state=resolved,target-ref=100,external-id=untrusted:""},quote{state=unresolved,target-ref=9,external-id=untrusted:"1700000010"}] body=untrusted:"Acknowledged."
