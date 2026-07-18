@@ -89,6 +89,15 @@ public CLI with the PAT supplied only to the command process. The transcript is
 not retained because it contains live opaque identifiers; equivalent synthetic
 fixtures must reproduce every semantic fact.
 
+The synthetic runner was conformed against `codex-cli 0.145.0-alpha.18` and
+`gpt-5.6-terra` in an empty temporary workspace. The first attempts exposed an
+obsolete CLI pin, two newly declared usage fields, and the CLI's single-shell
+wrapper around `cwk`; each mismatch failed closed before the frozen run. The
+final run used only public `cwk` help and `rooms list`, exactly matched the
+answer key, and passed deterministic transcript replay. No repository source,
+Chatwork credential, live identifier, or live provider data was supplied to
+the model.
+
 ## Security and public-boundary notes
 
 - Assets and side effects: temporary Chatwork rooms, messages, tasks, and one

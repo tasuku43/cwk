@@ -13,33 +13,33 @@
 ## Decide
 
 - [x] Define materially different candidate concepts and a control.
-- [ ] Review concept mocks with the project owner before renderer
+- [x] Review concept mocks with the project owner before renderer
   implementation.
-- [ ] Freeze fixture corpus and presentation-independent answer keys.
-- [ ] Freeze prompts, agent/model/tool versions, repetitions, token accounting,
+- [x] Freeze fixture corpus and presentation-independent answer keys.
+- [x] Freeze prompts, agent/model/tool versions, repetitions, token accounting,
   score calculation, and promotion thresholds.
-- [ ] Decide whether the competition may select a task-family hybrid or must
+- [x] Decide whether the competition may select a task-family hybrid or must
   select one universal grammar.
 - [ ] Record the accepted compatibility decision after evaluation.
 
 ## Repair shared correctness
 
-- [ ] Add all-result catalog-field completeness tests.
-- [ ] Preserve parent room references for message send, task create, and file
+- [x] Add all-result catalog-field completeness tests.
+- [x] Preserve parent room references for message send, task create, and file
   upload results.
-- [ ] Preserve explicit zero unread/mention counts for read-state results.
-- [ ] Preserve declared acknowledgement for destructive/acceptance results.
-- [ ] Render declared contact-request names.
-- [ ] Align quote fixtures with the real adapter's account-and-time relation.
-- [ ] Align the `members replace` administrator field name with the catalog.
-- [ ] Pass focused contract, capsule, and relationship tests.
+- [x] Preserve explicit zero unread/mention counts for read-state results.
+- [x] Preserve declared acknowledgement for destructive/acceptance results.
+- [x] Render declared contact-request names.
+- [x] Align quote fixtures with the real adapter's account-and-time relation.
+- [x] Align the `members replace` administrator field name with the catalog.
+- [x] Pass focused contract, capsule, and relationship tests.
 
 ## Compete
 
-- [ ] Create one worktree per candidate from the same reviewed base commit.
-- [ ] Freeze a base commit containing shared correctness repairs, fixtures,
+- [x] Create one worktree per candidate from the same reviewed base commit.
+- [x] Freeze a base commit containing shared correctness repairs, fixtures,
   answer keys, evaluator, frozen protocol, and passing gates.
-- [ ] Implement C0 measurement without behavior changes.
+- [x] Implement C0 measurement without behavior changes.
 - [ ] Implement P, L, R, and J behind the presentation boundary only.
 - [ ] Prove semantic, identity, trust, bounds, determinism, and output-boundary
   eligibility before scoring resource efficiency.

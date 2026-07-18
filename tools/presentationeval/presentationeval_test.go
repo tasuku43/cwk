@@ -150,7 +150,7 @@ func TestCommittedProtocolAndPromptMatchScaffold(t *testing.T) {
 		Unit   string `json:"unit"`
 	}
 	readJSONFile(t, filepath.Join(base, "benchmark-protocol.json"), &protocol)
-	if protocol.Schema != "cwk-presentation-benchmark-protocol/1" || protocol.Status != "scaffold-not-frozen" || protocol.Unit != "natural-language-agent-workflow" {
+	if protocol.Schema != "cwk-presentation-benchmark-protocol/1" || protocol.Status != "frozen" || protocol.Unit != "natural-language-agent-workflow" {
 		t.Fatalf("protocol = %#v", protocol)
 	}
 	for _, name := range []string{"benchmark-protocol.schema.json", "run.schema.json"} {

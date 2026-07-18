@@ -1,34 +1,43 @@
-# Proposed Competition Protocol
+# Frozen Competition Protocol
 
 This protocol must be reviewed and changed to `Frozen` before scored candidate
 measurements begin. Prototype commits made while the runner was undergoing
 live conformance are rebased onto the exact frozen base and reverified before
 they become eligible; no prototype measurement is scored.
 
-- Status: Proposed
+- Status: Frozen on 2026-07-18
 - Baseline: C0, `cwk-context-capsule/1`
 - Challengers: P task projection, L normalized ledger, R relationship-first
   timeline, J typed semantic JSON
 - Semantic inputs: [fixtures.md](fixtures.md)
 - Concepts: [concepts.md](concepts.md)
 
-## Pre-implementation freeze
+## Frozen values
 
-Record these exact values before creating candidate commits:
+| Item | Frozen value |
+|---|---|
+| Candidate base and runner | `95b5e331590a6462fb69b20ea454cc18defbc912` |
+| Live conformance runner | `5b37b1c67b58956beb54b9b7f5dbb5944178e9bf` |
+| Fixture and answer-key SHA-256 | `50482bd32d446e6512202c011fe107d5842c20ec7da30a8e66732b98aa6a289f` |
+| Simulator SHA-256 | `fb3d8382b5071e88be02e0d0dfd0227f70942c3abdb22b371eb182df444111ec` |
+| System prompt SHA-256 | `89b74ae96e29476d7507ee6781b990794faafdb849a03c48d5076de370bbb08b` |
+| Agent | `codex-cli 0.145.0-alpha.18` from the installed ChatGPT app |
+| Model | `gpt-5.6-terra`, reasoning effort `medium` |
+| Runtime | Go `1.26.5`, Darwin `25.5.0` arm64 |
+| Timeout / concurrency | 180 seconds per model call / one scored call at a time |
+| Run order | candidate Latin-square seed `20260718`; scenario IDs in lexical order |
+| Sampling controls | temperature and seed are not exposed; all observable controls are fixed |
+| Usage fields | input, cached input, cache-write input, output, reasoning output; total is input + output |
+| Invocation cap | 60 scored runs, 80 paired-probe calls, 160 total including conformance |
 
-- base commit after shared correctness repair;
-- fixture and semantic-answer-key SHA-256 digests;
-- runner and scoring commit;
-- agent/model identifiers and immutable version or dated snapshot;
-- system/task prompts and context supplied to each run;
-- tool versions and invocation budget;
-- temperature, seed support, timeout, and concurrency;
-- authoritative API token-usage fields and pinned fallback tokenizer/version;
-- operating system, architecture, and Go version.
+The final conformance run used synthetic `attention.rooms` at the live
+conformance commit and passed exact answer, critical fields, workflow,
+reference reuse, usage, and transcript replay. Eleven external invocations are
+conservatively charged to conformance, leaving the 140-call scored schedule
+within the authorized 160-call cap.
 
-No candidate implementation starts while one of these is undecided. A later
-change invalidates prior measurements unless the report demonstrates that it
-cannot affect the comparison.
+Any later change to the candidate base, fixture, simulator, prompt, model,
+reasoning effort, runner policy, or schedule invalidates prior measurements.
 
 ## Isolated worktrees
 

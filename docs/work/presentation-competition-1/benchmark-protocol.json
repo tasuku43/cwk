@@ -1,6 +1,6 @@
 {
   "schema": "cwk-presentation-benchmark-protocol/1",
-  "status": "scaffold-not-frozen",
+  "status": "frozen",
   "unit": "natural-language-agent-workflow",
   "simulator": {
     "invocation": "candidate-local tools/presentationeval compiled as disposable bin/cwk by the trusted runner",
@@ -11,6 +11,11 @@
   },
   "run": {
     "schema": "cwk-presentation-run/1",
+    "candidate_base_commit": "95b5e331590a6462fb69b20ea454cc18defbc912",
+    "live_conformance_commit": "5b37b1c67b58956beb54b9b7f5dbb5944178e9bf",
+    "fixture_answer_key_sha256": "50482bd32d446e6512202c011fe107d5842c20ec7da30a8e66732b98aa6a289f",
+    "simulator_sha256": "fb3d8382b5071e88be02e0d0dfd0227f70942c3abdb22b371eb182df444111ec",
+    "system_prompt_sha256": "89b74ae96e29476d7507ee6781b990794faafdb849a03c48d5076de370bbb08b",
     "primary_repetitions": 1,
     "high_variance_additional_repetitions": 1,
     "max_help_calls": 2,
@@ -27,6 +32,13 @@
     "codex_cli": "codex-cli 0.145.0-alpha.18",
     "model": "gpt-5.6-terra",
     "reasoning_effort": "medium",
+    "timeout_seconds": 180,
+    "concurrency": 1,
+    "order_seed": 20260718,
+    "go_version": "go1.26.5",
+    "platform": "darwin/arm64 (Darwin 25.5.0)",
+    "live_conformance_external_invocations": 11,
+    "live_conformance_passed": true,
     "codex_event_policy": "unknown lifecycle events, item types, non-cwk commands, and shell operators fail closed"
   },
   "usage": {
