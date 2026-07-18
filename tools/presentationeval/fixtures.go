@@ -151,7 +151,7 @@ func roomsResult(rooms []chatwork.Room) chatwork.Result {
 }
 
 func messagesResult(messages []chatwork.Message) chatwork.Result {
-	return chatwork.Result{Task: chatwork.TaskMessagesList, Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false, Description: "synthetic latest 100-message window; not complete room history"}, Messages: messages}
+	return chatwork.Result{Task: chatwork.TaskMessagesList, MessageRoom: messages[0].Room, Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false, Description: "synthetic latest 100-message window; not complete room history"}, Messages: messages}
 }
 
 func singleCoverage() chatwork.Coverage {
