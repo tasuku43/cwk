@@ -95,6 +95,28 @@ the variable when the shell no longer needs it. Missing or malformed token
 input fails before a Chatwork request and scoped help identifies
 `CWK_API_TOKEN` as the required environment input.
 
+### Read agent output
+
+Chatwork success output uses the versioned `cwk-task-projection/1` text
+contract. It prints canonical references directly and keeps only the fields
+declared for that task, plus coverage/completeness and explicit trust framing.
+For example, a synthetic room collection is shaped as:
+
+```text
+cwk-task-projection/1 task=rooms.list
+coverage kind="provider_collection" complete=true
+rooms count=2
+  room-ref=4101 name=untrusted:"Synthetic Lab" type="group" role="admin" unread=0 mentions=1 tasks=0
+  room-ref=4102 name=untrusted:"Synthetic Archive" type="group" role="member" unread=0 mentions=0 tasks=0
+```
+
+Pass a value such as `4101` unchanged to a declared `--room` input. Display
+aliases, icon URLs, empty descriptions, zero coverage limits, duplicated
+coverage prose, and other non-contract fields are not emitted. A bounded
+message window still declares `complete=false`, its positive limit, unresolved
+relationship count, typed To/reply/quote facts, and message bodies as
+`untrusted` external text.
+
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 
 ## Repository map

@@ -42,7 +42,9 @@ It omits:
 - zero coverage limits that do not represent a bound;
 - authored coverage prose already represented by typed kind/bound/completeness
   fields; and
-- raw Chatwork notation when typed To, reply, and quote facts already exist.
+- separate renderer-derived raw-notation records when typed To, reply, and
+  quote facts already exist. The declared message body remains visible as
+  untrusted external text even when it contains provider notation.
 
 Sender display name remains in message results because it is a useful declared
 identity label, is structurally framed as external text, and avoids forcing a
