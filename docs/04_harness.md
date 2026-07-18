@@ -174,7 +174,7 @@ Every strong statement should identify its enforcement path.
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
 | Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
-| Current text schema | Golden/schema tests require `cwk-task-projection/1`; migration notes record the breaking replacement of `cwk-context-capsule/1` without claiming a Competition 1 winner |
+| Current success text | All-route and golden tests require the headerless task projection, forbid the repeated schema/task and standalone coverage records, and preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing; aliases, semantic raw-notation records, wire extras, and non-contract defaults fail |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |

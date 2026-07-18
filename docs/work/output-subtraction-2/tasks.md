@@ -6,22 +6,22 @@
   authentication, external-API, and agent-readiness documents.
 - [x] Confirm repository profile is `ready` and main starts clean.
 - [x] Record the owner's selected removals, finite scope, and non-goals.
-- [ ] Audit representative live read-only outputs without retaining private data.
-- [ ] Audit every success result variant and current active contract reference.
+- [x] Audit representative live read-only outputs without retaining private data.
+- [x] Audit every success result variant and current active contract reference.
 
 ## Decide
 
 - [x] Remove the schema/task preamble.
 - [x] Remove the standalone coverage record and provider-oriented coverage kind.
 - [x] Retain actionable limit/completeness/uncertainty on the closest task record.
-- [ ] Classify every remaining rendered field as keep/drop/conditional.
-- [ ] Record compatibility, safety, and historical-evidence boundaries.
+- [x] Classify every remaining rendered field as keep/drop/conditional.
+- [x] Record compatibility, safety, and historical-evidence boundaries.
 
 ## Implement
 
-- [ ] Add failing all-route and negative-canary tests.
-- [ ] Update the success renderer and current catalog declarations.
-- [ ] Update active synthetic fixtures/evaluation inputs.
+- [x] Add all-route and negative-canary tests.
+- [x] Update the success renderer and current catalog declarations.
+- [x] Update active synthetic fixtures/evaluation inputs.
 - [ ] Update governing documentation, Skill guidance, README, and migration note.
 - [ ] Commit in reviewable contract/implementation/documentation slices.
 

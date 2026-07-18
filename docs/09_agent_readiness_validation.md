@@ -1,6 +1,6 @@
 # Agent Readiness Validation
 
-This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. Candidate C (`cwk-context-capsule/1`) is the first stable presentation baseline. The current default is the P-derived task projection (`cwk-task-projection/1`), adopted by an explicit owner compatibility decision after Competition 1 was inconclusive and hardened beyond the frozen candidate, not as its benchmark winner. This document also defines how future candidates are compared before another default change.
+This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. Candidate C (`cwk-context-capsule/1`) is the first stable presentation baseline. A P-derived task projection (`cwk-task-projection/1`) was adopted by an explicit owner compatibility decision after Competition 1 was inconclusive and hardened beyond the frozen candidate, not as its benchmark winner. The current default is its further reviewed headerless subtraction. This document also defines how future candidates are compared before another default change.
 
 ## Interaction budgets
 
@@ -68,9 +68,9 @@ The first complete implementation tested candidate C directly against the semant
 
 Competition 1 was inconclusive: benchmark/oracle defects and recovery-prompt ambiguity made its promotion result non-authoritative. Raw runs, score summaries, audit findings, and known defects remain evidence. They must not be discarded, corrected in place, or relabeled to imply that candidate P won.
 
-After that experiment, the project owner made a separate compatibility decision to select a P-derived task projection as the default. Frozen candidate P supplied the implementation seed; the integrated projection adds semantic kind hardening and further subtraction that were not part of its ineligible score. The decision accepts a breaking migration from `cwk-context-capsule/1` to `cwk-task-projection/1`: old capsule headers, dictionaries, aliases, ordering, and grammar are not preserved. The semantic answer, exact canonical-reference identity, bounds/completeness/uncertainty, and external-text trust classification remain required.
+After that experiment, the project owner made a separate compatibility decision to select a P-derived task projection as the default. Frozen candidate P supplied the implementation seed; the integrated projection added semantic hardening and subtraction that were not part of its ineligible score. A later owner review made a second pre-1.0 compatibility decision to remove the repeated `cwk-task-projection/1 task=...` preamble and standalone provider-oriented coverage record. Old capsule headers, dictionaries, aliases, ordering, grammar, and the intermediate task-projection header are not preserved. The semantic answer, exact canonical-reference identity, bounds/completeness/uncertainty, and external-text trust classification remain required.
 
-The current task projection is subtractive. It emits only catalog-declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. It emits no display aliases, semantic records derived from raw Chatwork notation, provider/wire extras, duplicated coverage prose, or helpful non-contract defaults. Declared message bodies remain visible untrusted data and cannot inject CLI-authored structure.
+The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. It emits no in-band schema/task preamble, display aliases, standalone provider coverage records, semantic records derived from raw Chatwork notation, provider/wire extras, empty optional shells, or helpful non-contract defaults. Declared message bodies remain visible untrusted data and cannot inject CLI-authored structure.
 
 For a future replacement, before experimental implementation the competition work packet pins:
 
@@ -153,7 +153,7 @@ go run ./cmd/cwk help messages list --format agent
 go test ./internal/cli -run 'TestChatwork|TestAgent'
 ```
 
-These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. Candidate-C evidence validates the first-stable baseline. Current task-projection semantic, subtractive-field, hostile-text, canonical-reference, and golden tests validate `cwk-task-projection/1` as the selected default.
+These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. Candidate-C evidence validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default.
 
 ## Review record
 

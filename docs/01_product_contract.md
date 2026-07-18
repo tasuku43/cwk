@@ -62,14 +62,14 @@ Every eligible presentation must:
 
 Candidate C (`cwk-context-capsule/1`) is the first stable data-presentation baseline: a versioned context capsule with deterministic headers, a compact local reference dictionary, typed task facts, explicit relationships/bounds, and visibly framed external text. Its local aliases were never command identity.
 
-The current default is the P-derived task projection (`cwk-task-projection/1`). It is a subtractive projection of the same typed result and emits only:
+The current default is the headerless task projection, a further reviewed subtraction of the P-derived `cwk-task-projection/1`. It starts directly with the task result and emits only:
 
 - catalog-declared fields required by the task result;
 - exact canonical references, without a display-alias dictionary;
 - task-relevant bounds, completeness, and uncertainty;
 - structural trust framing for every external-text field.
 
-It does not publish raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, or helpful non-contract defaults. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
+It does not publish an in-band schema/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes`. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 ## Future presentation-selection lifecycle
 
@@ -159,7 +159,7 @@ Every provider operation has one transport attempt. An uncertain mutation result
 
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
-Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The current default deliberately breaks that text contract: `cwk-context-capsule/1` is replaced by `cwk-task-projection/1`, and clients must not expect the old headers, reference dictionary, aliases, field ordering, or grammar. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of that text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
+Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the current headerless projection makes a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
 
 ## Explicit non-goals
 
@@ -172,4 +172,4 @@ Candidate C's versioned grammar, schemas, defaults, and ordering were the compat
 
 ## Completion evidence for a Chatwork capability
 
-A capability is complete only when its outcome, non-goals, command discovery, semantic model, exact references, bounds, failure behavior, authentication, external-call policy, hostile-data tests, and agent transcript are reviewed. Candidate C remains the first-stable baseline evidence. Presentation-dependent completion under the current default requires the `cwk-task-projection/1` contract, its subtractive-field and golden evidence, and the recorded breaking compatibility decision; no benchmark-win claim is required or permitted for the inconclusive Competition 1. Required repository gates must pass.
+A capability is complete only when its outcome, non-goals, command discovery, semantic model, exact references, bounds, failure behavior, authentication, external-call policy, hostile-data tests, and agent transcript are reviewed. Candidate C remains the first-stable baseline evidence. Presentation-dependent completion under the current default requires the headerless task-projection contract, its subtractive-field and golden evidence, and the recorded breaking compatibility decisions; no benchmark-win claim is required or permitted for the inconclusive Competition 1. Required repository gates must pass.

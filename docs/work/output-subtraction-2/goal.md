@@ -48,7 +48,7 @@ asked for the remaining commands to be inspected under the same rule.
   complete.
 - [ ] Empty and task-irrelevant fields identified by the audit are absent,
   while canonical references, semantic relationships, explicit zero/false,
-  acknowledgements, and trust framing remain mechanically enforced.
+  mutation outcomes, and trust framing remain mechanically enforced.
 - [ ] Root/scoped agent discovery, commands, authentication, failures, effects,
   stdout/stderr ownership, and exit behavior are unchanged.
 - [ ] Live read-only representative commands need no post-processing and match
