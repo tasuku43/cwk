@@ -525,19 +525,13 @@ func (r Result) resultVariant() string {
 }
 
 func (r Result) validateVariantFacts() error {
-	validateRef := func(ref Reference, kind ReferenceKind) error {
-		if ref.Kind != kind {
-			return fmt.Errorf("Chatwork result reference kind is %s, want %s", ref.Kind, kind)
-		}
-		return ValidateReference(ref.Kind, ref.Value)
-	}
 	validateRefs := func(refs []Reference, kind ReferenceKind, allowMany bool) error {
 		if len(refs) == 0 || (!allowMany && len(refs) != 1) {
 			return fmt.Errorf("Chatwork result must contain the declared %s reference cardinality", kind)
 		}
 		seen := make(map[Reference]struct{}, len(refs))
 		for _, ref := range refs {
-			if err := validateRef(ref, kind); err != nil {
+			if err := validateResultReference("mutation identity", ref, kind, false); err != nil {
 				return err
 			}
 			if _, exists := seen[ref]; exists {
@@ -549,6 +543,47 @@ func (r Result) validateVariantFacts() error {
 	}
 
 	switch r.Task {
+	case TaskAccountShow, TaskContactRequestsAccept:
+		return validateResultAccount("account", *r.Account, false)
+	case TaskContactsList, TaskMembersList:
+		for index, account := range r.Accounts {
+			if err := validateResultAccount(fmt.Sprintf("account[%d]", index), account, false); err != nil {
+				return err
+			}
+		}
+	case TaskRoomsList, TaskRoomsShow:
+		for index, room := range r.Rooms {
+			if err := validateResultRoom(fmt.Sprintf("room[%d]", index), room); err != nil {
+				return err
+			}
+		}
+	case TaskMessagesList, TaskMessagesShow:
+		for index, message := range r.Messages {
+			if err := validateResultMessage(fmt.Sprintf("message[%d]", index), message); err != nil {
+				return err
+			}
+		}
+	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
+		accountOptional := r.Task == TaskPersonalTasksList
+		for index, task := range r.Tasks {
+			if err := validateResultWorkTask(fmt.Sprintf("task[%d]", index), task, accountOptional); err != nil {
+				return err
+			}
+		}
+	case TaskFilesList, TaskFilesShow:
+		for index, file := range r.Files {
+			if err := validateResultFile(fmt.Sprintf("file[%d]", index), file); err != nil {
+				return err
+			}
+		}
+	case TaskInviteLinkShow, TaskInviteLinkCreate, TaskInviteLinkUpdate, TaskInviteLinkDelete:
+		return validateResultReference("invite link", r.InviteLink.Ref, ReferenceInvite, false)
+	case TaskContactRequestsList:
+		for index, request := range r.Requests {
+			if err := validateResultContactRequest(fmt.Sprintf("contact request[%d]", index), request); err != nil {
+				return err
+			}
+		}
 	case TaskRoomsCreate:
 		return validateRefs(r.Created, ReferenceRoom, false)
 	case TaskRoomsUpdate:
@@ -561,17 +596,17 @@ func (r Result) validateVariantFacts() error {
 		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceMessage, false); err != nil {
 			return err
 		}
-		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+		return validateResultReference("parent room", r.CreatedInRoom.ParentRoom, ReferenceRoom, false)
 	case TaskRoomTasksCreate:
 		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceTask, true); err != nil {
 			return err
 		}
-		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+		return validateResultReference("parent room", r.CreatedInRoom.ParentRoom, ReferenceRoom, false)
 	case TaskFilesUpload:
 		if err := validateRefs(r.CreatedInRoom.Refs, ReferenceFile, false); err != nil {
 			return err
 		}
-		return validateRef(r.CreatedInRoom.ParentRoom, ReferenceRoom)
+		return validateResultReference("parent room", r.CreatedInRoom.ParentRoom, ReferenceRoom, false)
 	case TaskMessagesMarkRead, TaskMessagesMarkUnread:
 		if r.ReadState.Unread < 0 || r.ReadState.Mentions < 0 {
 			return fmt.Errorf("Chatwork read-state counts must not be negative")
@@ -580,16 +615,110 @@ func (r Result) validateVariantFacts() error {
 		if !r.Acknowledgement.Acknowledged {
 			return fmt.Errorf("Chatwork room acknowledgement must be explicit")
 		}
-		return validateRef(r.Acknowledgement.Target, ReferenceRoom)
+		return validateResultReference("acknowledged room", r.Acknowledgement.Target, ReferenceRoom, false)
 	case TaskContactRequestsReject:
 		if !r.Acknowledgement.Acknowledged {
 			return fmt.Errorf("Chatwork contact-request acknowledgement must be explicit")
 		}
-		return validateRef(r.Acknowledgement.Target, ReferenceRequest)
+		return validateResultReference("acknowledged contact request", r.Acknowledgement.Target, ReferenceRequest, false)
 	case TaskMembersReplace:
 		if r.MembershipCounts.Administrators < 0 || r.MembershipCounts.Members < 0 || r.MembershipCounts.Readonly < 0 {
 			return fmt.Errorf("Chatwork membership counts must not be negative")
 		}
 	}
 	return nil
+}
+
+func validateResultReference(field string, ref Reference, kind ReferenceKind, optional bool) error {
+	if optional && ref == (Reference{}) {
+		return nil
+	}
+	if ref.Kind != kind {
+		return fmt.Errorf("Chatwork result %s reference kind is %s, want %s", field, ref.Kind, kind)
+	}
+	if err := ValidateReference(ref.Kind, ref.Value); err != nil {
+		return fmt.Errorf("Chatwork result %s reference is invalid: %w", field, err)
+	}
+	return nil
+}
+
+func validateResultRoom(field string, room Room) error {
+	return validateResultReference(field, room.Ref, ReferenceRoom, false)
+}
+
+func validateResultAccount(field string, account Account, optional bool) error {
+	if err := validateResultReference(field, account.Ref, ReferenceAccount, optional); err != nil {
+		return err
+	}
+	return validateResultReference(field+" room", account.Room, ReferenceRoom, true)
+}
+
+func validateResultMessage(field string, message Message) error {
+	if err := validateResultReference(field, message.Ref, ReferenceMessage, false); err != nil {
+		return err
+	}
+	if err := validateResultReference(field+" room", message.Room, ReferenceRoom, false); err != nil {
+		return err
+	}
+	if err := validateResultAccount(field+" sender", message.Sender, false); err != nil {
+		return err
+	}
+	for index, recipient := range message.Recipients {
+		if err := validateResultReference(fmt.Sprintf("%s recipient[%d]", field, index), recipient, ReferenceAccount, false); err != nil {
+			return err
+		}
+	}
+	if message.Reply != nil {
+		if message.Reply.Kind != "reply" {
+			return fmt.Errorf("Chatwork result %s reply relation kind is %q, want %q", field, message.Reply.Kind, "reply")
+		}
+		if err := validateResultReference(field+" reply target", message.Reply.Target, ReferenceMessage, false); err != nil {
+			return err
+		}
+	}
+	for index, quote := range message.Quotes {
+		if quote.Kind != "quote" {
+			return fmt.Errorf("Chatwork result %s quote[%d] relation kind is %q, want %q", field, index, quote.Kind, "quote")
+		}
+		if err := validateResultReference(fmt.Sprintf("%s quote[%d] target", field, index), quote.Target, ReferenceAccount, false); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateResultWorkTask(field string, task WorkTask, accountOptional bool) error {
+	if err := validateResultReference(field, task.Ref, ReferenceTask, false); err != nil {
+		return err
+	}
+	if err := validateResultRoom(field+" room", task.Room); err != nil {
+		return err
+	}
+	if err := validateResultAccount(field+" account", task.Account, accountOptional); err != nil {
+		return err
+	}
+	if err := validateResultAccount(field+" assigned by", task.AssignedBy, false); err != nil {
+		return err
+	}
+	return validateResultReference(field+" message", task.Message, ReferenceMessage, false)
+}
+
+func validateResultFile(field string, file File) error {
+	if err := validateResultReference(field, file.Ref, ReferenceFile, false); err != nil {
+		return err
+	}
+	if err := validateResultReference(field+" room", file.Room, ReferenceRoom, false); err != nil {
+		return err
+	}
+	if err := validateResultAccount(field+" account", file.Account, false); err != nil {
+		return err
+	}
+	return validateResultReference(field+" message", file.Message, ReferenceMessage, false)
+}
+
+func validateResultContactRequest(field string, request ContactRequest) error {
+	if err := validateResultReference(field, request.Ref, ReferenceRequest, false); err != nil {
+		return err
+	}
+	return validateResultAccount(field+" account", request.Account, false)
 }
