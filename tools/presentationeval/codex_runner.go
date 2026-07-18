@@ -168,7 +168,7 @@ func parseCodexJSONL(input, last []byte, allowCWK bool) (codexTranscript, error)
 					started[item.ID] = item.Command
 					continue
 				}
-				if started[item.ID] != item.Command || item.ExitCode == nil || item.Status != "completed" {
+				if started[item.ID] != item.Command || item.ExitCode == nil || !validCommandCompletion(item.Status, *item.ExitCode) {
 					return codexTranscript{}, fmt.Errorf("unmatched or incomplete command event %q", item.ID)
 				}
 				argv, err := parseCWKCommand(item.Command)
@@ -221,6 +221,10 @@ func parseCodexJSONL(input, last []byte, allowCWK bool) (codexTranscript, error)
 	}
 	transcript.FinalAnswer = append(json.RawMessage(nil), last...)
 	return transcript, nil
+}
+
+func validCommandCompletion(status string, exitCode int) bool {
+	return status == "completed" || (status == "failed" && exitCode != 0)
 }
 
 func exactKeys(values map[string]json.RawMessage, allowed ...string) error {

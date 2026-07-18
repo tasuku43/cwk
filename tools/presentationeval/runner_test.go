@@ -162,15 +162,27 @@ func TestRecordedAgentFailureIsPreservedAsIneligible(t *testing.T) {
 	}
 }
 
-func TestFrozenSuiteSchedulesTwelveScoredRunsAndEightProbePairs(t *testing.T) {
+func TestFrozenSuiteSchedulesTenScoredRunsAndEightProbePairs(t *testing.T) {
 	runs := 0
 	probes := 0
 	for _, scenario := range situations() {
 		runs += suiteRepetitions(scenario)
 		probes++
 	}
-	if runs != 12 || probes != 8 {
-		t.Fatalf("suite schedule = %d runs, %d probes; want 12 and 8", runs, probes)
+	if runs != 10 || probes != 8 {
+		t.Fatalf("suite schedule = %d runs, %d probes; want 10 and 8", runs, probes)
+	}
+}
+
+func TestCommandCompletionAcceptsIntentionalNonZeroExitOnlyAsFailed(t *testing.T) {
+	for _, test := range []struct {
+		status string
+		exit   int
+		want   bool
+	}{{"completed", 0, true}, {"completed", 6, true}, {"failed", 6, true}, {"failed", 0, false}, {"in_progress", 0, false}} {
+		if got := validCommandCompletion(test.status, test.exit); got != test.want {
+			t.Errorf("validCommandCompletion(%q, %d) = %t, want %t", test.status, test.exit, got, test.want)
+		}
 	}
 }
 

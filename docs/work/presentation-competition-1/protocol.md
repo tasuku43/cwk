@@ -28,13 +28,19 @@ they become eligible; no prototype measurement is scored.
 | Run order | candidate Latin-square seed `20260718`; scenario IDs in lexical order |
 | Sampling controls | temperature and seed are not exposed; all observable controls are fixed |
 | Usage fields | input, cached input, cache-write input, output, reasoning output; total is input + output |
-| Invocation cap | 60 scored runs, 80 paired-probe calls, 160 total including conformance |
+| Invocation cap | 50 scored runs, 80 paired-probe calls, 160 total including conformance and invalidated attempts |
 
 The final conformance run used synthetic `attention.rooms` at the live
 conformance commit and passed exact answer, critical fields, workflow,
 reference reuse, usage, and transcript replay. Eleven external invocations are
-conservatively charged to conformance, leaving the 140-call scored schedule
-within the authorized 160-call cap.
+conservatively charged to conformance. A post-freeze runner-v1 attempt then
+exposed that Codex reports an intentional nonzero `cwk` exit with command
+status `failed`; the original parser accepted only `completed`. Five affected
+or pre-amendment submissions (15 invocations) are retained but invalidated.
+Amendment 1 accepts `failed` only when the exit code is nonzero and reduces
+confirmation repetitions as described below. The replacement 130-call
+schedule keeps the conservative total at 156, within the authorized 160-call
+cap.
 
 Any later change to the candidate base, fixture, simulator, prompt, model,
 reasoning effort, runner policy, or schedule invalidates prior measurements.
@@ -91,7 +97,7 @@ go run ./tools/presentationeval run \
   --out <runs.jsonl>
 ```
 
-Run the complete frozen 12-run candidate schedule as:
+Run the complete amended 10-run candidate schedule as:
 
 ```sh
 go run ./tools/presentationeval run-suite \
@@ -149,16 +155,17 @@ declared canonical field directly is allowed.
 ## Repetitions and run order
 
 - One primary repetition per candidate/situation pair.
-- One additional repetition for each of the four predeclared high-variance
-  situations.
-- Eight scored agent situations: 8 primary runs per candidate, plus 4
-  high-variance confirmation runs per candidate, for 12 runs per candidate
-  and exactly 60 scheduled scored runs across the fixed five candidates.
+- One additional repetition for the two predeclared confirmation situations:
+  `rooms.large-attention` and `thread.relationships`.
+- Eight scored agent situations: 8 primary runs per candidate, plus 2
+  confirmation runs per candidate, for 10 runs per candidate and exactly 50
+  scheduled scored runs across the fixed five candidates.
 - Run one paired no-tool token probe per candidate/situation, then reuse that
   deterministic measurement for the additional high-variance repetition.
-- The scored schedule consumes at most 140 external model invocations: 60
-  workflow runs plus 80 paired-probe calls. The complete competition,
-  including conformance attempts, has a hard cap of 160 invocations.
+- The replacement scored schedule consumes 130 external model invocations: 50
+  workflow runs plus 80 paired-probe calls. Conformance and the retained
+  invalidated runner-v1 attempts bring the conservative total to 156. The hard
+  cap remains 160.
 - Alternate candidate order with a Latin-square schedule using fixed seed
   `20260718`.
 - Do not run two candidates in the same agent context.

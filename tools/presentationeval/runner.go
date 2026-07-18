@@ -259,10 +259,12 @@ func runSuite(ctx context.Context, dependencies runnerDependencies, request benc
 }
 
 func suiteRepetitions(scenario situation) int {
-	if scenario.HighVariance {
+	switch scenario.ID {
+	case "rooms.large-attention", "thread.relationships":
 		return 2
+	default:
+		return 1
 	}
-	return 1
 }
 
 func requireCleanRepository(ctx context.Context, runner processRunner, repository string) error {

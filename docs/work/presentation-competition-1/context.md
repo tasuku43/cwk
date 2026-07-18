@@ -98,6 +98,14 @@ answer key, and passed deterministic transcript replay. No repository source,
 Chatwork credential, live identifier, or live provider data was supplied to
 the model.
 
+The first scored recovery attempt exposed one remaining event-contract gap:
+an intentional fixture exit code 6 is a completed observed command for the
+benchmark, while Codex labels its command item `failed`. Runner v1 rejected it
+before deterministic replay. All five submissions produced before that
+discovery are retained outside the scored corpus. Amendment 1 accepts that
+status only with a nonzero exit and restarts every candidate from the amended
+common base; no candidate result from runner v1 is promoted into the score.
+
 ## Security and public-boundary notes
 
 - Assets and side effects: temporary Chatwork rooms, messages, tasks, and one
