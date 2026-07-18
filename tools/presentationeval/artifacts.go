@@ -45,14 +45,16 @@ func prepareArtifacts(outputDirectory, candidate string, iterations int) error {
 	if err := validateCandidate(candidate); err != nil {
 		return err
 	}
-	if err := createEmptyDirectory(outputDirectory); err != nil {
+	root, err := createEmptyRoot(outputDirectory)
+	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(outputDirectory, "rendered", candidate), 0o755); err != nil {
+	defer root.Close()
+	if err := root.MkdirAll(filepath.Join("rendered", candidate), privateDirectoryMode); err != nil {
 		return err
 	}
 
-	metricsFile, err := os.OpenFile(filepath.Join(outputDirectory, "render-metrics.jsonl"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	metricsFile, err := root.OpenFile("render-metrics.jsonl", os.O_WRONLY|os.O_CREATE|os.O_EXCL, privateArtifactMode)
 	if err != nil {
 		return err
 	}
@@ -76,7 +78,7 @@ func prepareArtifacts(outputDirectory, candidate string, iterations int) error {
 				return renderErr
 			}
 			filename := artifactName(scenario.ID, path) + ".txt"
-			if err := os.WriteFile(filepath.Join(outputDirectory, "rendered", candidate, filename), output, 0o644); err != nil {
+			if err := writeRootFile(root, filepath.Join("rendered", candidate, filename), output); err != nil {
 				return err
 			}
 			for _, measurement := range rawMetrics {
@@ -135,7 +137,7 @@ func prepareArtifacts(outputDirectory, candidate string, iterations int) error {
 		"answer-keys.json":   map[string]any{"schema": toolSchema, "situations": keys},
 		"summary-input.json": summaryInput,
 	} {
-		if err := writeJSONFile(filepath.Join(outputDirectory, name), value); err != nil {
+		if err := writeRootJSON(root, name, value); err != nil {
 			return err
 		}
 	}
@@ -204,38 +206,9 @@ func artifactName(situationID, path string) string {
 	return replacer.Replace(situationID + "__" + path)
 }
 
-func createEmptyDirectory(path string) error {
-	info, err := os.Stat(path)
-	switch {
-	case os.IsNotExist(err):
-		return os.MkdirAll(path, 0o755)
-	case err != nil:
-		return err
-	case !info.IsDir():
-		return fmt.Errorf("output path must be a directory")
-	}
-	entries, err := os.ReadDir(path)
-	if err != nil {
-		return err
-	}
-	if len(entries) != 0 {
-		return fmt.Errorf("output directory must be empty")
-	}
-	return nil
-}
-
 func hashBytes(value []byte) string {
 	digest := sha256.Sum256(value)
 	return hex.EncodeToString(digest[:])
-}
-
-func writeJSONFile(path string, value any) error {
-	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-	return writeJSON(file, value)
 }
 
 func writeJSON(writer io.Writer, value any) error {

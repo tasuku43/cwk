@@ -26,7 +26,7 @@ func runProbeCommand(ctx context.Context, dependencies runnerDependencies, reque
 		return err
 	}
 	defer os.RemoveAll(workspace)
-	if err := os.MkdirAll(filepath.Join(workspace, "workspace"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(workspace, "workspace"), privateDirectoryMode); err != nil {
 		return err
 	}
 	probe, err := measurePresentationProbe(ctx, dependencies, request, scenario, workspace, 1)

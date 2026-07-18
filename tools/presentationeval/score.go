@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
@@ -14,16 +13,18 @@ import (
 )
 
 func scoreRuns(runsPath, outputDirectory string) error {
-	if err := createEmptyDirectory(outputDirectory); err != nil {
+	root, err := createEmptyRoot(outputDirectory)
+	if err != nil {
 		return err
 	}
-	input, err := os.Open(runsPath)
+	defer root.Close()
+	input, err := openRootedPath(runsPath, os.O_RDONLY)
 	if err != nil {
 		return err
 	}
 	defer input.Close()
 
-	output, err := os.OpenFile(filepath.Join(outputDirectory, "runs.scored.jsonl"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	output, err := root.OpenFile("runs.scored.jsonl", os.O_WRONLY|os.O_CREATE|os.O_EXCL, privateArtifactMode)
 	if err != nil {
 		return err
 	}
@@ -72,7 +73,7 @@ func scoreRuns(runsPath, outputDirectory string) error {
 	}
 
 	summary := summarizeScores(scored)
-	return writeJSONFile(filepath.Join(outputDirectory, "score-summary.json"), summary)
+	return writeRootJSON(root, "score-summary.json", summary)
 }
 
 func scoreSubmission(submission runSubmission) (scoredRun, error) {

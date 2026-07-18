@@ -57,11 +57,34 @@ func invokeCodex(ctx context.Context, runner processRunner, invocation codexInvo
 		return codexTranscript{}, err
 	}
 	defer os.RemoveAll(temp)
-	schemaPath := filepath.Join(temp, "answer.schema.json")
-	lastPath := filepath.Join(temp, "last-message.json")
-	if err := os.WriteFile(schemaPath, schema, 0o600); err != nil {
+	root, err := os.OpenRoot(temp)
+	if err != nil {
 		return codexTranscript{}, err
 	}
+	defer root.Close()
+	schemaPath := filepath.Join(temp, "answer.schema.json")
+	lastPath := filepath.Join(temp, "last-message.json")
+	if err := writeRootFile(root, "answer.schema.json", schema); err != nil {
+		return codexTranscript{}, err
+	}
+	args := codexArguments(invocation, schemaPath, lastPath)
+	callContext, cancel := context.WithTimeout(ctx, 3*time.Minute)
+	defer cancel()
+	response, err := runner.Run(callContext, processRequest{Purpose: processCodexRun, Path: invocation.CodexPath, Args: args, Env: benchmarkProcessEnvironment(), Stdin: []byte(invocation.Prompt), StdoutLimit: maxCodexOutputBytes, StderrLimit: 1 << 20, TrustedRoot: filepath.Dir(invocation.Workspace)})
+	if err != nil {
+		return codexTranscript{}, fmt.Errorf("invoke codex: %w", err)
+	}
+	if response.ExitCode != 0 {
+		return codexTranscript{}, fmt.Errorf("codex exited %d: %s", response.ExitCode, strings.TrimSpace(string(response.Stderr)))
+	}
+	last, err := root.ReadFile("last-message.json")
+	if err != nil {
+		return codexTranscript{}, fmt.Errorf("read final answer: %w", err)
+	}
+	return parseCodexJSONL(response.Stdout, last, invocation.AllowCWK)
+}
+
+func codexArguments(invocation codexInvocation, schemaPath, lastPath string) []string {
 	args := []string{"--ask-for-approval", "never", "exec", "--sandbox", "workspace-write", "--ignore-user-config", "--ignore-rules", "--ephemeral", "--skip-git-repo-check", "--strict-config", "-C", invocation.Workspace, "--model", invocation.Model, "--json", "--output-schema", schemaPath, "--output-last-message", lastPath,
 		"-c", "sandbox_workspace_write.network_access=false", "-c", "shell_environment_policy.inherit=none",
 		"-c", `model_reasoning_effort="medium"`,
@@ -76,20 +99,7 @@ func invokeCodex(ctx context.Context, runner processRunner, invocation codexInvo
 		args = append(args, "--disable", "shell_tool")
 	}
 	args = append(args, "-")
-	callContext, cancel := context.WithTimeout(ctx, 3*time.Minute)
-	defer cancel()
-	response, err := runner.Run(callContext, processRequest{Path: invocation.CodexPath, Args: args, Env: benchmarkProcessEnvironment(), Stdin: []byte(invocation.Prompt), StdoutLimit: maxCodexOutputBytes, StderrLimit: 1 << 20})
-	if err != nil {
-		return codexTranscript{}, fmt.Errorf("invoke codex: %w", err)
-	}
-	if response.ExitCode != 0 {
-		return codexTranscript{}, fmt.Errorf("codex exited %d: %s", response.ExitCode, strings.TrimSpace(string(response.Stderr)))
-	}
-	last, err := os.ReadFile(lastPath)
-	if err != nil {
-		return codexTranscript{}, fmt.Errorf("read final answer: %w", err)
-	}
-	return parseCodexJSONL(response.Stdout, last, invocation.AllowCWK)
+	return args
 }
 
 func parseCodexJSONL(input, last []byte, allowCWK bool) (codexTranscript, error) {

@@ -38,6 +38,7 @@ type runnerDependencies struct {
 }
 
 type processRequest struct {
+	Purpose     processPurpose
 	Path        string
 	Args        []string
 	Dir         string
@@ -45,6 +46,7 @@ type processRequest struct {
 	Stdin       []byte
 	StdoutLimit int
 	StderrLimit int
+	TrustedRoot string
 }
 
 type processResponse struct {
@@ -60,7 +62,12 @@ type processRunner interface {
 type osProcessRunner struct{}
 
 func (osProcessRunner) Run(ctx context.Context, request processRequest) (processResponse, error) {
-	command := exec.CommandContext(ctx, request.Path, request.Args...)
+	executable, err := validateProcessRequest(request)
+	if err != nil {
+		return processResponse{}, err
+	}
+	// #nosec G204 -- validateProcessRequest binds the executable and argv to one fixed evaluation purpose.
+	command := exec.CommandContext(ctx, executable, request.Args...)
 	command.Dir = request.Dir
 	command.Env = request.Env
 	command.Stdin = bytes.NewReader(request.Stdin)
@@ -69,7 +76,7 @@ func (osProcessRunner) Run(ctx context.Context, request processRequest) (process
 	stderr.Limit = request.StderrLimit
 	command.Stdout = &stdout
 	command.Stderr = &stderr
-	err := command.Run()
+	err = command.Run()
 	response := processResponse{Stdout: stdout.Bytes(), Stderr: stderr.Bytes(), ExitCode: 0}
 	var exitError *exec.ExitError
 	if errors.As(err, &exitError) {
@@ -168,16 +175,16 @@ func runBenchmark(ctx context.Context, dependencies runnerDependencies, request 
 	defer os.RemoveAll(workspace)
 	fixtureBin := filepath.Join(workspace, "bin")
 	work := filepath.Join(workspace, "workspace")
-	if err := os.MkdirAll(fixtureBin, 0o755); err != nil {
+	if err := os.MkdirAll(fixtureBin, privateDirectoryMode); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(work, 0o755); err != nil {
+	if err := os.MkdirAll(work, privateDirectoryMode); err != nil {
 		return err
 	}
-	if err := buildFixture(ctx, dependencies.Processes, repository, filepath.Join(fixtureBin, "cwk")); err != nil {
+	if err := buildFixture(ctx, dependencies.Processes, repository, workspace, filepath.Join(fixtureBin, "cwk")); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(request.OutputPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o644)
+	file, err := openRootedPath(request.OutputPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND)
 	if err != nil {
 		return err
 	}
@@ -268,7 +275,7 @@ func suiteRepetitions(scenario situation) int {
 }
 
 func requireCleanRepository(ctx context.Context, runner processRunner, repository string) error {
-	response, err := runner.Run(ctx, processRequest{Path: "git", Args: []string{"status", "--porcelain", "--untracked-files=all"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
+	response, err := runner.Run(ctx, processRequest{Purpose: processGitStatus, Path: "git", Args: []string{"status", "--porcelain", "--untracked-files=all"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
 	if err != nil || response.ExitCode != 0 {
 		return fmt.Errorf("inspect candidate worktree: %w", err)
 	}
@@ -302,7 +309,7 @@ func validateBenchmarkRequest(request benchmarkRequest) error {
 }
 
 func verifyCodexVersion(ctx context.Context, runner processRunner, path string) error {
-	response, err := runner.Run(ctx, processRequest{Path: path, Args: []string{"--version"}, Env: benchmarkProcessEnvironment(), StdoutLimit: 4096, StderrLimit: 4096})
+	response, err := runner.Run(ctx, processRequest{Purpose: processCodexVersion, Path: path, Args: []string{"--version"}, Env: benchmarkProcessEnvironment(), StdoutLimit: 4096, StderrLimit: 4096})
 	if err != nil {
 		return fmt.Errorf("read codex version: %w", err)
 	}
@@ -313,7 +320,7 @@ func verifyCodexVersion(ctx context.Context, runner processRunner, path string) 
 }
 
 func repositoryCommit(ctx context.Context, runner processRunner, repository string) (string, error) {
-	response, err := runner.Run(ctx, processRequest{Path: "git", Args: []string{"rev-parse", "HEAD"}, Dir: repository, Env: os.Environ(), StdoutLimit: 4096, StderrLimit: 4096})
+	response, err := runner.Run(ctx, processRequest{Purpose: processGitRevision, Path: "git", Args: []string{"rev-parse", "HEAD"}, Dir: repository, Env: os.Environ(), StdoutLimit: 4096, StderrLimit: 4096})
 	if err != nil {
 		return "", fmt.Errorf("resolve candidate commit: %w", err)
 	}
@@ -327,8 +334,8 @@ func repositoryCommit(ctx context.Context, runner processRunner, repository stri
 	return commit, nil
 }
 
-func buildFixture(ctx context.Context, runner processRunner, repository, output string) error {
-	response, err := runner.Run(ctx, processRequest{Path: "go", Args: []string{"build", "-trimpath", "-o", output, "./tools/presentationeval"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
+func buildFixture(ctx context.Context, runner processRunner, repository, trustedRoot, output string) error {
+	response, err := runner.Run(ctx, processRequest{Purpose: processGoBuild, Path: "go", Args: []string{"build", "-trimpath", "-o", output, "./tools/presentationeval"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20, TrustedRoot: trustedRoot})
 	if err != nil {
 		return fmt.Errorf("build fixture cwk: %w", err)
 	}

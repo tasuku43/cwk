@@ -55,7 +55,7 @@ func (f *fakeCodexProcesses) Run(_ context.Context, request processRequest) (pro
 		return processResponse{Stdout: []byte(strings.Repeat("a", 40) + "\n")}, nil
 	case "go":
 		output := argumentAfter(request.Args, "-o")
-		if err := os.WriteFile(output, []byte("fixture"), 0o755); err != nil {
+		if err := os.WriteFile(output, []byte("fixture"), 0o750); err != nil {
 			f.t.Fatal(err)
 		}
 		return processResponse{}, nil
