@@ -1,9 +1,9 @@
 # Work Goal: Make the Chatwork API token the sole authentication path
 
-- Status: Active
+- Status: Complete
 - Owner: Codex
 - Target: Current implementation cycle
-- Related ADRs: ADR 0001; ADR 0002 will be superseded
+- Related ADRs: ADR 0001; ADR 0003 (supersedes ADR 0002)
 
 ## Outcome
 
@@ -34,21 +34,21 @@ first stable release.
 
 ## Acceptance criteria
 
-- [ ] Every Chatwork API task declares PAT as its only accepted method and reads
+- [x] Every Chatwork API task declares PAT as its only accepted method and reads
   the token only from `CWK_API_TOKEN` in the command process.
-- [ ] `CWK_AUTH_METHOD`, `auth login`, `auth status`, `auth logout`, OAuth
+- [x] `CWK_AUTH_METHOD`, `auth login`, `auth status`, `auth logout`, OAuth
   configuration, callback input, browser opening, OS credential storage, and
   OAuth dependencies are absent from the runnable product.
-- [ ] Missing or invalid token input fails before a provider task request with
+- [x] Missing or invalid token input fails before a provider task request with
   structured recovery pointing to exact scoped help.
-- [ ] Root and scoped agent help let an agent discover and invoke a known
+- [x] Root and scoped agent help let an agent discover and invoke a known
   Chatwork task without an authentication-method choice or authentication
   lifecycle command.
-- [ ] No token is accepted in argv, persisted by `cwk`, emitted to stdout or
+- [x] No token is accepted in argv, persisted by `cwk`, emitted to stdout or
   stderr, or included in fixtures and diagnostics.
-- [ ] Existing task semantics, references, effects, mutation confirmation,
+- [x] Existing task semantics, references, effects, mutation confirmation,
   API coverage, output bounds, and candidate-C output remain unchanged.
-- [ ] `task check`, `task security`, and `task public:check` pass.
+- [x] `task check`, `task security`, and `task public:check` pass.
 
 ## Governing documents
 
@@ -56,8 +56,8 @@ first stable release.
 - Product contract section: Authentication and external-call decisions
 - Architecture or security invariant: Chatwork authentication topology and
   credentials and secrets
-- Existing ADR: ADR 0002 is superseded because its selected OAuth mechanism is
-  removed
+- Existing ADR: ADR 0003 supersedes ADR 0002 because the selected OAuth
+  mechanism is removed
 
 ## Completion definition
 
@@ -65,3 +65,6 @@ The work is complete when the public and internal OAuth surface is removed,
 PAT-only behavior and zero-call failures are mechanically tested, durable
 contracts agree, all required verification profiles pass, and the changes are
 committed in reviewable units.
+
+Completed on 2026-07-18 with implementation commit `0f6d49b`, durable-contract
+commit `6032b27`, and the verification evidence recorded in `context.md`.

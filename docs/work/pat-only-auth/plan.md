@@ -42,3 +42,8 @@
 - `task check`
 - `task security`
 - `task public:check`
+
+All listed verification completed successfully on 2026-07-18. The public
+agent-help replay additionally confirmed that the root index has no `auth`
+namespace and scoped Chatwork help declares `methods: ["pat"]` plus the sole
+`CWK_API_TOKEN` prerequisite.

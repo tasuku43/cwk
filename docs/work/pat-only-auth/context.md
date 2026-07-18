@@ -37,3 +37,18 @@ claim OAuth support.
 
 - A future release may evaluate OS-protected PAT persistence, but it is outside
   this bounded change and requires a separate thesis/security decision.
+
+## Completion evidence
+
+- `cli.Catalog` contains no authentication lifecycle command and every
+  Chatwork task declares only `pat`.
+- Production resolves `CWK_API_TOKEN` lazily on the first API task, so root and
+  scoped help succeed without reading a credential.
+- Missing and malformed PAT tests fail closed before constructing a usable
+  authenticated task service; adapter binding tests reject cross-client use.
+- OAuth/config/browser/keyring packages and the OAuth/keyring dependency graph
+  are absent. `go list -m all` contains only the main module.
+- Manual agent-help replay showed one PAT prerequisite, no method selector, and
+  exact scoped-help recovery for `chatwork_token_missing`.
+- `task check:fast`, `task check`, `task security`, and `task public:check`
+  passed on 2026-07-18 with Go 1.26.5.
