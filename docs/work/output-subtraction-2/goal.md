@@ -1,6 +1,6 @@
 # Work Goal: Remove non-actionable success-output metadata
 
-- Status: In progress
+- Status: Complete
 - Owner: Project owner
 - Target: One bounded post-completion output audit
 - Related ADRs: None
@@ -39,21 +39,21 @@ asked for the remaining commands to be inspected under the same rule.
 
 ## Acceptance criteria
 
-- [ ] All 33 public Chatwork success routes and every domain result variant are
+- [x] All 33 public Chatwork success routes and every domain result variant are
   represented in an explicit keep/drop/conditional audit.
-- [ ] Normal success output has no schema/task preamble and no standalone
+- [x] Normal success output has no schema/task preamble and no standalone
   coverage record or provider-oriented coverage kind.
-- [ ] Collection bounds/completeness and message unresolved-relation facts are
+- [x] Collection bounds/completeness and message unresolved-relation facts are
   retained in the closest task record without making partial output look
   complete.
-- [ ] Empty and task-irrelevant fields identified by the audit are absent,
+- [x] Empty and task-irrelevant fields identified by the audit are absent,
   while canonical references, semantic relationships, explicit zero/false,
   mutation outcomes, and trust framing remain mechanically enforced.
-- [ ] Root/scoped agent discovery, commands, authentication, failures, effects,
+- [x] Root/scoped agent discovery, commands, authentication, failures, effects,
   stdout/stderr ownership, and exit behavior are unchanged.
-- [ ] Live read-only representative commands need no post-processing and match
+- [x] Live read-only representative commands need no post-processing and match
   the reviewed contract; synthetic fixtures cover mutation outcomes.
-- [ ] `task check`, `task security`, and `task public:check` pass.
+- [x] `task check`, `task security`, and `task public:check` pass.
 
 ## Governing documents
 

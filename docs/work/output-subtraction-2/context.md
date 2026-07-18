@@ -108,6 +108,12 @@ Representative read-only commands are run with the PAT supplied only by the
 user's command environment. Exact live output is not committed. Mutation
 routes are rendered from publishable synthetic `chatwork.Result` fixtures.
 
+The final replay covered account, status, contacts, rooms, personal tasks,
+single-room, members, recent messages, room tasks, files, and invitation-link
+reads. All eleven succeeded without the removed preamble, standalone coverage
+record, or provider organization-ID shell. Root and exact-command agent help
+also exposed the revised fields without an exploratory command.
+
 ## Security and public-boundary notes
 
 - No new side effect, credential source, destination, dependency, or file

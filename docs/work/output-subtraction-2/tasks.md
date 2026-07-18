@@ -22,22 +22,22 @@
 - [x] Add all-route and negative-canary tests.
 - [x] Update the success renderer and current catalog declarations.
 - [x] Update active synthetic fixtures/evaluation inputs.
-- [ ] Update governing documentation, Skill guidance, README, and migration note.
-- [ ] Commit in reviewable contract/implementation/documentation slices.
+- [x] Update governing documentation, Skill guidance, README, and migration note.
+- [x] Commit in reviewable contract/implementation/documentation slices.
 
 ## Verify
 
-- [ ] Focused tests pass. Evidence:
-- [ ] Representative live read-only commands match the reviewed output. Evidence:
-- [ ] Agent discovery and interpretation stay within budget. Evidence:
-- [ ] `task check` passes. Evidence:
-- [ ] `task security` passes. Evidence:
-- [ ] `task public:check` passes. Evidence:
-- [ ] Repository status and generated diff are understood. Evidence:
+- [x] Focused tests pass. Evidence: `go test ./internal/cli/capsule ./internal/cli ./tools/presentationeval`.
+- [x] Representative live read-only commands match the reviewed output. Evidence: eleven account/room/message/task/file/invite read routes passed shape checks without retaining live output.
+- [x] Agent discovery and interpretation stay within budget. Evidence: root and exact `messages list` schema-v3 help succeeded and declared the revised fields.
+- [x] `task check` passes. Evidence: Go 1.26.5 full profile.
+- [x] `task security` passes. Evidence: modules verified, security boundary clean, no vulnerabilities found.
+- [x] `task public:check` passes. Evidence: public repoguard and contractlint passed.
+- [x] Repository status and generated diff are understood. Evidence: implementation `4e6c5c2`, contract/docs `a201200`, and this closeout commit.
 
 ## Hand off
 
-- [ ] Acceptance criteria have evidence.
-- [ ] Durable decisions were promoted out of the work packet.
-- [ ] Temporary diagnostics and sensitive artifacts were removed.
-- [ ] Follow-up work is explicit and does not reopen another optimization round.
+- [x] Acceptance criteria have evidence.
+- [x] Durable decisions were promoted out of the work packet.
+- [x] Temporary diagnostics and sensitive artifacts were removed.
+- [x] Follow-up work is explicit and does not reopen another optimization round.
