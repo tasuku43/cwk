@@ -1,6 +1,6 @@
 # Work Goal: Make bounded message relations directly legible
 
-- Status: Accepted
+- Status: Complete
 - Owner: Project owner and Codex
 - Target: Current implementation cycle
 - Related ADRs: None; this is an explicit pre-1.0 text-contract decision
@@ -73,3 +73,7 @@ The work ends when every acceptance criterion has recorded evidence, affected
 thesis/product/architecture/readiness/harness contracts agree, `task check`
 passes, and no live data, credentials, temporary diagnostics, or unrelated
 changes remain.
+
+Completed on 2026-07-19. The final implementation preserves typed semantics,
+passes the repository full gate, and records the bounded token comparison in
+`token-measurement.md`.

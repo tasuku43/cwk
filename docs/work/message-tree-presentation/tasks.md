@@ -13,7 +13,7 @@
 - [x] Verify canonical reference reuse and unchanged machine-oriented outputs.
 - [x] Update catalog and durable documentation.
 - [x] Record same-tokenizer before/after token counts.
-- [ ] Run focused tests and `task check`.
-- [ ] Review diff for unrelated or sensitive material.
-- [ ] Commit coherent implementation/documentation slices.
-- [ ] Mark packet complete with evidence.
+- [x] Run focused tests and `task check`.
+- [x] Review diff for unrelated or sensitive material.
+- [x] Commit coherent implementation/documentation slices.
+- [x] Mark packet complete with evidence.
