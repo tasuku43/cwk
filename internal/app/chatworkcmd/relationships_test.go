@@ -2,6 +2,7 @@ package chatworkcmd
 
 import (
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -200,6 +201,36 @@ func TestResolveMessageRelationsRejectsDuplicateAndInconsistentFactsSafely(t *te
 				t.Fatalf("fault leaked relationship data: %q", structured.Message)
 			}
 		})
+	}
+}
+
+func TestResolveMessageRelationsPreservesProviderOrderAcrossDeepInterleavedReplies(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	messages := make([]chatwork.Message, 50)
+	for index := range messages {
+		messages[index] = chatwork.Message{
+			Ref:  relationshipReference(t, chatwork.ReferenceMessage, fmt.Sprint(1000+index)),
+			Room: room,
+		}
+		if index > 0 {
+			parent := (index - 1) / 2
+			messages[index].Reply = &chatwork.Relation{
+				Kind: "reply", Target: messages[parent].Ref, ExternalID: room.Value,
+			}
+		}
+	}
+
+	got, err := ResolveMessageRelations(messages)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index := range got {
+		if got[index].Ref != messages[index].Ref {
+			t.Fatalf("provider order changed at %d: got %s, want %s", index, got[index].Ref.Value, messages[index].Ref.Value)
+		}
+		if index > 0 && (got[index].Reply == nil || !got[index].Reply.Resolved) {
+			t.Fatalf("reply %d was not resolved: %+v", index, got[index].Reply)
+		}
 	}
 }
 

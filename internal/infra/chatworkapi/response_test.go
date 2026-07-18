@@ -34,7 +34,7 @@ func TestMapResponseCoversResourceShapes(t *testing.T) {
 			}
 		}},
 		{"messages", completeRequest(chatwork.TaskMessagesList), `[{"message_id":"3","account":{"account_id":1,"name":"Alice"},"body":"[To:9] [rp aid=8 to=2-7]","send_time":1,"update_time":0}]`, func(t *testing.T, result chatwork.Result) {
-			if len(result.Messages) != 1 || len(result.Messages[0].Recipients) != 2 || result.Messages[0].Reply.Target.Value != "7" || result.Coverage.Complete {
+			if len(result.Messages) != 1 || result.MessageRoom.Value != "2" || len(result.Messages[0].Recipients) != 2 || result.Messages[0].Reply.Target.Value != "7" || result.Coverage.Complete {
 				t.Fatalf("result = %+v", result)
 			}
 		}},
@@ -67,6 +67,41 @@ func TestMapResponseCoversResourceShapes(t *testing.T) {
 			}
 			test.check(t, result)
 		})
+	}
+}
+
+func TestMapMessageListPreservesProviderOrderAndExactRoomScope(t *testing.T) {
+	request := completeRequest(chatwork.TaskMessagesList)
+	result, err := mapResponse(request, []byte(`[
+		{"message_id":"30","account":{"account_id":1,"name":"A"},"body":"third time","send_time":300,"update_time":0},
+		{"message_id":"10","account":{"account_id":2,"name":"B"},"body":"first time","send_time":100,"update_time":0},
+		{"message_id":"20","account":{"account_id":3,"name":"C"},"body":"second time","send_time":200,"update_time":0}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessageRoom != request.Room {
+		t.Fatalf("message room = %+v, want %+v", result.MessageRoom, request.Room)
+	}
+	want := []string{"30", "10", "20"}
+	for index, message := range result.Messages {
+		if message.Ref.Value != want[index] || message.Room != request.Room {
+			t.Fatalf("message[%d] = %+v, want ref %s in exact room", index, message, want[index])
+		}
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatalf("mapped message window is not request-bound: %v", err)
+	}
+}
+
+func TestEmptyMessageListPreservesExactRoomScope(t *testing.T) {
+	request := completeRequest(chatwork.TaskMessagesList)
+	result := emptyResult(request)
+	if result.MessageRoom != request.Room || result.Messages == nil || len(result.Messages) != 0 {
+		t.Fatalf("empty message result = %+v", result)
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatalf("empty message window is not request-bound: %v", err)
 	}
 }
 

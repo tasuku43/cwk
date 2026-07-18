@@ -161,11 +161,11 @@ func TestResultRejectsContextualReferenceKindLaundering(t *testing.T) {
 		{"room identity", Result{Task: TaskRoomsList, Rooms: []Room{{Ref: account}}}},
 		{"account identity", Result{Task: TaskContactsList, Accounts: []Account{{Ref: room}}}},
 		{"account optional room", Result{Task: TaskContactsList, Accounts: []Account{{Ref: account, Room: account}}}},
-		{"message identity", Result{Task: TaskMessagesList, Messages: []Message{{Ref: room, Room: room, Sender: Account{Ref: account}}}}},
-		{"message room", Result{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: account, Sender: Account{Ref: account}}}}},
-		{"message sender", Result{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: room}}}}},
-		{"message sender optional room", Result{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account, Room: account}}}}},
-		{"message recipient", Result{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}, Recipients: []Reference{message}}}}},
+		{"message identity", Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: room, Room: room, Sender: Account{Ref: account}}}}},
+		{"message room", Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: account, Sender: Account{Ref: account}}}}},
+		{"message sender", Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: room}}}}},
+		{"message sender optional room", Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account, Room: account}}}}},
+		{"message recipient", Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}, Recipients: []Reference{message}}}}},
 		{"task identity", Result{Task: TaskRoomTasksList, Tasks: []WorkTask{{Ref: file, Room: validTask.Room, Account: validTask.Account, AssignedBy: validTask.AssignedBy, Message: message}}}},
 		{"task room", Result{Task: TaskRoomTasksList, Tasks: []WorkTask{{Ref: task, Room: Room{Ref: account}, Account: validTask.Account, AssignedBy: validTask.AssignedBy, Message: message}}}},
 		{"task account", Result{Task: TaskRoomTasksList, Tasks: []WorkTask{{Ref: task, Room: validTask.Room, Account: Account{Ref: room}, AssignedBy: validTask.AssignedBy, Message: message}}}},
@@ -195,7 +195,7 @@ func TestResultRejectsMessageRelationKindAndTargetMismatches(t *testing.T) {
 	account := Reference{Kind: ReferenceAccount, Value: "2"}
 	message := Reference{Kind: ReferenceMessage, Value: "3"}
 	valid := func() Result {
-		return Result{Task: TaskMessagesList, Messages: []Message{{
+		return Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
 			Ref: message, Room: room, Sender: Account{Ref: account},
 			Reply:  &Relation{Kind: "reply", Target: message},
 			Quotes: []Relation{{Kind: "quote", Target: account}},
@@ -238,8 +238,8 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 
 	results := []Result{
 		{Task: TaskAccountShow, Account: &Account{Ref: account}},
-		{Task: TaskMessagesList, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
-		{Task: TaskMessagesList, Messages: []Message{{
+		{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
+		{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
 			Ref: message, Room: room, Sender: Account{Ref: account},
 			Reply: &Relation{Kind: "reply"}, Quotes: []Relation{{Kind: "quote"}},
 		}}},
@@ -257,5 +257,54 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 		if err := result.Validate(); err != nil {
 			t.Errorf("%s optional zero reference failed: %v", result.Task, err)
 		}
+	}
+}
+
+func TestMessageListRequiresExactRoomScopeEvenWhenEmpty(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "1"}
+	valid := Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{}}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("empty scoped message window failed: %v", err)
+	}
+
+	missing := valid
+	missing.MessageRoom = Reference{}
+	if err := missing.Validate(); err == nil {
+		t.Fatal("empty message window without room scope passed")
+	}
+
+	wrongKind := valid
+	wrongKind.MessageRoom = Reference{Kind: ReferenceAccount, Value: "1"}
+	if err := wrongKind.Validate(); err == nil {
+		t.Fatal("message window with non-room scope passed")
+	}
+
+	wrongTask := Result{Task: TaskRoomsList, MessageRoom: room, Rooms: []Room{}}
+	if err := wrongTask.Validate(); err == nil {
+		t.Fatal("message room scope on another task passed")
+	}
+}
+
+func TestMessageListBindsEveryMessageAndRequestToExactRoom(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "1"}
+	otherRoom := Reference{Kind: ReferenceRoom, Value: "2"}
+	message := Reference{Kind: ReferenceMessage, Value: "3"}
+	account := Reference{Kind: ReferenceAccount, Value: "4"}
+	valid := Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
+		Ref: message, Room: room, Sender: Account{Ref: account},
+	}}}
+	if err := valid.ValidateFor(Request{Task: TaskMessagesList, Room: room}); err != nil {
+		t.Fatalf("exact message room binding failed: %v", err)
+	}
+
+	mixed := valid
+	mixed.Messages = append([]Message(nil), valid.Messages...)
+	mixed.Messages[0].Room = otherRoom
+	if err := mixed.Validate(); err == nil {
+		t.Fatal("message from outside the declared window room passed")
+	}
+
+	if err := valid.ValidateFor(Request{Task: TaskMessagesList, Room: otherRoom}); err == nil {
+		t.Fatal("message window bound to a different requested room passed")
 	}
 }

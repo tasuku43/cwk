@@ -207,6 +207,7 @@ func mapResponse(input chatwork.Request, body []byte) (chatwork.Result, error) {
 		if err != nil {
 			return chatwork.Result{}, err
 		}
+		result.MessageRoom = input.Room
 		result.Messages = messages
 	case chatwork.TaskMessagesShow:
 		var wire messageDTO
@@ -376,6 +377,7 @@ func emptyResult(input chatwork.Request) chatwork.Result {
 	case chatwork.TaskRoomsList:
 		result.Rooms = []chatwork.Room{}
 	case chatwork.TaskMessagesList:
+		result.MessageRoom = input.Room
 		result.Messages = []chatwork.Message{}
 	case chatwork.TaskPersonalTasksList, chatwork.TaskRoomTasksList:
 		result.Tasks = []chatwork.WorkTask{}

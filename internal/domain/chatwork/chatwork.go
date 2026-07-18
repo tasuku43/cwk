@@ -359,8 +359,12 @@ type Coverage struct {
 
 // Result is a typed semantic union. Only fields relevant to Task are populated.
 type Result struct {
-	Task             Task
-	Coverage         Coverage
+	Task     Task
+	Coverage Coverage
+	// MessageRoom is the exact room scope of a messages.list window. It remains
+	// present when Messages is an explicitly empty collection so presentation
+	// never has to reconstruct the requested room from an item.
+	MessageRoom      Reference
 	Account          *Account
 	Status           *Status
 	Rooms            []Room
@@ -385,6 +389,9 @@ type Result struct {
 func (r Result) Validate() error {
 	if !r.Task.Valid() {
 		return fmt.Errorf("Chatwork result task is missing or invalid")
+	}
+	if r.Task != TaskMessagesList && r.MessageRoom != (Reference{}) {
+		return fmt.Errorf("Chatwork result message room is only valid for messages.list")
 	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
@@ -465,6 +472,10 @@ func (r Result) ValidateFor(request Request) error {
 	}
 
 	switch r.Task {
+	case TaskMessagesList:
+		if r.MessageRoom != request.Room {
+			return fmt.Errorf("Chatwork result message room does not match the request")
+		}
 	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
 		if r.CreatedInRoom.ParentRoom != request.Room {
 			return fmt.Errorf("Chatwork result parent room does not match the request")
@@ -558,9 +569,17 @@ func (r Result) validateVariantFacts() error {
 			}
 		}
 	case TaskMessagesList, TaskMessagesShow:
+		if r.Task == TaskMessagesList {
+			if err := validateResultReference("message window room", r.MessageRoom, ReferenceRoom, false); err != nil {
+				return err
+			}
+		}
 		for index, message := range r.Messages {
 			if err := validateResultMessage(fmt.Sprintf("message[%d]", index), message); err != nil {
 				return err
+			}
+			if r.Task == TaskMessagesList && message.Room != r.MessageRoom {
+				return fmt.Errorf("Chatwork result message[%d] room does not match the message window", index)
 			}
 		}
 	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
