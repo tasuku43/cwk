@@ -56,6 +56,15 @@ The application layer depends on domain values and primitive types. It does not 
 
 Infrastructure owns protocol-specific validation and conversion. Raw OAuth tokens, refresh tokens, PATs, token sources, and authorization headers never leave this layer. Infrastructure does not decide which public command should exist, how several adapters form a user task, or how terminal output is presented.
 
+The Chatwork authentication adapters are the only production packages that
+import `golang.org/x/oauth2` or `github.com/zalando/go-keyring`. The OAuth
+adapter owns state, PKCE, authorization-code exchange, refresh, token rotation,
+identity verification, and the operating-system credential-store handle. The
+Chatwork API adapter receives only a private infrastructure authorization
+strategy and returns only secret-free authentication metadata across its
+domain-facing boundary. [ADR 0002](decisions/0002-chatwork-oauth-public-client.md)
+pins the dependency and platform trade-offs.
+
 `internal/infra/systemdoctor` is the default diagnostic adapter. `internal/infra/sampledata` is a deterministic offline repository used to prove opaque reference flow without network access.
 
 ### CLI
@@ -82,6 +91,55 @@ For Chatwork output, including the selected candidate-C context capsule and rela
 Production Go packages stay within `cmd/` and the four `internal/` layers. The `cmd/` entrypoint imports only context, operating-system signal handling, and `internal/cli`; process execution, network, filesystem, and third-party dependencies belong behind infrastructure ports. Repository-only programs live under `tools/` and cannot be imported by production packages.
 
 CLI, application, and infrastructure code propagate the caller context instead of creating `context.Background()` or `context.TODO()`. The command entrypoint creates the signal-aware root and calls the context-only CLI boundary; a nil context produces a context-independent contract fault before dispatch. Infrastructure network code uses an explicitly constructed client governed by a finite call policy; package-level default HTTP clients and convenience calls are rejected by architecture lint.
+
+## Chatwork authentication topology
+
+PAT and OAuth are alternate credential sources behind one secret-free gate;
+they are not a fallback chain.
+
+```text
+CWK_AUTH_METHOD=pat|oauth2
+  -> CLI composition selects exactly one infrastructure authenticator
+  -> application authentication gate receives a secret-free requirement
+  -> infrastructure issues one process-local binding for the selected record
+  -> application passes that binding unchanged to the Chatwork task port
+  -> infrastructure resolves and revalidates the same record immediately before I/O
+       pat    -> command-process environment -> x-chatworktoken
+       oauth2 -> operating-system credential store -> refresh/identity check -> Bearer
+```
+
+A missing, unknown, or unavailable selected method fails before a provider task
+request. The composition root never probes both sources, prefers a credential
+because it happens to exist, or falls back from a failed OAuth refresh or store
+read to PAT. This keeps account choice explicit even when both sources are
+available.
+
+The OAuth surface is one fixed public-client profile. `auth profiles` is its
+reference producer; login, status, and logout accept that exact opaque value
+unchanged. The profile reference does not encode a token, account identifier,
+credential-store service/account key, or other bearer capability. Login uses a
+fresh state and PKCE S256 verifier, writes the consent URL only to stderr, reads
+one complete custom-scheme callback URL from stdin, verifies the exact
+registered redirect and state, exchanges the code, verifies the account through
+the fixed Chatwork API identity endpoint, and only then persists the credential.
+Status reads the stored expiry projection without refresh or network I/O.
+Logout removes the exact local entry and makes no provider-revocation claim.
+
+OAuth refresh is serialized around the selected stored record. Immediately
+before a Chatwork API request, infrastructure resolves the exact ephemeral
+binding, uses `golang.org/x/oauth2` to refresh when the token is no longer
+valid, verifies the required scopes and account through `GET /v2/me`, compares
+that account with the stored and admitted identity, and persists the complete
+rotated credential before attaching the Bearer header to the task request. A
+refresh, scope, identity, cancellation, or persistence failure therefore makes
+zero Chatwork task requests. A stale, cross-session, or mismatched binding also
+fails before credential use.
+
+OAuth credentials are stored only through the operating-system facility
+selected by `go-keyring`: macOS Keychain, Secret Service on Linux/BSD, or
+Windows Credential Manager. Store absence, denial, lock, backend failure, and
+payload rejection are typed failures. There is no plaintext file,
+environment-variable, stdout, or in-memory-across-process fallback.
 
 ## Catalog as the public source of truth
 
@@ -200,7 +258,7 @@ argv
 
 For mutations, validation failure must occur before the external side effect. `app/execution.Invoker` provides the common ordering and has no permissive default policy. Dry-run, human approval, OS authentication, authorization reuse, confirmation, and audit behavior remain derived policy rather than command-local conventions.
 
-The Chatwork policy implementation derives one of three confirmation requirements from typed impact and the fixed operation contract: exact invocation only, exact `--confirm access-change`, or exact `--confirm destructive`. CLI parsing supplies the typed confirmation, application policy compares it with the snapshotted intent, and infrastructure never interprets the flag. Every logical provider operation permits one transport attempt. An unclassified post-action result routes only to a catalog-declared read-only reconciliation task.
+The Chatwork policy implementation derives one of three confirmation requirements from typed impact and the fixed operation contract: exact invocation only, exact `--confirm=access-change`, or exact `--confirm=destructive`. CLI parsing supplies the typed confirmation, application policy compares it with the snapshotted intent, and infrastructure never interprets the flag. Every logical provider operation permits one transport attempt. An unclassified post-action result routes only to a catalog-declared read-only reconciliation task.
 
 ## Error ownership
 

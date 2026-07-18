@@ -23,7 +23,7 @@
   ],
   "mutation_policy": {
     "default_confirmation": "exact-invocation",
-    "access_change_confirmation": "--confirm access-change",
+    "access_change_confirmation": "--confirm=access-change",
     "access_change_operation_ids": [
       "post-rooms",
       "put-rooms-room_id-members",
@@ -31,7 +31,7 @@
       "put-rooms-room_id-link",
       "put-incoming_requests-request_id"
     ],
-    "destructive_confirmation": "--confirm destructive",
+    "destructive_confirmation": "--confirm=destructive",
     "destructive_operation_ids": [
       "delete-rooms-room_id",
       "delete-rooms-room_id-messages-message_id",

@@ -142,7 +142,7 @@ func TestChatworkSnapshotPinsLimitsAndMutationPolicy(t *testing.T) {
 		"operation id \"get-rooms\" is not in the reviewed documented_100_item_operation_ids set",
 		"default_confirmation must remain exact-invocation",
 		"reviewed operation id \"post-rooms\" is missing",
-		"destructive_confirmation must remain --confirm destructive",
+		"destructive_confirmation must remain --confirm=destructive",
 		"uncertain_outcome must remain read-only-reconciliation",
 	)
 }
@@ -388,9 +388,9 @@ func validChatworkSnapshot(capabilityID string) chatworkAPISnapshot {
 		Documented100ItemOperationIDs: append([]string(nil), documented100ItemOperationIDs...),
 		MutationPolicy: chatworkMutationPolicy{
 			DefaultConfirmation:      "exact-invocation",
-			AccessChangeConfirmation: "--confirm access-change",
+			AccessChangeConfirmation: "--confirm=access-change",
 			AccessChangeOperationIDs: append([]string(nil), accessChangeOperationIDs...),
-			DestructiveConfirmation:  "--confirm destructive",
+			DestructiveConfirmation:  "--confirm=destructive",
 			DestructiveOperationIDs:  append([]string(nil), destructiveOperationIDs...),
 			UncertainOutcome:         "read-only-reconciliation",
 		},

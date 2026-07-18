@@ -78,7 +78,7 @@ Both ledgers are strict JSON and must themselves be regular files reached withou
 
 The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-operation snapshot rather than a public-command registry. Its exact 32 operation IDs and method/path pairs are pinned to the official 2026-07-18 documentation index and map only to capability IDs. Contract validation rejects a same-sized substituted operation set, missing or duplicate operation IDs, method/path drift, unknown capabilities, or a Chatwork-backed capability with no upstream owner. `coverage_status: planned` permits incremental implementation; closing the active goal requires changing it to `complete`, which rejects any operation without at least one public capability owner. Future provider additions require a new reviewed snapshot decision; they do not silently extend the active goal.
 
-The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm access-change` or `--confirm destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
+The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm=access-change` or `--confirm=destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
 
 Capability status has a narrow meaning:
 
@@ -110,6 +110,20 @@ The test suite has complementary levels:
 - Domain tests fix pure invariants.
 - Application tests fix task interpretation, orchestration, and ambiguity behavior.
 - Authentication, pagination, and mutation-boundary tests prove rejection/cancellation before downstream calls, exact secret-free authentication binding, complete standard runtime-fault declarations, and complete-or-no-result behavior.
+- Chatwork authentication-selection tests require exact `pat|oauth2`, exercise
+  both credentials being present, and prove that missing, unknown, unavailable,
+  expired, refresh-failed, and store-failed selections neither probe nor fall
+  back to the other method and make zero unintended provider task requests.
+- Chatwork OAuth protocol tests fix public-client Authorization Code Grant,
+  state, PKCE S256, exact custom-scheme redirect validation, no client secret or
+  `offline_access`, bounded fixed destinations, redirect denial, and
+  secret-free provider fault mapping.
+- Chatwork OAuth storage and binding fixtures use fake stores and two synthetic
+  accounts to cover store absence/denial/corruption, stale and cross-session
+  bindings, refresh races, rotated-token persistence before task
+  authorization, refreshed-identity mismatch, and secret canaries. Tests never
+  access a developer operating-system credential store or live Chatwork
+  account.
 - Catalog pagination tests require an exact optional-input/top-level-string-output opaque cursor binding, typed empty-cursor completion, and JSON-only presentation for `paged` results, and forbid that binding for `complete` results. Renderer fixtures reject an omitted, null, or non-string cursor.
 - Infrastructure tests fix protocol conversion and boundary failure.
 - CLI tests fix routing, help, rendering, and exit behavior.
@@ -144,6 +158,11 @@ Every strong statement should identify its enforcement path.
 | Mutation outcome classification | Structured-fault-first/cause-stripping tests, non-retryable unclassified outcome fallback, and read-only recovery validation |
 | Authentication precondition | Secret-free session contract, zero-downstream-call tests, and catalog validation of every standard gate fault's code/kind/retryability |
 | Authentication binding | Opaque JSON-excluded/fmt-redacted binding type, infrastructure-only issuance lint, exact pass-through test, and derived two-account/stale-binding/refresh-race adapter fixtures |
+| Explicit Chatwork authentication selection | CLI/composition tests for exact `pat|oauth2`, deterministic selection when both sources exist, selected-source-only access, and zero-call/no-fallback failures |
+| OAuth protocol boundary | Infrastructure-only dependency lint plus state, PKCE S256, exact redirect, public-client exchange, fixed-destination, redirect-denial, and cancellation adapter tests |
+| OAuth credential storage | Fake-store absence/denial/corruption/size/cancellation tests, no-plaintext-fallback assertion, and platform build matrix |
+| OAuth refresh identity continuity | Serialized refresh-race fixtures, required-scope and exact-account revalidation, rotated-record persistence-before-authorization, stale-binding rejection, and zero unintended task requests |
+| Authentication secret exclusion | Provider/store/callback secret-canary scans across stdout, stderr, structured faults, logs, snapshots, fixtures, and test diagnostics |
 | Pagination completeness | Cursor loop/budget/cancellation tests, retryability/catalog agreement, and no-partial-result assertion |
 | Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only presentation, and agent-help/reference-workflow projection |
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |

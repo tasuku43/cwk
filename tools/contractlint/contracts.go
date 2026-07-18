@@ -315,12 +315,12 @@ func validateChatworkMutationPolicy(policy chatworkMutationPolicy) []issue {
 	if policy.DefaultConfirmation != "exact-invocation" {
 		issues = append(issues, issue{Path: chatworkAPIPath + ".mutation_policy", Message: "default_confirmation must remain exact-invocation"})
 	}
-	if policy.AccessChangeConfirmation != "--confirm access-change" {
-		issues = append(issues, issue{Path: chatworkAPIPath + ".mutation_policy", Message: "access_change_confirmation must remain --confirm access-change"})
+	if policy.AccessChangeConfirmation != "--confirm=access-change" {
+		issues = append(issues, issue{Path: chatworkAPIPath + ".mutation_policy", Message: "access_change_confirmation must remain --confirm=access-change"})
 	}
 	issues = append(issues, validateExactOperationIDSet("mutation_policy.access_change_operation_ids", policy.AccessChangeOperationIDs, accessChangeOperationIDs)...)
-	if policy.DestructiveConfirmation != "--confirm destructive" {
-		issues = append(issues, issue{Path: chatworkAPIPath + ".mutation_policy", Message: "destructive_confirmation must remain --confirm destructive"})
+	if policy.DestructiveConfirmation != "--confirm=destructive" {
+		issues = append(issues, issue{Path: chatworkAPIPath + ".mutation_policy", Message: "destructive_confirmation must remain --confirm=destructive"})
 	}
 	issues = append(issues, validateExactOperationIDSet("mutation_policy.destructive_operation_ids", policy.DestructiveOperationIDs, destructiveOperationIDs)...)
 	if policy.UncertainOutcome != "read-only-reconciliation" {
