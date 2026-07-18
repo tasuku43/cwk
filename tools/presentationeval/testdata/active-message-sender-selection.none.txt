@@ -1,0 +1,11 @@
+messages room-ref=3501 count=4 window=recent limit=100 complete=false unresolved-relations=2
+selection source-count=14 senders=[2501,2502] context=none anchors=[#2,#6,#9,#13]
+external-text=untrusted escaped
+schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
+actors
+  a1 account-ref=2501 name="Aki"
+  a2 account-ref=2502 name="Beni"
+#2 1102 a1 1701000002 reply=?1101 "Aki answers the root."
+#6 1106 a2 1701000006 "Beni starts another branch."
+#9 1109 a2 1701000009 reply=?1108 "Beni answers the second root."
+#13 1113 a1 1701000013 "[rp aid=2503 to=3501-1108] [To:2503] remains raw body"
