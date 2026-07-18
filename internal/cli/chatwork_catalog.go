@@ -188,15 +188,22 @@ func chatworkBase(path, summary, args string, effect operation.Effect, role Comm
 			Output:         CommandOutput{Formats: []OutputFormat{OutputFormatText}, DefaultFormat: OutputFormatText, Fields: output, Completeness: OutputCompletenessComplete},
 			Prerequisites:  []string{"Set CWK_AUTH_METHOD to exactly pat or oauth2; configure only the selected method's documented credential source."},
 			Authentication: chatworkAuthentication,
-			Errors:         chatworkCommandErrors(path, reconcile, mutation != nil), Mutation: mutation,
+			Errors:         chatworkCommandErrors(path, task, reconcile, mutation != nil), Mutation: mutation,
 		},
 		handler:  runChatwork,
 		chatwork: &chatworkCommandDefinition{Task: task, Confirmation: confirmation, Reconcile: reconcile},
 	}
 }
 
-func chatworkCommandErrors(path, reconcile string, mutation bool) []CommandError {
+func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mutation bool) []CommandError {
 	help := "help " + path
+	retry := path
+	if mutation {
+		// Mutation recovery never suggests replaying a write. Even failures that
+		// are retryable at the fault level route through scoped help; uncertain
+		// outcomes use the exact read-only reconciliation task below.
+		retry = help
+	}
 	errors := []CommandError{
 		declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, help, "Correct the declared command inputs."),
 		declaredCommandError(fault.KindInvalidInput, "invalid_chatwork_task", false, help, "Correct the typed Chatwork task inputs."),
@@ -206,32 +213,52 @@ func chatworkCommandErrors(path, reconcile string, mutation bool) []CommandError
 		declaredCommandError(fault.KindContract, "chatwork_result_mismatch", false, help, "Repair the typed Chatwork adapter result contract."),
 		declaredCommandError(fault.KindAuthentication, "invalid_authentication_binding", false, help, "Re-establish the configured Chatwork authentication."),
 		declaredCommandError(fault.KindInternal, "unclassified_chatwork_error", false, help, "Inspect the Chatwork adapter classification."),
+		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_missing", false, "auth profiles", "Select exactly one documented Chatwork authentication method."),
+		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_invalid", false, "auth profiles", "Select exactly pat or oauth2 without fallback."),
 		declaredCommandError(fault.KindInvalidInput, "chatwork_invalid_request", false, help, "Correct the task inputs accepted by Chatwork."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_token_missing", false, help, "Set CWK_API_TOKEN for this command process."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_token_invalid", false, help, "Replace CWK_API_TOKEN with a valid process-local token."),
+		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_missing", false, "help auth login", "Set the documented public-client ID and redirect URI configuration."),
+		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_invalid", false, "help auth login", "Correct the documented public-client ID and redirect URI configuration."),
+		declaredCommandError(fault.KindInvalidInput, "oauth_configuration_invalid", false, "help auth login", "Correct the fixed public-client OAuth configuration."),
+		declaredCommandError(fault.KindAuthentication, "oauth_credential_missing", false, "auth profiles", "Discover the OAuth profile and establish it before retrying the API task."),
+		declaredCommandError(fault.KindUnavailable, "oauth_credential_store_unavailable", true, "auth status", "Inspect the profile after operating-system credential access is restored."),
+		declaredCommandError(fault.KindAuthentication, "oauth_refresh_failed", false, "auth status", "Inspect and then re-establish the exact OAuth profile."),
+		declaredCommandError(fault.KindContract, "oauth_credential_too_large", false, "help auth status", "Review provider token growth against the fixed credential-store bound."),
+		declaredCommandError(fault.KindContract, "oauth_identity_request_invalid", false, "help auth status", "Repair the fixed OAuth identity-verification request contract."),
+		declaredCommandError(fault.KindUnavailable, "oauth_identity_verification_unavailable", true, "auth status", "Inspect the profile after Chatwork identity verification becomes available."),
+		declaredCommandError(fault.KindContract, "oauth_identity_response_invalid", false, "help auth status", "Review Chatwork identity schema drift before using the credential."),
+		declaredCommandError(fault.KindAuthentication, "oauth_identity_verification_failed", false, "auth status", "Inspect and then re-establish the exact OAuth profile."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_authentication_failed", false, help, "Replace the configured Chatwork token."),
 		declaredCommandError(fault.KindPermission, "chatwork_permission_denied", false, help, "Use an account permitted to perform this task."),
 		declaredCommandError(fault.KindNotFound, "chatwork_not_found", false, help, "Rediscover a current canonical reference."),
-		declaredCommandError(fault.KindRateLimited, "chatwork_rate_limited", true, path, "Retry after the declared provider reset time."),
-		declaredCommandError(fault.KindUnavailable, "chatwork_unavailable", true, path, "Retry after Chatwork becomes available."),
+		declaredCommandError(fault.KindRateLimited, "chatwork_rate_limited", true, retry, "Retry after the declared provider reset time."),
 		declaredCommandError(fault.KindContract, "chatwork_response_too_large", false, help, "Narrow the task or review the fixed response bound."),
 		declaredCommandError(fault.KindContract, "chatwork_response_invalid", false, help, "Review provider schema drift before retrying."),
 		declaredCommandError(fault.KindContract, "chatwork_response_malformed", false, help, "Review provider schema drift before retrying."),
 		declaredCommandError(fault.KindContract, "chatwork_response_unmapped", false, help, "Repair the typed response mapping."),
-		declaredCommandError(fault.KindUnavailable, "chatwork_response_unavailable", true, path, "Retry after the response can be read."),
-		declaredCommandError(fault.KindContract, "chatwork_notation_malformed", false, help, "Review malformed or unsupported message notation."),
+		declaredCommandError(fault.KindUnavailable, "chatwork_response_unavailable", true, retry, "Retry only after reviewing the bounded response failure."),
 		declaredCommandError(fault.KindContract, "chatwork_request_contract_invalid", false, help, "Repair the typed request mapping."),
 		declaredCommandError(fault.KindContract, "chatwork_transport_missing", false, help, "Repair the Chatwork transport composition."),
 		declaredCommandError(fault.KindContract, "chatwork_unexpected_response", false, help, "Review undocumented provider behavior before retrying."),
-		declaredCommandError(fault.KindInvalidInput, "chatwork_file_invalid", false, help, "Choose a readable file within the 5 MiB upload bound."),
-		declaredCommandError(fault.KindInvalidInput, "chatwork_file_name_invalid", false, help, "Choose a file with a valid base name."),
-		declaredCommandError(fault.KindInvalidInput, "chatwork_file_unreadable", false, help, "Choose a readable local file."),
-		declaredCommandError(fault.KindInvalidInput, "chatwork_file_too_large", false, help, "Choose a file no larger than 5 MiB."),
-		declaredCommandError(fault.KindContract, "chatwork_upload_contract_invalid", false, help, "Repair the bounded multipart request mapping."),
 		declaredCommandError(fault.KindContract, "output_contract_exceeded", false, help, "Narrow the result or review the fixed output bound."),
 		declaredCommandError(fault.KindContract, "output_encoding_failed", false, help, "Repair the context-capsule projection."),
-		declaredCommandError(fault.KindInternal, "output_write_failed", true, path, "Retry with a writable output stream."),
-		declaredCommandError(fault.KindCanceled, "operation_canceled", true, path, "Retry when the caller is ready."),
+		declaredCommandError(fault.KindInternal, "output_write_failed", true, retry, "Retry with a writable output stream."),
+		declaredCommandError(fault.KindCanceled, "operation_canceled", true, retry, "Retry when the caller is ready."),
+	}
+	if !mutation {
+		errors = append(errors, declaredCommandError(fault.KindUnavailable, "chatwork_unavailable", true, path, "Retry after Chatwork becomes available."))
+	}
+	if task == chatwork.TaskMessagesList || task == chatwork.TaskMessagesShow {
+		errors = append(errors, declaredCommandError(fault.KindContract, "chatwork_notation_malformed", false, help, "Review malformed or unsupported message notation."))
+	}
+	if task == chatwork.TaskFilesUpload {
+		errors = append(errors,
+			declaredCommandError(fault.KindInvalidInput, "chatwork_file_name_invalid", false, help, "Choose a file with a valid base name."),
+			declaredCommandError(fault.KindInvalidInput, "chatwork_file_unreadable", false, help, "Choose a readable local file."),
+			declaredCommandError(fault.KindInvalidInput, "chatwork_file_too_large", false, help, "Choose a file no larger than 5 MiB."),
+			declaredCommandError(fault.KindContract, "chatwork_upload_contract_invalid", false, help, "Repair the bounded multipart request mapping."),
+		)
 	}
 	for _, required := range []struct {
 		kind fault.Kind
