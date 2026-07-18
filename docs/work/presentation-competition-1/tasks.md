@@ -68,15 +68,25 @@
   [decision.md](decision.md).
 - [x] Run focused domain and presentation tests during integration. Evidence:
   focused suites accompanied the integration and contract-test commits above.
-- [ ] Run `task check`. Evidence:
-- [ ] Run `task security`. Evidence:
-- [ ] Run `task public:check` for publishable changes. Evidence:
-- [ ] Remove temporary credentials and diagnostics. Evidence:
-- [ ] Confirm repository status and candidate-worktree cleanup. Evidence:
+- [x] Run `task check`. Evidence: passed at `b8a522a` after the evaluation I/O
+  security repair, including race, security, release, and public profiles.
+- [x] Run `task security`. Evidence: module verification, security repoguard,
+  gosec, and govulncheck passed at `b8a522a`.
+- [x] Run `task public:check` for publishable changes. Evidence: public
+  repoguard and contractlint passed at `b8a522a`.
+- [x] Remove temporary credentials and diagnostics. Evidence: no credential or
+  live transcript is tracked; security/public scans pass and the evaluation
+  runner removes its private temporary roots.
+- [x] Confirm repository status and candidate-worktree cleanup. Evidence: all
+  eight experiment worktrees were clean before normal removal; only the clean
+  main worktree remains, while candidate branches and commits are retained.
 
 ## Hand off
 
-- [ ] Acceptance criteria have evidence.
+- [x] Acceptance criteria have evidence. Evidence: [goal.md](goal.md),
+  [evaluation-audit.md](evaluation-audit.md),
+  [evidence/manifest.json](evidence/manifest.json), and the successful final
+  gates recorded above.
 - [x] Durable decisions are promoted to governing documentation. Evidence:
   `5be3106` plus the final consistency review in this work packet.
 - [x] Raw competition evidence identifies exact commits and tool versions.

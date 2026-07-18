@@ -1,6 +1,6 @@
 # Work Plan: Select the next agent presentation by evidence
 
-- Status: In progress; selected implementation integrated, final gates pending
+- Status: Complete
 - Goal: [goal.md](goal.md)
 - Context: [context.md](context.md)
 - Decision: [decision.md](decision.md)
@@ -118,8 +118,9 @@ untrusted data.
 6. **Completed:** record the separate owner compatibility decision, integrate
    the P seed, harden domain reference kinds, remove redundant coverage prose,
    and add subtractive projection contract tests.
-7. **In progress:** governing-document propagation is complete; run the
-   repository, security, and public-boundary gates and verify cleanup.
+7. **Completed:** propagate governing documents, pass the repository,
+   security, and public-boundary gates, and remove every clean experimental
+   worktree while retaining its branch and evidence commit.
 
 ## Verification
 

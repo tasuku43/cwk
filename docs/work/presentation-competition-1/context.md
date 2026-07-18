@@ -146,9 +146,15 @@ subtraction was not attributed retroactively to P's frozen benchmark result.
   was added by the candidates or selected projection.
 - Publication: every candidate artifact and answer key must pass public
   boundary checks.
-- Pending verification: the final `task check`, `task security`, and
-  `task public:check` results and candidate-worktree cleanup are not yet
-  recorded in this packet.
+- Final verification: `task check`, `task security`, and `task public:check`
+  pass at `b8a522a`. The first full-gate attempt rejected permissive and
+  unconfined evaluation-helper I/O; `b8a522a` confines it with `os.Root`,
+  private artifact modes, symlink/regular-file checks, and purpose-bound
+  subprocess validation before the successful rerun.
+- Cleanup: all eight competition worktrees were independently confirmed clean
+  and then removed without force. Their candidate branches and exact evidence
+  commits remain available. No credential or live diagnostic file was added
+  to the repository; security and public-boundary scans pass.
 
 ## Glossary
 

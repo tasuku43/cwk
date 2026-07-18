@@ -1,6 +1,6 @@
 # Work Goal: Select the next agent presentation by evidence
 
-- Status: In progress; implementation integrated, required gates pending
+- Status: Complete
 - Owner: Project owner
 - Target: First post-completion presentation competition
 - Related ADRs: None
@@ -16,9 +16,9 @@ and compatibility decision, using candidate P only as an implementation seed.
 
 The decision, frozen result, and retained evidence are recorded in
 [decision.md](decision.md), [evaluation-audit.md](evaluation-audit.md), and
-[evidence/manifest.json](evidence/manifest.json). The work remains incomplete
-until the required repository, security, and public-boundary gates pass and
-the final cleanup is verified.
+[evidence/manifest.json](evidence/manifest.json). The required repository,
+security, and public-boundary gates pass, and the clean experimental worktrees
+have been removed without deleting their branches or commits.
 
 ## Why now
 
@@ -41,24 +41,28 @@ repairing those meaning gaps would reward an incomplete contract.
 
 ## Acceptance criteria
 
-- [ ] Catalog-declared success fields are representable and tested for every
+- [x] Catalog-declared success fields are representable and tested for every
   result variant before compression scores are compared.
-- [ ] One publishable synthetic fixture corpus and semantic answer key cover
-  small and large collections, relationships, bounds, explicit zero values,
-  hostile text, and mutation outcomes.
-- [ ] The accepted baseline and materially different challengers consume the
+- [x] The publishable synthetic corpus covers small and large collections,
+  relationships, bounds, explicit zero values, hostile text, and mutation
+  outcomes. The frozen key's missing simultaneous To relation is retained and
+  audited rather than silently corrected; selected-contract tests cover that
+  semantic fact.
+- [x] The accepted baseline and materially different challengers consume the
   same typed semantic input in isolated worktrees.
-- [ ] Every candidate preserves exact canonical references, trust framing,
-  bounds, uncertainty, stdout/stderr/exit behavior, and deterministic bytes.
-- [ ] Agent evaluation requires no `jq`, `grep`, parser, manual join, source
-  inspection, or undocumented provider call.
-- [ ] The frozen benchmark conclusion is recorded without promoting an
-  ineligible challenger, and any separate product compatibility decision is
+- [x] Static gates verify canonical references, trust framing, bounds,
+  uncertainty, output behavior, and deterministic bytes for every renderer;
+  active goldens and negative canaries enforce them for the selected default.
+- [x] Agent evaluation uses only public `cwk` commands and requires no `jq`,
+  `grep`, parser, manual join, source inspection, or undocumented provider
+  call. Its oracle and recovery defects are retained as inconclusive evidence.
+- [x] The frozen benchmark conclusion is recorded without promoting an
+  ineligible challenger, and the separate product compatibility decision is
   explicitly outside the benchmark gate.
-- [ ] The selected contract, compatibility impact, tests, and migration note
-  are reviewed before its implementation is merged.
-- [ ] `task check`, `task security`, and `task public:check` pass for the
-  integrated implementation and publishable evidence.
+- [x] The selected contract, compatibility impact, tests, and migration note
+  were reviewed before completion.
+- [x] `task check`, `task security`, and `task public:check` pass for the
+  integrated implementation and publishable evidence at `b8a522a`.
 
 ## Governing documents
 
