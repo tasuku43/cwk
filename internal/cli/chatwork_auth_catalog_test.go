@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"context"
 	"testing"
 
 	"github.com/tasuku43/cwk/internal/domain/chatworkauth"
@@ -9,14 +8,7 @@ import (
 )
 
 func TestChatworkAuthCatalogValidatesWithTaskCatalog(t *testing.T) {
-	authSpecs := chatworkAuthCommandSpecs()
-	for index := range authSpecs {
-		// Dispatch is intentionally supplied by the separate CLI-handler slice.
-		authSpecs[index].handler = func(context.Context, *CLI, CommandSpec, operation.Intent, []string) int { return 0 }
-	}
-	commands := append(DefaultCatalog().Commands(), chatworkCommandSpecs()...)
-	commands = append(commands, authSpecs...)
-	if err := NewCatalog(commands...).Validate(); err != nil {
+	if err := DefaultCatalog().Validate(); err != nil {
 		t.Fatalf("Chatwork auth catalog validation failed: %v", err)
 	}
 }

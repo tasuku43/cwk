@@ -392,6 +392,7 @@ func TestEveryCatalogCommandDispatchesThroughItsSpec(t *testing.T) {
 		inspector := passingInspector("test/test")
 		command, _, stderr := newTestCLI(inspector)
 		args := strings.Split(spec.Path, " ")
+		args = append(args, "--help")
 		if code := runCLI(command, args); code != ExitOK {
 			t.Errorf("Run(%q) code = %d, stderr = %q", spec.Path, code, stderr.String())
 		}

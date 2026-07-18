@@ -2,7 +2,7 @@
   "snapshot_date": "2026-07-18",
   "source": "https://developer.chatwork.com/llms.txt",
   "base_url": "https://api.chatwork.com/v2",
-  "coverage_status": "planned",
+  "coverage_status": "complete",
   "limits": {
     "metadata_read_timeout_seconds": 20,
     "upload_timeout_seconds": 60,

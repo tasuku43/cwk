@@ -5,15 +5,19 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	appauthn "github.com/tasuku43/cwk/internal/app/authn"
+	"github.com/tasuku43/cwk/internal/app/chatworkauthcmd"
 	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
 	"github.com/tasuku43/cwk/internal/app/doctorcmd"
 	"github.com/tasuku43/cwk/internal/app/samplecmd"
+	"github.com/tasuku43/cwk/internal/domain/chatworkauth"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
+	"github.com/tasuku43/cwk/internal/infra/chatworkoauth"
 	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
 )
@@ -31,13 +35,31 @@ type CLI struct {
 	samples         *samplecmd.Service
 	chatwork        *chatworkcmd.Service
 	chatworkAuth    *appauthn.Gate
+	chatworkOAuth   *chatworkauthcmd.Service
 	chatworkInitErr error
 }
 
-// New builds the production CLI with offline template adapters.
+const chatworkAuthMethodEnvironment = "CWK_AUTH_METHOD"
+
+// New builds the production CLI with the fixed Chatwork adapters. OAuth
+// lifecycle commands remain available even when an API authentication method
+// has not yet been selected or configured.
 func New(in io.Reader, out, errOut io.Writer) *CLI {
 	cli := newCLI(in, out, errOut, DefaultCatalog(), systemdoctor.New())
-	client, err := chatworkapi.NewFromEnvironment()
+	store := chatworkoauth.OSStore{}
+	lifecycle, err := chatworkoauth.NewLifecycle(store)
+	configured, configuredErr := chatworkoauth.NewFromEnvironment(store)
+	manager := &chatworkOAuthManager{configured: configured, lifecycle: lifecycle}
+	if configuredErr != nil {
+		manager.configErr = oauthClientConfigurationFault()
+	}
+	if err != nil {
+		cli.chatworkOAuth = chatworkauthcmd.New(nil)
+	} else {
+		cli.chatworkOAuth = chatworkauthcmd.New(manager)
+	}
+
+	client, err := selectedChatworkClient(os.Getenv(chatworkAuthMethodEnvironment), configured, manager.configErr)
 	if err != nil {
 		cli.chatworkInitErr = err
 		return cli
@@ -45,6 +67,65 @@ func New(in io.Reader, out, errOut io.Writer) *CLI {
 	cli.chatwork = chatworkcmd.New(client)
 	cli.chatworkAuth = appauthn.New(client)
 	return cli
+}
+
+// chatworkOAuthManager keeps registration-dependent login separate from the
+// store-only status/logout path, so a credential can always be inspected and
+// removed after registration environment variables are cleared.
+type chatworkOAuthManager struct {
+	configured *chatworkoauth.Manager
+	lifecycle  *chatworkoauth.Manager
+	configErr  error
+}
+
+func (m *chatworkOAuthManager) Login(ctx context.Context, receive chatworkauthcmd.RedirectReceiver) (chatworkauth.CredentialStatus, error) {
+	if m == nil || m.configured == nil {
+		if m != nil && m.configErr != nil {
+			return chatworkauth.CredentialStatus{}, m.configErr
+		}
+		return chatworkauth.CredentialStatus{}, oauthClientConfigurationFault()
+	}
+	return m.configured.Login(ctx, receive)
+}
+
+func (m *chatworkOAuthManager) Status(ctx context.Context) (chatworkauth.CredentialStatus, error) {
+	if m == nil || m.lifecycle == nil {
+		return chatworkauth.CredentialStatus{}, fault.New(fault.KindUnavailable, "oauth_credential_store_unavailable", "The OAuth credential store is unavailable.", true)
+	}
+	return m.lifecycle.Status(ctx)
+}
+
+func (m *chatworkOAuthManager) Logout(ctx context.Context) error {
+	if m == nil || m.lifecycle == nil {
+		return fault.New(fault.KindUnavailable, "oauth_credential_store_unavailable", "The OAuth credential store is unavailable.", true)
+	}
+	return m.lifecycle.Logout(ctx)
+}
+
+func selectedChatworkClient(method string, oauth *chatworkoauth.Manager, oauthErr error) (*chatworkapi.Client, error) {
+	switch method {
+	case "pat":
+		return chatworkapi.NewFromEnvironment()
+	case "oauth2":
+		if oauthErr != nil || oauth == nil {
+			if oauthErr != nil {
+				return nil, oauthErr
+			}
+			return nil, oauthClientConfigurationFault()
+		}
+		return chatworkapi.NewWithOAuth(oauth)
+	case "":
+		return nil, fault.New(fault.KindAuthentication, "chatwork_auth_method_missing", "Chatwork authentication method is not selected.", false)
+	default:
+		return nil, fault.New(fault.KindAuthentication, "chatwork_auth_method_invalid", "Chatwork authentication method must be pat or oauth2.", false)
+	}
+}
+
+func oauthClientConfigurationFault() error {
+	if os.Getenv(chatworkoauth.ClientIDEnvironment) == "" || os.Getenv(chatworkoauth.RedirectEnvironment) == "" {
+		return fault.New(fault.KindInvalidInput, "oauth_client_configuration_missing", "Chatwork OAuth public-client configuration is missing.", false)
+	}
+	return fault.New(fault.KindInvalidInput, "oauth_client_configuration_invalid", "Chatwork OAuth public-client configuration is invalid.", false)
 }
 
 func newCLI(in io.Reader, out, errOut io.Writer, catalog Catalog, inspector doctorcmd.InspectorPort) *CLI {

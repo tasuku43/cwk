@@ -10,54 +10,59 @@
     "reason": ""
   },
   {
+    "id": "authentication.manage",
+    "status": "public",
+    "reason": ""
+  },
+  {
     "id": "chatwork.account.inspect",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.contact-requests.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.contacts.discover",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.files.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.invite-links.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.members.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.messages.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.personal-tasks.inspect",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.rooms.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "chatwork.room-tasks.manage",
-    "status": "deferred",
-    "reason": "Implementation is tracked by docs/work/chatwork-public-api-v2."
+    "status": "public",
+    "reason": ""
   },
   {
     "id": "sample.inspect",

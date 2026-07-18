@@ -3,9 +3,7 @@ package cli
 import "testing"
 
 func TestChatworkCatalogSpecsValidateWithPublicCatalog(t *testing.T) {
-	commands := append(DefaultCatalog().Commands(), chatworkCommandSpecs()...)
-	catalog := NewCatalog(commands...)
-	if err := catalog.Validate(); err != nil {
+	if err := DefaultCatalog().Validate(); err != nil {
 		t.Fatalf("Chatwork catalog validation failed: %v", err)
 	}
 }
