@@ -40,6 +40,22 @@ func (e Effect) MarshalText() ([]byte, error) {
 	return []byte(e.String()), nil
 }
 
+// UnmarshalText accepts only the stable public spellings emitted by
+// MarshalText.
+func (e *Effect) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "read":
+		*e = EffectRead
+	case "create":
+		*e = EffectCreate
+	case "write":
+		*e = EffectWrite
+	default:
+		return fmt.Errorf("effect is invalid: %q", text)
+	}
+	return nil
+}
+
 // Validate rejects the zero value and values that are not part of the public
 // effect model.
 func (e Effect) Validate() error {
@@ -98,6 +114,22 @@ func (c Cardinality) MarshalText() ([]byte, error) {
 	}
 }
 
+// UnmarshalText accepts only the stable public spellings emitted by
+// MarshalText. This keeps scoped agent-help contracts losslessly decodable.
+func (c *Cardinality) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "one":
+		*c = CardinalityOne
+	case "many":
+		*c = CardinalityMany
+	case "unbounded":
+		*c = CardinalityUnbounded
+	default:
+		return fmt.Errorf("impact cardinality is invalid: %q", text)
+	}
+	return nil
+}
+
 // Declaration is an explicit yes/no declaration. Its zero value means that a
 // mutation author has not considered that impact dimension yet.
 type Declaration uint8
@@ -107,6 +139,20 @@ const (
 	DeclarationNo
 	DeclarationYes
 )
+
+// UnmarshalText accepts only the stable public spellings emitted by
+// MarshalText. Unknown declarations remain invalid instead of being inferred.
+func (d *Declaration) UnmarshalText(text []byte) error {
+	switch string(text) {
+	case "no":
+		*d = DeclarationNo
+	case "yes":
+		*d = DeclarationYes
+	default:
+		return fmt.Errorf("impact declaration is invalid: %q", text)
+	}
+	return nil
+}
 
 func (d Declaration) String() string {
 	switch d {

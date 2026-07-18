@@ -167,4 +167,21 @@ func TestIntentJSONUsesStableSemanticEnumNames(t *testing.T) {
 	if _, err := json.Marshal(Intent{Command: "items list", Effect: EffectUnknown}); err == nil {
 		t.Fatal("JSON marshal accepted an unknown effect")
 	}
+
+	var decoded Intent
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("JSON did not round trip: %v", err)
+	}
+	if decoded.Impact != intent.Impact {
+		t.Fatalf("decoded impact = %+v, want %+v", decoded.Impact, intent.Impact)
+	}
+	for _, malformed := range []string{
+		`{"cardinality":"unknown","notification":"no","access_change":"no","destructive":"no"}`,
+		`{"cardinality":"one","notification":"maybe","access_change":"no","destructive":"no"}`,
+	} {
+		var impact Impact
+		if err := json.Unmarshal([]byte(malformed), &impact); err == nil {
+			t.Fatalf("JSON unmarshal accepted %s", malformed)
+		}
+	}
 }
