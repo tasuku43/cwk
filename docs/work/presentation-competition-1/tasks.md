@@ -77,8 +77,10 @@
 ## Hand off
 
 - [ ] Acceptance criteria have evidence.
-- [ ] Durable decisions are promoted to governing documentation.
+- [x] Durable decisions are promoted to governing documentation. Evidence:
+  `5be3106` plus the final consistency review in this work packet.
 - [x] Raw competition evidence identifies exact commits and tool versions.
   Evidence: [evidence/manifest.json](evidence/manifest.json).
-- [ ] Follow-up work is finite and does not reopen unrelated API coverage or
-  authentication goals.
+- [x] Follow-up work is finite and does not reopen unrelated API coverage or
+  authentication goals. Evidence: [goal.md](goal.md) limits remaining work to
+  required gates and cleanup.

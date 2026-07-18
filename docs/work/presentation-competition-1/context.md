@@ -19,8 +19,9 @@ credentials, and private message content are intentionally excluded.
 - A live isolated two-account room showed that explicit To and reply notation
   are parsed correctly. To was not strengthened into reply, and the reply
   resolved to the exact message in the returned window.
-- Typed To, reply, and quote facts remain explicit while redundant raw
-  Chatwork notation is omitted from the task projection. External message and
+- Typed To, reply, and quote facts remain explicit. Raw Chatwork notation may
+  remain inside a declared message body, but the projection neither emits it
+  as additional semantic structure nor reparses it. External message and
   sender text remains visibly framed as untrusted data.
 - Explicit zero, false, empty, absent, acknowledgement, parent, bound, and
   completeness facts remain present when the catalog contract distinguishes
@@ -72,8 +73,9 @@ credentials, and private message content are intentionally excluded.
 - [x] The normalized ledger and relationship-first timeline remain losing
   experimental candidates; neither becomes a default or specialization in
   this work packet.
-- [x] Raw Chatwork notation is omitted when reviewed typed To, reply, and quote
-  facts already represent its task-relevant meaning.
+- [x] Raw Chatwork notation is not promoted into presentation-authored
+  semantic structure. It may remain inside the declared untrusted body while
+  reviewed typed To, reply, and quote facts carry relationship meaning.
 - [x] One fixed task projection covers collections, mutation outcomes, and
   relationship-heavy messages. It uses catalog task selection rather than an
   output-size heuristic, adaptive summary, or agent-selected detail mode.

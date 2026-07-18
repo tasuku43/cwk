@@ -1,6 +1,6 @@
 # Project Theses
 
-This document decides ambiguous product and engineering choices for Chatwork CLI (`cwk`). A thesis states a representation-independent product hypothesis, its consequences, and the evidence that can disprove it. Concrete presentation designs remain replaceable until evaluation promotes one into a public contract.
+This document decides ambiguous product and engineering choices for Chatwork CLI (`cwk`). A thesis states a representation-independent product hypothesis, its consequences, and the evidence that can disprove it. Concrete presentation designs remain replaceable until reviewed evidence and an explicit compatibility decision promote one into a public contract.
 
 ## North Star
 
@@ -67,7 +67,7 @@ Chatwork data is converted into a typed, provider-independent task result before
 
 ## Axiom 4: Presentation is versioned and replaceable
 
-No concrete output syntax is a thesis. The first complete implementation deliberately selected the context-capsule presentation, candidate C (`cwk-context-capsule/1`), so API work could close against one high-quality contract. It remains the first stable baseline. The current default is the task projection, candidate P (`cwk-task-projection/1`), adopted through an explicit owner compatibility decision after Competition 1 was inconclusive. That decision accepted a breaking text-schema migration; it is not a claim that P won the defective benchmark. Later presentation changes remain evidence-informed and require an explicit compatibility decision.
+No concrete output syntax is a thesis. The first complete implementation deliberately selected the context-capsule presentation, candidate C (`cwk-context-capsule/1`), so API work could close against one high-quality contract. It remains the first stable baseline. The current default is the P-derived task projection (`cwk-task-projection/1`), adopted through an explicit owner compatibility decision after Competition 1 was inconclusive and hardened beyond the frozen candidate. That decision accepted a breaking text-schema migration; it is not a claim that P won the defective benchmark. Later presentation changes remain evidence-informed and require an explicit compatibility decision.
 
 ### Hard constraints
 
@@ -104,7 +104,7 @@ Token count is not optimized below the required understanding-quality floor. Num
 
 ## Axiom 5: Presentation implementations stay behind one semantic boundary
 
-The historical context capsule, the current task projection, and any future presentation hypotheses consume the same provider-independent semantic boundary. Candidate C became the first stable presentation by explicit product decision. Competition 1 did not produce an authoritative winner because its benchmark/oracle defects made the result inconclusive. The owner then deliberately superseded C with P as a breaking compatibility decision. Future replacements still compete under comparable conditions before another default change.
+The historical context capsule, the current task projection, and any future presentation hypotheses consume the same provider-independent semantic boundary. Candidate C became the first stable presentation by explicit product decision. Competition 1 did not produce an authoritative winner because its benchmark/oracle defects made the result inconclusive. The owner then deliberately superseded C with a P-derived projection as a breaking compatibility decision; the frozen P candidate was only its implementation seed. Future replacements still compete under comparable conditions before another default change.
 
 ### Consequences
 

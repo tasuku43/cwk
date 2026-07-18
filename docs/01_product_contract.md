@@ -62,7 +62,7 @@ Every eligible presentation must:
 
 Candidate C (`cwk-context-capsule/1`) is the first stable data-presentation baseline: a versioned context capsule with deterministic headers, a compact local reference dictionary, typed task facts, explicit relationships/bounds, and visibly framed external text. Its local aliases were never command identity.
 
-The current default is candidate P (`cwk-task-projection/1`). It is a subtractive projection of the same typed result and emits only:
+The current default is the P-derived task projection (`cwk-task-projection/1`). It is a subtractive projection of the same typed result and emits only:
 
 - catalog-declared fields required by the task result;
 - exact canonical references, without a display-alias dictionary;
@@ -73,7 +73,7 @@ It does not publish raw Chatwork notation as semantic structure, undeclared prov
 
 ## Future presentation-selection lifecycle
 
-Candidate C was selected for the first complete implementation by explicit product decision. Competition 1 later compared C with alternative projections but was inconclusive because benchmark/oracle and recovery-prompt defects made its promotion result non-authoritative. The owner separately chose P as the new default and explicitly accepted a breaking text-schema migration. P is therefore an owner compatibility decision after the competition, not the benchmark winner.
+Candidate C was selected for the first complete implementation by explicit product decision. Competition 1 later compared C with alternative projections but was inconclusive because benchmark/oracle and recovery-prompt defects made its promotion result non-authoritative. The owner separately chose a P-derived projection as the new default and explicitly accepted a breaking text-schema migration; the integrated projection adds hardening and subtraction beyond frozen candidate P. The current default is therefore an owner compatibility decision after the competition, not the benchmark winner.
 
 A future replacement becomes a public contract through a dedicated competition and compatibility decision:
 

@@ -118,8 +118,8 @@ untrusted data.
 6. **Completed:** record the separate owner compatibility decision, integrate
    the P seed, harden domain reference kinds, remove redundant coverage prose,
    and add subtractive projection contract tests.
-7. **Pending:** finish governing-document propagation, run the repository,
-   security, and public-boundary gates, and verify cleanup.
+7. **In progress:** governing-document propagation is complete; run the
+   repository, security, and public-boundary gates and verify cleanup.
 
 ## Verification
 
