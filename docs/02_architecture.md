@@ -87,12 +87,12 @@ offline repository retained only for generic contract tests.
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
 
-For Chatwork output, including the selected candidate-C context capsule and relationship-aware message results, the layers divide responsibility further:
+For Chatwork output, including relationship-aware message results and the current `cwk-task-projection/1` presentation, the layers divide responsibility further:
 
 - Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
 - Infrastructure decodes Chatwork wire DTOs and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity.
 - Application use cases select the bounded data required by one outcome, resolve only explicit relationships available within that bound, and return a typed task result with coverage and unresolved facts.
-- CLI presentation projects that same typed result through the versioned context-capsule contract. Its compact aliases and hierarchy may reorganize facts but do not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+- CLI presentation projects that same typed result through a versioned text contract. The current task projection emits only catalog-declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. It adds no aliases, raw Chatwork notation as semantic structure, provider/wire extras, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -184,7 +184,7 @@ Relationship truth has three states:
 
 Filtering and context selection are application outcome concerns. Provider pagination and notation parsing remain infrastructure concerns. Presentation owns only representation.
 
-Candidate C is the first public presentation by explicit product decision and receives the compatibility and golden tests in this implementation. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code.
+Candidate C (`cwk-context-capsule/1`) is the first stable public presentation baseline and retains that historical evidence. Competition 1 was inconclusive because benchmark defects made its promotion result non-authoritative. The current default, candidate P (`cwk-task-projection/1`), was selected afterward by an explicit owner compatibility decision that accepted a breaking text-schema migration; it is not described as the benchmark winner. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code, and raw experimental evidence remains immutable decision input.
 
 Upstream coverage is separately pinned in `.harness/chatwork_api_v2.json`. That manifest may prove that every fixed official operation has a public task owner, but it cannot dispatch a request or generate a command. `cli.Catalog` remains the only public-command source of truth.
 
@@ -204,10 +204,11 @@ messages list --room <room-ref>
   consumes {kind: chatwork-room, argument: --room}
 ```
 
-The candidate-C capsule may assign a compact display alias, but it also emits
-the exact canonical `room_ref`; only that canonical value is accepted by the
-action. The former sample graph is absent from `DefaultCatalog` and remains an
-offline test fixture for generic boundary checks.
+The current task projection emits the exact canonical `room_ref` directly and
+defines no display alias; only that canonical value is accepted by the action.
+Historical candidate-C aliases were document-local and were never accepted by
+commands. The former sample graph is absent from `DefaultCatalog` and remains
+an offline test fixture for generic boundary checks.
 
 ## Operation effect and intent
 

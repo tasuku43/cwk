@@ -60,11 +60,22 @@ Every eligible presentation must:
 - preserve success/failure stream, status, completeness, and recovery contracts;
 - support the evaluated outcome without undocumented external processing.
 
-The first stable data presentation is candidate C: a versioned context capsule with deterministic headers, a compact local reference dictionary, typed task facts, explicit relationships/bounds, and visibly framed external text. Local aliases reduce repetition but are never accepted as command identity; the same capsule exposes canonical references for exact reuse. The grammar is a compatibility contract, not a product axiom.
+Candidate C (`cwk-context-capsule/1`) is the first stable data-presentation baseline: a versioned context capsule with deterministic headers, a compact local reference dictionary, typed task facts, explicit relationships/bounds, and visibly framed external text. Its local aliases were never command identity.
+
+The current default is candidate P (`cwk-task-projection/1`). It is a subtractive projection of the same typed result and emits only:
+
+- catalog-declared fields required by the task result;
+- exact canonical references, without a display-alias dictionary;
+- task-relevant bounds, completeness, and uncertainty;
+- structural trust framing for every external-text field.
+
+It does not publish raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, or helpful non-contract defaults. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 ## Future presentation-selection lifecycle
 
-Candidate C is selected for the first complete implementation by explicit product decision. A future replacement becomes a public contract through a dedicated competition:
+Candidate C was selected for the first complete implementation by explicit product decision. Competition 1 later compared C with alternative projections but was inconclusive because benchmark/oracle and recovery-prompt defects made its promotion result non-authoritative. The owner separately chose P as the new default and explicitly accepted a breaking text-schema migration. P is therefore an owner compatibility decision after the competition, not the benchmark winner.
+
+A future replacement becomes a public contract through a dedicated competition and compatibility decision:
 
 1. define one typed semantic fixture corpus and exact answer key;
 2. define agent tasks, model/agent versions, prompts, repetitions, invocation budgets, token accounting, and scoring before implementation;
@@ -72,9 +83,9 @@ Candidate C is selected for the first complete implementation by explicit produc
 4. reject candidates that fail semantic, identity, coverage, trust, determinism, or output-boundary requirements;
 5. compare eligible candidates on understanding quality, correct next action/reference, tokens, tool steps, bytes, latency, reviewability, and maintenance cost;
 6. select a winner, combination, or another iteration through reviewed evidence;
-7. only then change candidate C's schema/grammar versions, defaults, compatibility promises, and golden tests.
+7. only then make and record the compatibility decision that changes the current schema/grammar version, default, compatibility promises, and golden tests.
 
-Candidate worktrees are experimental. Their output is not public merely because it runs.
+Candidate worktrees are experimental. Their output is not public merely because it runs. Raw runs, score summaries, audit findings, and known benchmark defects remain evidence even when the experiment is inconclusive; they must not be rewritten to imply that the subsequently selected format won.
 
 ## Filtering and task composition
 
@@ -148,17 +159,17 @@ Every provider operation has one transport attempt. An uncertain mutation result
 
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
-Candidate C's versioned grammar, schemas, defaults, and ordering are compatibility promises for the first complete implementation because the product has selected it explicitly. A future replacement changes those promises only after the presentation competition accepts it. Experimental worktree output carries no compatibility promise.
+Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The current default deliberately breaks that text contract: `cwk-context-capsule/1` is replaced by `cwk-task-projection/1`, and clients must not expect the old headers, reference dictionary, aliases, field ordering, or grammar. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of that text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
 
 ## Explicit non-goals
 
 - Tracking future Chatwork additions automatically, mechanically mirroring endpoints, or exposing raw transport passthrough.
-- Treating candidate C as a thesis or allowing its aliases to become action identity.
+- Treating candidate C or the current task projection as a thesis, or allowing presentation shorthand to become action identity.
 - Silent fuzzy matching, truncation, or relationship inference.
 - Default lossy/model-generated summaries.
 - Claiming structural escaping makes external text semantically trustworthy.
-- OAuth grants and lifecycle commands; token persistence; multiple accounts or credential profiles; administration/private APIs; webhooks; GUI work; alternative presentations; token optimization; and release publication in the first complete implementation.
+- OAuth grants and lifecycle commands; token persistence; multiple accounts or credential profiles; administration/private APIs; webhooks; GUI work; and release publication in the first complete implementation. Presentation experiments and token optimization remain separate from API-capability completeness.
 
 ## Completion evidence for a Chatwork capability
 
-A capability is complete only when its outcome, non-goals, command discovery, semantic model, exact references, bounds, failure behavior, authentication, external-call policy, hostile-data tests, and agent transcript are reviewed. Presentation-dependent completion requires the accepted candidate-C format contract and its baseline evidence; a future replacement additionally requires accepted competition evidence. Required repository gates must pass.
+A capability is complete only when its outcome, non-goals, command discovery, semantic model, exact references, bounds, failure behavior, authentication, external-call policy, hostile-data tests, and agent transcript are reviewed. Candidate C remains the first-stable baseline evidence. Presentation-dependent completion under the current default requires the `cwk-task-projection/1` contract, its subtractive-field and golden evidence, and the recorded breaking compatibility decision; no benchmark-win claim is required or permitted for the inconclusive Competition 1. Required repository gates must pass.

@@ -67,7 +67,7 @@ Chatwork data is converted into a typed, provider-independent task result before
 
 ## Axiom 4: Presentation is versioned and replaceable
 
-No concrete output syntax is a thesis. The first complete implementation deliberately selects the context-capsule presentation (candidate C) so API work can close against one high-quality contract. Later presentation changes are selected by evidence about agent task quality and resource cost and require an explicit compatibility decision.
+No concrete output syntax is a thesis. The first complete implementation deliberately selected the context-capsule presentation, candidate C (`cwk-context-capsule/1`), so API work could close against one high-quality contract. It remains the first stable baseline. The current default is the task projection, candidate P (`cwk-task-projection/1`), adopted through an explicit owner compatibility decision after Competition 1 was inconclusive. That decision accepted a breaking text-schema migration; it is not a claim that P won the defective benchmark. Later presentation changes remain evidence-informed and require an explicit compatibility decision.
 
 ### Hard constraints
 
@@ -79,6 +79,15 @@ Every eligible presentation must:
 - be deterministic for the same typed input;
 - require no undocumented parsing convention or external post-processing for the evaluated outcome;
 - preserve stdout, stderr, exit, failure, and completeness contracts.
+
+The current task projection additionally follows a subtractive rule: it emits
+only catalog-declared task fields, exact canonical references, task-relevant
+bounds/completeness/uncertainty, and structural trust framing for external
+text. It does not add display aliases, raw Chatwork notation as semantic
+structure, undeclared provider or wire fields, duplicated coverage prose, or
+helpful non-contract defaults. Declared message bodies remain visible as
+untrusted external text; they are not reparsed by presentation to invent
+semantics.
 
 ### Optimization objectives
 
@@ -95,22 +104,22 @@ Token count is not optimized below the required understanding-quality floor. Num
 
 ## Axiom 5: Presentation implementations stay behind one semantic boundary
 
-The selected context capsule and any future presentation hypotheses consume the same provider-independent semantic boundary. Candidate C becomes the first stable presentation by explicit product decision; future replacements compete under comparable conditions before changing that contract.
+The historical context capsule, the current task projection, and any future presentation hypotheses consume the same provider-independent semantic boundary. Candidate C became the first stable presentation by explicit product decision. Competition 1 did not produce an authoritative winner because its benchmark/oracle defects made the result inconclusive. The owner then deliberately superseded C with P as a breaking compatibility decision. Future replacements still compete under comparable conditions before another default change.
 
 ### Consequences
 
 - Each candidate consumes the same typed semantic input and provider-independent fixtures.
 - Candidate worktrees cannot change semantics, coverage, or answer keys to improve their score.
 - The evaluation pins task prompts, model/agent versions, invocation budgets, token accounting, repetitions, and scoring.
-- Candidate C owns only presentation grammar, dictionaries, aliases, indentation, schemas, and output modes; none leaks into domain or application semantics.
-- Compact aliases are display-local and never replace canonical references accepted by commands.
-- A future replacement must beat or deliberately supersede the accepted C contract; inconclusive evidence leaves C unchanged.
+- A presentation owns only its grammar, ordering, schemas, and output modes; none leaks into domain or application semantics.
+- Historical candidate-C aliases were display-local and never replaced canonical references accepted by commands; the current task projection emits exact canonical references directly and defines no display aliases.
+- An inconclusive experiment does not establish a benchmark winner. A default may still change through a separately recorded owner compatibility decision that explicitly accepts the migration, as occurred for `cwk-task-projection/1`.
 
 ### Enforcement
 
-- Candidate C receives deterministic golden, semantic-answer, hostile-output, and canonical-reference tests in the first complete implementation.
+- Candidate C retains its status and evidence as the deterministic first stable baseline; the current task projection receives the active golden, semantic-answer, hostile-output, canonical-reference, and subtractive-field tests.
 - A future presentation-competition work packet defines candidates and measurement before experimental implementations begin.
-- Comparison reports identify each worktree/commit and record raw results, not only a winner summary.
+- Comparison reports identify each worktree/commit and record raw results, benchmark defects, and audit findings, not only a winner summary. Later compatibility decisions must not relabel inconclusive evidence as a win.
 
 ## Axiom 6: Discovery owns ambiguity; actions bind one exact target
 
@@ -177,7 +186,7 @@ The first complete implementation is bounded by the 32 REST operations linked fr
 2. implement single-account, process-local PAT authentication behind one secret-free binding, fixed-destination bounded transport, provider faults, and safe mutation intent;
 3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, and partial coverage;
 4. implement every remaining operation with the same catalog, reference, authentication, effect, and recovery contracts;
-5. render candidate C deterministically and prove its semantic answer, bounds, trust framing, and canonical reference flow;
+5. establish candidate C deterministically as the first stable presentation and prove its semantic answer, bounds, trust framing, and canonical reference flow;
 6. pass full, security, public, local-provider E2E, and agent-readiness gates without live credentials.
 
 Within that finite implementation, every provider operation has one attempt;
@@ -201,11 +210,17 @@ persistence, multiple accounts/profiles, GUI work, release publication,
 alternative presentations, and further token optimization are outside this
 completion boundary.
 
+After that boundary closed, the owner accepted the breaking default-text
+migration from `cwk-context-capsule/1` to `cwk-task-projection/1`. The semantic
+task result and exact canonical references remain authoritative; context-capsule
+headers, dictionaries, aliases, ordering, and grammar are not compatibility
+promises of the current default.
+
 ## Explicit non-goals
 
 - Mirroring Chatwork endpoints mechanically or exposing transport vocabulary, even though the fixed public-operation snapshot must be covered by user-task workflows.
 - Raw routes, arbitrary headers/bodies, or transport passthrough.
-- Treating the selected context-capsule grammar, dictionaries, aliases, or indentation as an axiom or domain model.
+- Treating either the historical context-capsule grammar or the current task-projection grammar, field selection, or ordering as an axiom or domain model.
 - Hidden fuzzy target selection.
 - Silent truncation or fabricated relationships.
 - Default lossy or model-generated summaries.

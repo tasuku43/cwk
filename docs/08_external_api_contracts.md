@@ -152,7 +152,7 @@ Chatwork message responses cross two distinct compatibility boundaries:
 1. infrastructure validates the reviewed provider wire shape and parses supported Chatwork notation into typed semantic facts;
 2. a presentation candidate projects those facts without changing the semantic answer, canonical identity, bounds, or trust classification.
 
-Neither boundary exposes raw upstream JSON as the product model. A wire-field addition does not automatically become public output, and a notation parser update cannot silently create a new public relationship type.
+Neither boundary exposes raw upstream JSON as the product model. A wire-field addition does not automatically become public output, and a notation parser update cannot silently create a new public relationship type. A declared message body may contain raw Chatwork notation as untrusted external text, but presentation does not publish that notation as a separate semantic record or reinterpret it.
 
 The first message-context semantic fixture must declare:
 
@@ -167,7 +167,9 @@ The first message-context semantic fixture must declare:
 
 An internally complete semantic result over a partial upstream window is still partial room context. Every eligible presentation must make that answer recoverable. A zero exit status means the declared bounded result was produced completely; it does not claim that all room history was retrieved.
 
-A supported evaluation outcome must consume each candidate directly. If its acceptance transcript uses `jq`, a custom join, Chatwork-tag parsing, or an undocumented follow-up request, that candidate is ineligible or the capability's stated outcome is too broad. Candidate C is the selected first context-capsule grammar and is tested against this semantic boundary; a later competition is required only to replace it, not to complete the current API implementation.
+A supported evaluation outcome must consume each candidate directly. If its acceptance transcript uses `jq`, a custom join, Chatwork-tag parsing, or an undocumented follow-up request, that candidate is ineligible or the capability's stated outcome is too broad. Candidate C (`cwk-context-capsule/1`) remains the tested first-stable baseline. The current default is candidate P (`cwk-task-projection/1`), selected through an explicit owner compatibility decision after Competition 1 was inconclusive, not as its benchmark winner.
+
+The current projection is subtractive: it publishes only catalog-declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. It defines no display aliases and does not add provider/wire fields, raw notation as derived semantics, duplicated coverage prose, or helpful non-contract defaults. Moving from C to P is a breaking text-schema migration; semantic task contracts and canonical-reference identity remain governed independently. Competition raw runs, scoring defects, and audit findings remain evidence and cannot be rewritten to manufacture a winner claim.
 
 ## Capability and coverage discipline
 

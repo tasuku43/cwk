@@ -44,11 +44,18 @@ architecture decision before implementation.
 
 For relationship-rich Chatwork reads, define the outcome's typed semantic
 result and answer key before presentation. Raw provider JSON plus documented
-post-processing does not complete the outcome. The first complete Chatwork
-implementation uses the accepted candidate-C context capsule. Record a
-repeated external pipeline as thesis evidence. Compare materially different
-future presentation candidates in isolated worktrees under the protocol in
-`docs/09_agent_readiness_validation.md` before replacing that stable format.
+post-processing does not complete the outcome. Candidate C
+(`cwk-context-capsule/1`) remains the first-stable baseline. The current default
+is `cwk-task-projection/1`, selected by an explicit owner compatibility decision
+after an inconclusive competition, not as its benchmark winner. Its renderer is
+subtractive: emit only catalog-declared task fields, exact canonical references,
+task-relevant bounds/completeness/uncertainty, and external-text trust framing;
+do not add aliases, raw provider notation as semantic structure, wire extras,
+or non-contract defaults. Record a repeated external pipeline as thesis
+evidence. Compare materially different future presentation candidates in
+isolated worktrees under the protocol in
+`docs/09_agent_readiness_validation.md` before replacing the current default,
+and retain inconclusive raw results and benchmark defects.
 
 Separate discovery from action. Discovery commands may accept ambiguity and
 must return stable, opaque IDs. Acting commands accept one opaque ID or another
@@ -261,12 +268,15 @@ Add the smallest set that proves the capability:
   proximity, and indentation-looking text do not fabricate reply edges;
 - canonical-reference round trips that reject presentation-derived shorthand
   unless a separate typed contract explicitly defines it;
-- a no-post-processing agent transcript and candidate-C baseline; any future
+- a no-post-processing agent transcript, the historical candidate-C baseline,
+  and the current `cwk-task-projection/1` subtractive-field contract; any future
   replacement uses a presentation competition that pins candidates,
   agent/model versions, prompts, repetitions, answer scoring, token accounting,
-  quality floor, latency, and raw result retention;
-- golden fixtures for the accepted candidate-C first contract; future
-  replacements receive them only after reviewed competition evidence.
+  quality floor, latency, benchmark-defect reporting, and raw result retention;
+- retained baseline fixtures for the candidate-C first contract and active
+  golden fixtures for the current task projection; future replacements receive
+  active compatibility fixtures only after reviewed evidence and an explicit
+  compatibility decision.
 
 Tests must use temporary directories, fixed clocks, fake credentials, and local
 test servers. They must not require a developer account or live network.

@@ -140,7 +140,7 @@ The test suite has complementary levels:
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
 - No-post-processing agent transcripts fail if a supported task requires `jq`, `grep`, a custom join, raw notation parsing, source inspection, or an exploratory provider call.
 - Presentation competitions pin fixtures, agent/model versions, prompts, repetitions, invocation budgets, answer scoring, token accounting, and latency measurement before candidate implementation.
-- Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, and maintenance evidence. A selected presentation receives golden and compatibility tests only after review accepts it.
+- Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, maintenance, benchmark-defect, and audit evidence. A selected presentation receives golden and compatibility tests only after an explicit compatibility decision; an inconclusive benchmark is never relabeled as a win.
 
 A global coverage percentage is not a substitute for these contracts. Add tests at the boundary where a future regression would otherwise pass unnoticed.
 
@@ -173,6 +173,9 @@ Every strong statement should identify its enforcement path.
 | Context relationship truth | Presentation-independent typed fixtures and negative inference tests for To, quote, names, proximity, and missing references |
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
 | Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
+| Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
+| Current text schema | Golden/schema tests require `cwk-task-projection/1`; migration notes record the breaking replacement of `cwk-context-capsule/1` without claiming a Competition 1 winner |
+| Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing; aliases, semantic raw-notation records, wire extras, and non-contract defaults fail |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
 | Fixed Chatwork API coverage | Strict 32-operation snapshot plus bidirectional operation-to-public-capability validation |

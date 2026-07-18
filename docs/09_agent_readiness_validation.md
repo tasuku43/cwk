@@ -1,6 +1,6 @@
 # Agent Readiness Validation
 
-This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. Candidate C is the first accepted context-capsule presentation; this document also defines how future candidates are compared before replacing it.
+This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. Candidate C (`cwk-context-capsule/1`) is the first stable presentation baseline. The current default is candidate P (`cwk-task-projection/1`), adopted by an explicit owner compatibility decision after Competition 1 was inconclusive, not as its benchmark winner. This document also defines how future candidates are compared before another default change.
 
 ## Interaction budgets
 
@@ -55,9 +55,15 @@ A candidate is ineligible regardless of token savings when it:
 - requires undocumented parsing or a nonzero external-reconstruction count;
 - violates stdout, stderr, exit, failure, completeness, or untrusted-data contracts.
 
-## Candidate-C baseline and future parallel-worktree competition
+## Stable C baseline, Competition 1 evidence, and current default
 
-The first complete implementation tests candidate C directly against the semantic fixture and exact answers. It must preserve canonical references, bounds, unresolved relationships, hostile-text framing, deterministic bytes, and zero external reconstruction. These tests form the baseline that a later experiment may not silently weaken.
+The first complete implementation tested candidate C directly against the semantic fixture and exact answers. It preserves canonical references, bounds, unresolved relationships, hostile-text framing, deterministic bytes, and zero external reconstruction. Those results remain the first-stable baseline that later experiments may not silently weaken or rewrite.
+
+Competition 1 was inconclusive: benchmark/oracle defects and recovery-prompt ambiguity made its promotion result non-authoritative. Raw runs, score summaries, audit findings, and known defects remain evidence. They must not be discarded, corrected in place, or relabeled to imply that candidate P won.
+
+After that experiment, the project owner made a separate compatibility decision to select candidate P as the default. The decision accepts a breaking migration from `cwk-context-capsule/1` to `cwk-task-projection/1`: old capsule headers, dictionaries, aliases, ordering, and grammar are not preserved. The semantic answer, exact canonical-reference identity, bounds/completeness/uncertainty, and external-text trust classification remain required.
+
+The current task projection is subtractive. It emits only catalog-declared task fields, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. It emits no display aliases, semantic records derived from raw Chatwork notation, provider/wire extras, duplicated coverage prose, or helpful non-contract defaults. Declared message bodies remain visible untrusted data and cannot inject CLI-authored structure.
 
 For a future replacement, before experimental implementation the competition work packet pins:
 
@@ -85,7 +91,7 @@ First reject ineligible candidates. Compare the remaining candidates on a Pareto
 - human reviewability for safe supervision;
 - implementation and maintenance cost.
 
-The minimum understanding-quality floor is set before results are viewed. Lower token use cannot compensate for falling below it. A winner, reviewed combination, or another experiment is an acceptable decision; arbitrary selection is not.
+The minimum understanding-quality floor is set before results are viewed. Lower token use cannot compensate for falling below it. A winner, reviewed combination, or another experiment is an acceptable experiment conclusion. If the experiment is inconclusive, it establishes no winner. A separately recorded owner compatibility decision may still supersede the default when it names the evidence limits and explicitly accepts any breaking migration; it must not be presented as a benchmark result.
 
 ## Recovery probes
 
@@ -140,8 +146,8 @@ go run ./cmd/cwk help messages list --format agent
 go test ./internal/cli -run 'TestChatwork|TestAgent'
 ```
 
-These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. The candidate-C semantic and golden tests separately validate the selected presentation.
+These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. Candidate-C evidence validates the first-stable baseline. Current task-projection semantic, subtractive-field, hostile-text, canonical-reference, and golden tests validate `cwk-task-projection/1` as the selected default.
 
 ## Review record
 
-Record the natural-language outcome, discovery/task transcript, external-processing count, provider-call bounds, semantic answers, canonical references, recovery choices, per-run token/byte/latency measurements, agent/model versions, worktree/commit, failures, and variance. Preserve candidate evidence even when it loses so later thesis revisions can distinguish format failure from model or fixture drift.
+Record the natural-language outcome, discovery/task transcript, external-processing count, provider-call bounds, semantic answers, canonical references, recovery choices, per-run token/byte/latency measurements, agent/model versions, worktree/commit, failures, variance, benchmark defects, and the decision authority. Preserve candidate evidence when it loses or the experiment is inconclusive so later thesis revisions can distinguish format failure from model, fixture, prompt, oracle, or scoring drift.
