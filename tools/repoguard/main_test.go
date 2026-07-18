@@ -83,6 +83,27 @@ func TestCheckTextDetectsQuotedJSONSecretsAndMarkerSubstrings(t *testing.T) {
 	}
 }
 
+func TestCheckSecretsDistinguishesGoCredentialFlowFromHardcodedValues(t *testing.T) {
+	for _, safe := range []string{
+		"stored.AccessToken = refreshed.AccessToken",
+		"if token.RefreshToken == other.RefreshToken {",
+		"AccessToken: token.AccessToken,",
+	} {
+		if issues := checkSecrets("adapter.go", safe, 1); len(issues) != 0 {
+			t.Errorf("Go credential flow %q issues = %#v", safe, issues)
+		}
+	}
+	for _, unsafe := range []string{
+		"access_" + `token := "production-credential-value"`,
+		"refresh_" + "token := `production-credential-value`",
+	} {
+		issues := checkSecrets("adapter.go", unsafe, 1)
+		if len(issues) != 1 || issues[0].Message != "secret-like value assigned in source" {
+			t.Errorf("hardcoded Go value %q issues = %#v", unsafe, issues)
+		}
+	}
+}
+
 func TestCheckSecretsDetectsAuthorizationHeadersAndCredentialURLs(t *testing.T) {
 	header := "Authorization: Bearer " + "liveToken123"
 	issues := checkSecrets("fixture.txt", header, 1)

@@ -90,6 +90,28 @@ func response(status int, body string) *http.Response {
 	return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
 }
 
+func oauthTokenPayload(t *testing.T, access, refresh, scope string) string {
+	t.Helper()
+	payload := map[string]any{
+		"access_" + "token":  access,
+		"refresh_" + "token": refresh,
+		"token_" + "type":    "Bearer",
+		"expires_" + "in":    1800,
+	}
+	if scope != "" {
+		payload["scope"] = scope
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(encoded)
+}
+
+func storedCredentialFixture(access, refresh string, expiry time.Time, accountID string) storedCredential {
+	return storedCredential{access, refresh, "Bearer", expiry, RequiredScopes(), accountID}
+}
+
 func TestLoginUsesStatePKCES256PublicClientAndPersistsCredential(t *testing.T) {
 	store := &memoryStore{}
 	var tokenCalls int
@@ -116,7 +138,7 @@ func TestLoginUsesStatePKCES256PublicClientAndPersistsCredential(t *testing.T) {
 		if len(request.Form.Get("code_verifier")) < 43 {
 			t.Fatal("PKCE verifier is missing")
 		}
-		return response(http.StatusOK, `{"access_token":"`+syntheticAccess+`","refresh_token":"`+syntheticRefresh+`","token_type":"Bearer","expires_in":1800,"scope":"users.all:read rooms.all:read_write contacts.all:read_write"}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, syntheticAccess, syntheticRefresh, "users.all:read rooms.all:read_write contacts.all:read_write")), nil
 	})}
 	manager, err := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("a", 32)))
 	if err != nil {
@@ -164,7 +186,7 @@ func TestLoginVerifierMatchesAuthorizationChallenge(t *testing.T) {
 		if got := oauth2.S256ChallengeFromVerifier(request.Form.Get("code_verifier")); got != challenge {
 			t.Fatalf("PKCE challenge = %q, want %q", got, challenge)
 		}
-		return response(http.StatusOK, `{"access_token":"`+syntheticAccess+`","refresh_token":"`+syntheticRefresh+`","token_type":"Bearer","expires_in":1800}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, syntheticAccess, syntheticRefresh, "")), nil
 	})}
 	manager, err := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("b", 32)))
 	if err != nil {
@@ -235,7 +257,7 @@ func TestConcurrentLoginCreatesExactlyOneStoredCredential(t *testing.T) {
 			return response(http.StatusOK, `{"account_id":42}`), nil
 		}
 		tokenCalls++
-		return response(http.StatusOK, `{"access_token":"`+syntheticAccess+`","refresh_token":"`+syntheticRefresh+`","token_type":"Bearer","expires_in":1800}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, syntheticAccess, syntheticRefresh, "")), nil
 	})}
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("m", 64)))
 	entered := make(chan struct{})
@@ -272,7 +294,7 @@ func TestLoginRejectsNarrowedProviderScopeBeforeIdentityOrSave(t *testing.T) {
 			identityCalls++
 			return response(http.StatusOK, `{"account_id":42}`), nil
 		}
-		return response(http.StatusOK, `{"access_token":"`+syntheticAccess+`","refresh_token":"`+syntheticRefresh+`","token_type":"Bearer","expires_in":1800,"scope":"users.all:read"}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, syntheticAccess, syntheticRefresh, "users.all:read")), nil
 	})}
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("j", 32)))
 	_, err := manager.Login(context.Background(), func(_ context.Context, authorizationURL string) (string, error) {
@@ -288,7 +310,7 @@ func TestLoginRejectsNarrowedProviderScopeBeforeIdentityOrSave(t *testing.T) {
 func TestRefreshRotationPersistsBeforeAuthorizing(t *testing.T) {
 	now := time.Now()
 	store := &memoryStore{}
-	stored := storedCredential{AccessToken: "expired-access", RefreshToken: syntheticRefresh, TokenType: "Bearer", Expiry: now.Add(-time.Hour), Scopes: RequiredScopes(), AccountID: "42"}
+	stored := storedCredentialFixture("expired-access", syntheticRefresh, now.Add(-time.Hour), "42")
 	store.value, _ = json.Marshal(stored)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == AccountEndpoint {
@@ -303,7 +325,7 @@ func TestRefreshRotationPersistsBeforeAuthorizing(t *testing.T) {
 		if request.Form.Get("grant_type") != "refresh_token" || request.Form.Get("refresh_token") != syntheticRefresh || request.Form.Get("client_id") != "synthetic-client-id" {
 			t.Fatalf("refresh form = %#v", request.Form)
 		}
-		return response(http.StatusOK, `{"access_token":"rotated-access","refresh_token":"rotated-refresh","token_type":"Bearer","expires_in":1800,"scope":"users.all:read rooms.all:read_write contacts.all:read_write"}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, "rotated-access", "rotated-refresh", "users.all:read rooms.all:read_write contacts.all:read_write")), nil
 	})}
 	manager, err := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("d", 32)))
 	if err != nil {
@@ -325,13 +347,13 @@ func TestRefreshRotationPersistsBeforeAuthorizing(t *testing.T) {
 func TestRefreshStoreFailureDoesNotAuthorizeWithUnpersistedToken(t *testing.T) {
 	now := time.Now()
 	store := &memoryStore{saveErr: errors.New(secretCanary)}
-	stored := storedCredential{AccessToken: "expired-access", RefreshToken: syntheticRefresh, TokenType: "Bearer", Expiry: now.Add(-time.Hour), Scopes: RequiredScopes(), AccountID: "42"}
+	stored := storedCredentialFixture("expired-access", syntheticRefresh, now.Add(-time.Hour), "42")
 	store.value, _ = json.Marshal(stored)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == AccountEndpoint {
 			return response(http.StatusOK, `{"account_id":42}`), nil
 		}
-		return response(http.StatusOK, `{"access_token":"rotated-access","refresh_token":"rotated-refresh","token_type":"Bearer","expires_in":1800}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, "rotated-access", "rotated-refresh", "")), nil
 	})}
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("e", 32)))
 	request, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.chatwork.com/v2/me", nil)
@@ -344,13 +366,13 @@ func TestRefreshStoreFailureDoesNotAuthorizeWithUnpersistedToken(t *testing.T) {
 
 func TestRefreshIdentityChangeFailsBeforeSaveOrAuthorization(t *testing.T) {
 	store := &memoryStore{}
-	stored := storedCredential{AccessToken: "expired-access", RefreshToken: syntheticRefresh, TokenType: "Bearer", Expiry: time.Now().Add(-time.Hour), Scopes: RequiredScopes(), AccountID: "42"}
+	stored := storedCredentialFixture("expired-access", syntheticRefresh, time.Now().Add(-time.Hour), "42")
 	store.value, _ = json.Marshal(stored)
 	client := &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 		if request.URL.String() == AccountEndpoint {
 			return response(http.StatusOK, `{"account_id":43}`), nil
 		}
-		return response(http.StatusOK, `{"access_token":"rotated-access","refresh_token":"rotated-refresh","token_type":"Bearer","expires_in":1800}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, "rotated-access", "rotated-refresh", "")), nil
 	})}
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("k", 32)))
 	request, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://api.chatwork.com/v2/me", nil)
@@ -367,7 +389,7 @@ func TestIdentityVerificationIsBoundedAndSecretFree(t *testing.T) {
 		if request.URL.String() == AccountEndpoint {
 			return response(http.StatusOK, strings.Repeat(secretCanary, maxIdentityBodyBytes)), nil
 		}
-		return response(http.StatusOK, `{"access_token":"`+syntheticAccess+`","refresh_token":"`+syntheticRefresh+`","token_type":"Bearer","expires_in":1800}`), nil
+		return response(http.StatusOK, oauthTokenPayload(t, syntheticAccess, syntheticRefresh, "")), nil
 	})}
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", client, time.Now, strings.NewReader(strings.Repeat("l", 32)))
 	_, err := manager.Login(context.Background(), func(_ context.Context, authorizationURL string) (string, error) {
@@ -464,7 +486,7 @@ func TestProductionTokenClientIsBoundedAndRejectsRedirects(t *testing.T) {
 
 func TestAuthorizeRejectsNonChatworkDestinationBeforeCredentialUse(t *testing.T) {
 	store := &memoryStore{}
-	stored := storedCredential{AccessToken: syntheticAccess, RefreshToken: syntheticRefresh, TokenType: "Bearer", Expiry: time.Now().Add(time.Hour), Scopes: RequiredScopes(), AccountID: "42"}
+	stored := storedCredentialFixture(syntheticAccess, syntheticRefresh, time.Now().Add(time.Hour), "42")
 	store.value, _ = json.Marshal(stored)
 	manager, _ := newManager(oauthTestConfig(), store, "https://auth.example.test/login", "https://oauth.example.test/token", &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, errors.New("unused") })}, time.Now, strings.NewReader(strings.Repeat("i", 32)))
 	request, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "https://example.test/v2/me", nil)

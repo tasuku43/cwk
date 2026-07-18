@@ -35,7 +35,7 @@ var (
 	referenceMarkdownLink = regexp.MustCompile(`^\s*\[[^]\n]+\]:\s*(\S+)`)
 	uriScheme             = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
 	authorizationSecret   = regexp.MustCompile(`(?i)authorization\s*:\s*(?:bearer|basic)\s+([A-Za-z0-9+/=_-]{8,})`)
-	assignmentSecret      = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_])["']?(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*[:=]\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^# ,}\]\t\r\n]+))`)
+	assignmentSecret      = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_])["']?(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*(?::=|[:=])\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^# ,}\]\t\r\n]+))`)
 	exampleSecret         = regexp.MustCompile(`^(?:example|dummy|fake|test|redacted|placeholder)(?:[-_.][a-z0-9][a-z0-9._-]*)?$`)
 	environmentSecret     = regexp.MustCompile(`^(?:\$\{[A-Z][A-Z0-9_]*\}|env\.[A-Z][A-Z0-9_]*)$`)
 	secretPatterns        = []struct {
@@ -585,6 +585,12 @@ func checkSecrets(path, line string, lineNumber int) []issue {
 		}
 	}
 	for _, match := range assignmentSecret.FindAllStringSubmatch(line, -1) {
+		// Go field copies, comparisons, and method calls are not embedded
+		// credentials. Quoted and raw string literals remain subject to the same
+		// hard-coded-secret policy as every other public file.
+		if strings.HasSuffix(path, ".go") && match[1] == "" && match[2] == "" && !strings.HasPrefix(match[3], "`") {
+			continue
+		}
 		value := ""
 		for _, candidate := range match[1:] {
 			if candidate != "" {
