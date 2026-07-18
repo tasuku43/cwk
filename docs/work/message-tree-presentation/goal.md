@@ -1,4 +1,4 @@
-# Work Goal: Make bounded message conversations directly legible
+# Work Goal: Make bounded message relations directly legible
 
 - Status: Accepted
 - Owner: Project owner and Codex
@@ -8,16 +8,18 @@
 ## Outcome
 
 `messages list` renders one bounded Chatwork message window as a deterministic
-reply tree with a document-local actor dictionary. An agent can recover provider
-sequence, distinguish To from reply, identify unresolved parents, and pass every
-canonical message reference unchanged to the next command without external
-processing.
+chronological adjacency list with a document-local actor dictionary. An agent
+can follow explicit reply edges, distinguish To from reply, identify unresolved
+parents, and pass every canonical message reference unchanged to the next
+command without external processing.
 
 ## Why now
 
 The current flat projection repeats room, sender, trust, and relation-state
-syntax on every message. The project owner has selected a concrete tree grammar
-that preserves the typed semantic answer while reducing that repetition.
+syntax on every message. The project owner first requested an indented tree, then
+superseded it before implementation with one flat chronological adjacency-list
+grammar. The latest decision preserves the typed semantic answer while avoiding
+indentation growth and reducing repetition.
 
 ## Non-goals
 
@@ -33,10 +35,12 @@ that preserves the typed semantic answer while reducing that repetition.
 
 ## Acceptance criteria
 
-- [ ] One room record, one external-text trust declaration, and one entry per
-  known sender appear before a deterministic message tree.
-- [ ] Every message retains its canonical reference and original provider
-  sequence number; resolved reply edges determine indentation and branching.
+- [ ] One room record, one external-text trust declaration, one schema line, and
+  one entry per known sender appear before the chronological message list.
+- [ ] Every message occupies one physical line in provider order and retains its
+  canonical reference plus a unique deterministic sequence number.
+- [ ] Resolved reply edges use `reply=#N`; branches and interleaved conversations
+  remain explicit without indentation, depth, root, thread, or child metadata.
 - [ ] To and reply are separate, may coexist, and only typed relations are used.
 - [ ] Unresolved reply targets retain an available canonical reference without
   being attached to a guessed node; target absence never fabricates a reference.
@@ -46,6 +50,8 @@ that preserves the typed semantic answer while reducing that repetition.
   global trust declaration and no repeated `untrusted:` prefix.
 - [ ] Synthetic semantic, golden, hostile-text, edge-shape, and exact-reference
   tests cover the owner-specified matrix without real Chatwork data.
+- [ ] A 50-message reply chain has no indentation growth and output size remains
+  approximately linear in message count.
 - [ ] A same-tokenizer before/after token measurement is recorded for one
   representative synthetic fixture.
 - [ ] Scoped agent-readiness evidence proves reply-chain understanding and exact

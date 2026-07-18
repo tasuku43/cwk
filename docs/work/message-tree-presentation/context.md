@@ -1,4 +1,4 @@
-# Context: Message tree presentation
+# Context: Flat message adjacency presentation
 
 ## Verified facts before implementation
 
@@ -31,32 +31,40 @@
   unresolved reply, To, quote, absent relation, hostile body text, bounded
   coverage, and exact reference flow. They require updates, not replacement.
 
+## Superseded direction
+
+- The initial packet selected a physically reordered indented reply tree. Before
+  implementation, the owner superseded that decision with a single flat format.
+  No indented renderer was implemented, and no switch or legacy alternative will
+  be retained.
+
 ## Constraints
 
-- The tree is a presentation of typed facts, not a second relation resolver.
-- `#N` is the one-based position in the provider-returned slice. Physical tree
-  order may differ; `#N` must make the original order recoverable.
-- Resolved replies nest beneath their exact in-window parent. Roots and siblings
-  retain provider sequence order. Unresolved replies remain roots.
+- The adjacency list is a presentation of typed facts, not a second relation resolver.
+- `#N` is the one-based position in the provider-returned slice. Physical
+  reordering is forbidden; output lines remain in that exact order.
 - Each node retains full `message-ref`; `reply=#N` is only a local cross-reference.
-- Reply is the only tree edge. To and quote remain non-tree relation fields.
+- Reply, To, and quote are explicit fields; none is represented by indentation.
 - Resolved is the default and omitted. Only unresolved relations carry an
   explicit `?` marker.
 - Actor aliases are assigned by first sender occurrence in provider order.
   Canonical account identity, not display name, deduplicates actors.
 - Repeated observations of one account must agree on its displayed name; an
   inconsistent semantic window fails closed instead of silently discarding text.
+- Every body is quoted on the same physical line as its message record. Newlines
+  and hostile structural text are escaped by the existing terminal-safe rule.
+- No blank lines appear between message records.
 - Existing collection bounds and completeness remain once on the header because
   they are required uncertainty facts, not per-message repetition.
-- Send timestamps remain available in the typed semantic fixture. The tree's
+- Send timestamps remain available in the typed semantic fixture. The flat list's
   public temporal contract is provider sequence; absolute timestamp selection is
   an implementation decision to verify against the updated catalog and golden.
 
 ## Unknowns closed by this packet
 
 - No alternate grammar competition will be started; the owner explicitly chose
-  this tree grammar.
+  this chronological adjacency-list grammar.
 - No recipient-name lookup will be added; it would add calls and semantics beyond
   this change.
-- Quote relations will not become tree edges. Their existing typed facts must not
+- Quote relations will not become reply edges. Their existing typed facts must not
   be silently reclassified or inferred.
