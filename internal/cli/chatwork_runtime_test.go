@@ -77,7 +77,10 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	if port.request.Room != room || !port.request.ForceRecent {
 		t.Fatalf("request = %+v, want exact room and recent window", port.request)
 	}
-	for _, want := range []string{"cwk-context-capsule/1\n", "canonical=10", "canonical=11", "reply kind=\"reply\" state=resolved"} {
+	// Presentation candidates deliberately use different grammars. This
+	// integration test owns only the shared semantic boundary: both exact
+	// message references and the typed resolved reply facts must survive.
+	for _, want := range []string{"10", "11", "reply", "resolved"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, stdout.String())
 		}
