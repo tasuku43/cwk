@@ -8,7 +8,7 @@ This document decides ambiguous product and engineering choices for Chatwork CLI
 
 The primary user is a developer or operator who delegates Chatwork work to a coding agent from a shell or automation environment. Human usability remains important, but command certainty, agent understanding quality, and token efficiency are the first optimization targets.
 
-The product is not measured by Chatwork API endpoint coverage or by the compactness of one syntax. A smaller output is worse when it causes command mistakes, hides missing context, weakens identity, or makes an agent infer relationships.
+The product is not an endpoint mirror and is not measured by the compactness of one syntax. Its first complete implementation nevertheless has a finite coverage obligation: every operation in the official 2026-07-18 Chatwork API snapshot must be reachable through at least one reviewed user-task workflow. A smaller output is worse when it causes command mistakes, hides missing context, weakens identity, or makes an agent infer relationships.
 
 ## Axiom 1: A supported outcome is operationally closed
 
@@ -65,9 +65,9 @@ Chatwork data is converted into a typed, provider-independent task result before
 - Negative tests reject fabricated relationships and silent completeness claims.
 - Candidate presentations are evaluated against the same semantic facts and canonical references.
 
-## Axiom 4: Presentation is an empirical, multi-objective decision
+## Axiom 4: Presentation is versioned and replaceable
 
-No concrete output syntax is a thesis. Presentation is selected by evidence about agent task quality and resource cost.
+No concrete output syntax is a thesis. The first complete implementation deliberately selects the context-capsule presentation (candidate C) so API work can close against one high-quality contract. Later presentation changes are selected by evidence about agent task quality and resource cost and require an explicit compatibility decision.
 
 ### Hard constraints
 
@@ -91,26 +91,26 @@ Among eligible candidates, prefer the Pareto frontier across:
 - serialized bytes, latency, and implementation/maintenance cost;
 - human reviewability when it affects safe supervision.
 
-Token count is not optimized below the required understanding-quality floor. Numerical thresholds, tokenizer/model versions, fixtures, and repetitions are chosen in the presentation competition work packet, not invented in this thesis.
+Token count is not optimized below the required understanding-quality floor. Numerical thresholds, tokenizer/model versions, fixtures, and repetitions for later optimization are chosen in a presentation-competition work packet, not invented in this thesis or used to block the first complete implementation.
 
-## Axiom 5: Presentation candidates compete behind one semantic boundary
+## Axiom 5: Presentation implementations stay behind one semantic boundary
 
-Materially different presentation hypotheses are implemented in isolated worktrees and evaluated under comparable conditions before one is stabilized.
+The selected context capsule and any future presentation hypotheses consume the same provider-independent semantic boundary. Candidate C becomes the first stable presentation by explicit product decision; future replacements compete under comparable conditions before changing that contract.
 
 ### Consequences
 
 - Each candidate consumes the same typed semantic input and provider-independent fixtures.
 - Candidate worktrees cannot change semantics, coverage, or answer keys to improve their score.
 - The evaluation pins task prompts, model/agent versions, invocation budgets, token accounting, repetitions, and scoring.
-- Candidate-specific grammars, dictionaries, aliases, indentation, schemas, and output modes remain hypotheses in their worktrees.
-- Only a reviewed winner, or an explicitly selected combination, is promoted into the public output contract and main implementation.
-- Inconclusive evidence results in another experiment, not an arbitrary format commitment.
+- Candidate C owns only presentation grammar, dictionaries, aliases, indentation, schemas, and output modes; none leaks into domain or application semantics.
+- Compact aliases are display-local and never replace canonical references accepted by commands.
+- A future replacement must beat or deliberately supersede the accepted C contract; inconclusive evidence leaves C unchanged.
 
 ### Enforcement
 
-- A presentation-competition work packet defines candidates and measurement before implementation begins.
+- Candidate C receives deterministic golden, semantic-answer, hostile-output, and canonical-reference tests in the first complete implementation.
+- A future presentation-competition work packet defines candidates and measurement before experimental implementations begin.
 - Comparison reports identify each worktree/commit and record raw results, not only a winner summary.
-- The selected design receives golden/contract tests only after the decision is accepted.
 
 ## Axiom 6: Discovery owns ambiguity; actions use exact references
 
@@ -159,24 +159,33 @@ Command certainty, operational closure, semantic fidelity, understanding quality
 - Public examples use synthetic Chatwork-like data.
 - `task check` decides implementation completion; higher-risk changes add the named security/public/release profiles.
 
-## First testable slice
+## First complete implementation
 
-The first slice should test the axioms rather than prematurely stabilize presentation:
+The first complete implementation is bounded by the 32 REST operations linked from the official Chatwork documentation index on 2026-07-18. It must:
 
-1. define a typed semantic fixture for room discovery and a bounded recent-message result;
-2. include explicit and missing relationships, repeated values, canonical references, hostile text, and partial coverage;
-3. define agent questions and exact answers for command selection, relationship understanding, completeness, and next-reference use;
-4. implement materially different presentation candidates in isolated worktrees against the same input;
-5. compare eligibility, understanding quality, token use, tool steps, and maintenance cost;
-6. promote a presentation contract only after reviewing the evidence.
+1. map every operation to at least one task-oriented public workflow and mechanically reject gaps or unreviewed extras;
+2. implement single-account API-token authentication, fixed-destination bounded transport, provider faults, and safe mutation intent;
+3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, and partial coverage;
+4. implement every remaining operation with the same catalog, reference, authentication, effect, and recovery contracts;
+5. render candidate C deterministically and prove its semantic answer, bounds, trust framing, and canonical reference flow;
+6. pass full, security, public, local-provider E2E, and agent-readiness gates without live credentials.
 
-Authentication storage, exact public command names, provider call budgets, presentation candidates, and numerical acceptance thresholds remain decisions for subsequent work packets.
+Within that finite implementation, every provider operation has one attempt;
+metadata/read and non-upload requests use a 20-second timeout and uploads 60
+seconds. The checked contract also caps success/error bodies at 8 MiB/64 KiB,
+complete output at 16 MiB, aggregate lists at 10,000 items, documented endpoint
+lists at 100 items, and upload at 5 MiB. Exact typed invocation suffices for
+ordinary creates/updates; the reviewed access-changing and destructive sets
+add exact `--confirm access-change` and `--confirm destructive`, respectively.
+Uncertain mutation outcomes reconcile only through read-only tasks.
+
+Future provider additions, OAuth, multiple accounts, GUI work, release publication, alternative presentations, and further token optimization are outside this completion boundary.
 
 ## Explicit non-goals
 
-- Mirroring every Chatwork API endpoint.
+- Mirroring Chatwork endpoints mechanically or exposing transport vocabulary, even though the fixed public-operation snapshot must be covered by user-task workflows.
 - Raw routes, arbitrary headers/bodies, or transport passthrough.
-- Selecting JSON, a custom compact grammar, dictionaries, aliases, indentation, or another concrete representation as an axiom.
+- Treating the selected context-capsule grammar, dictionaries, aliases, or indentation as an axiom or domain model.
 - Hidden fuzzy target selection.
 - Silent truncation or fabricated relationships.
 - Default lossy or model-generated summaries.

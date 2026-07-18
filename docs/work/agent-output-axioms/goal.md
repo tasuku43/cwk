@@ -1,5 +1,9 @@
 # Work Goal: Establish agent-output axioms
 
+> Follow-up decision (2026-07-18): this work deliberately avoided selecting a
+> representation as an axiom. The subsequent complete-implementation goal may,
+> and does, select candidate C as a replaceable public contract.
+
 - Status: Complete
 - Owner: Project owner
 - Target: Product-thesis pass before presentation implementation

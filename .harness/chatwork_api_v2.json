@@ -1,0 +1,77 @@
+{
+  "snapshot_date": "2026-07-18",
+  "source": "https://developer.chatwork.com/llms.txt",
+  "base_url": "https://api.chatwork.com/v2",
+  "coverage_status": "planned",
+  "limits": {
+    "metadata_read_timeout_seconds": 20,
+    "upload_timeout_seconds": 60,
+    "max_attempts": 1,
+    "success_response_bytes": 8388608,
+    "provider_error_response_bytes": 65536,
+    "output_bytes": 16777216,
+    "list_items": 10000,
+    "documented_endpoint_list_items": 100,
+    "upload_bytes": 5242880
+  },
+  "documented_100_item_operation_ids": [
+    "get-my-tasks",
+    "get-rooms-room_id-messages",
+    "get-rooms-room_id-tasks",
+    "get-rooms-room_id-files",
+    "get-incoming_requests"
+  ],
+  "mutation_policy": {
+    "default_confirmation": "exact-invocation",
+    "access_change_confirmation": "--confirm access-change",
+    "access_change_operation_ids": [
+      "post-rooms",
+      "put-rooms-room_id-members",
+      "post-rooms-room_id-link",
+      "put-rooms-room_id-link",
+      "put-incoming_requests-request_id"
+    ],
+    "destructive_confirmation": "--confirm destructive",
+    "destructive_operation_ids": [
+      "delete-rooms-room_id",
+      "delete-rooms-room_id-messages-message_id",
+      "delete-rooms-room_id-link",
+      "delete-incoming_requests-request_id"
+    ],
+    "uncertain_outcome": "read-only-reconciliation"
+  },
+  "operations": [
+    {"id":"get-me","method":"GET","path":"/me","capability_ids":["chatwork.account.inspect"]},
+    {"id":"get-my-status","method":"GET","path":"/my/status","capability_ids":["chatwork.account.inspect"]},
+    {"id":"get-my-tasks","method":"GET","path":"/my/tasks","capability_ids":["chatwork.personal-tasks.inspect"]},
+    {"id":"get-contacts","method":"GET","path":"/contacts","capability_ids":["chatwork.contacts.discover"]},
+    {"id":"get-rooms","method":"GET","path":"/rooms","capability_ids":["chatwork.rooms.manage"]},
+    {"id":"post-rooms","method":"POST","path":"/rooms","capability_ids":["chatwork.rooms.manage"]},
+    {"id":"get-rooms-room_id","method":"GET","path":"/rooms/{room_id}","capability_ids":["chatwork.rooms.manage"]},
+    {"id":"put-rooms-room_id","method":"PUT","path":"/rooms/{room_id}","capability_ids":["chatwork.rooms.manage"]},
+    {"id":"delete-rooms-room_id","method":"DELETE","path":"/rooms/{room_id}","capability_ids":["chatwork.rooms.manage"]},
+    {"id":"get-rooms-room_id-members","method":"GET","path":"/rooms/{room_id}/members","capability_ids":["chatwork.members.manage"]},
+    {"id":"put-rooms-room_id-members","method":"PUT","path":"/rooms/{room_id}/members","capability_ids":["chatwork.members.manage"]},
+    {"id":"get-rooms-room_id-messages","method":"GET","path":"/rooms/{room_id}/messages","capability_ids":["chatwork.messages.manage"]},
+    {"id":"post-rooms-room_id-messages","method":"POST","path":"/rooms/{room_id}/messages","capability_ids":["chatwork.messages.manage"]},
+    {"id":"put-rooms-room_id-messages-read","method":"PUT","path":"/rooms/{room_id}/messages/read","capability_ids":["chatwork.messages.manage"]},
+    {"id":"put-rooms-room_id-messages-unread","method":"PUT","path":"/rooms/{room_id}/messages/unread","capability_ids":["chatwork.messages.manage"]},
+    {"id":"get-rooms-room_id-messages-message_id","method":"GET","path":"/rooms/{room_id}/messages/{message_id}","capability_ids":["chatwork.messages.manage"]},
+    {"id":"put-rooms-room_id-messages-message_id","method":"PUT","path":"/rooms/{room_id}/messages/{message_id}","capability_ids":["chatwork.messages.manage"]},
+    {"id":"delete-rooms-room_id-messages-message_id","method":"DELETE","path":"/rooms/{room_id}/messages/{message_id}","capability_ids":["chatwork.messages.manage"]},
+    {"id":"get-rooms-room_id-tasks","method":"GET","path":"/rooms/{room_id}/tasks","capability_ids":["chatwork.room-tasks.manage"]},
+    {"id":"post-rooms-room_id-tasks","method":"POST","path":"/rooms/{room_id}/tasks","capability_ids":["chatwork.room-tasks.manage"]},
+    {"id":"get-rooms-room_id-tasks-task_id","method":"GET","path":"/rooms/{room_id}/tasks/{task_id}","capability_ids":["chatwork.room-tasks.manage"]},
+    {"id":"put-rooms-room_id-tasks-task_id-status","method":"PUT","path":"/rooms/{room_id}/tasks/{task_id}/status","capability_ids":["chatwork.room-tasks.manage"]},
+    {"id":"get-rooms-room_id-files","method":"GET","path":"/rooms/{room_id}/files","capability_ids":["chatwork.files.manage"]},
+    {"id":"post-rooms-room_id-files","method":"POST","path":"/rooms/{room_id}/files","capability_ids":["chatwork.files.manage"]},
+    {"id":"get-rooms-room_id-files-file_id","method":"GET","path":"/rooms/{room_id}/files/{file_id}","capability_ids":["chatwork.files.manage"]},
+    {"id":"get-rooms-room_id-link","method":"GET","path":"/rooms/{room_id}/link","capability_ids":["chatwork.invite-links.manage"]},
+    {"id":"post-rooms-room_id-link","method":"POST","path":"/rooms/{room_id}/link","capability_ids":["chatwork.invite-links.manage"]},
+    {"id":"put-rooms-room_id-link","method":"PUT","path":"/rooms/{room_id}/link","capability_ids":["chatwork.invite-links.manage"]},
+    {"id":"delete-rooms-room_id-link","method":"DELETE","path":"/rooms/{room_id}/link","capability_ids":["chatwork.invite-links.manage"]},
+    {"id":"get-incoming_requests","method":"GET","path":"/incoming_requests","capability_ids":["chatwork.contact-requests.manage"]},
+    {"id":"put-incoming_requests-request_id","method":"PUT","path":"/incoming_requests/{request_id}","capability_ids":["chatwork.contact-requests.manage"]},
+    {"id":"delete-incoming_requests-request_id","method":"DELETE","path":"/incoming_requests/{request_id}","capability_ids":["chatwork.contact-requests.manage"]}
+  ]
+}

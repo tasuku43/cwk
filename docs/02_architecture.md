@@ -70,12 +70,12 @@ Infrastructure owns protocol-specific validation and conversion. Raw OAuth token
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
 
-For relationship-aware Chatwork output, the layers divide responsibility further:
+For Chatwork output, including the selected candidate-C context capsule and relationship-aware message results, the layers divide responsibility further:
 
 - Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
 - Infrastructure decodes Chatwork wire DTOs and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity.
 - Application use cases select the bounded data required by one outcome, resolve only explicit relationships available within that bound, and return a typed task result with coverage and unresolved facts.
-- CLI presentation implementations project that same typed result for users or agents. Candidate renderers may reorganize or encode facts but do not define relationship truth, completeness, identity, or task policy.
+- CLI presentation projects that same typed result through the versioned context-capsule contract. Its compact aliases and hierarchy may reorganize facts but do not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -144,7 +144,11 @@ Relationship truth has three states:
 
 Filtering and context selection are application outcome concerns. Provider pagination and notation parsing remain infrastructure concerns. Presentation owns only representation.
 
-Before a presentation is public, materially different implementations may be developed in isolated worktrees. They share the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code. The reviewed winner receives the public compatibility contract and golden tests after selection.
+Candidate C is the first public presentation by explicit product decision and receives the compatibility and golden tests in this implementation. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code.
+
+Upstream coverage is separately pinned in `.harness/chatwork_api_v2.json`. That manifest may prove that every fixed official operation has a public task owner, but it cannot dispatch a request or generate a command. `cli.Catalog` remains the only public-command source of truth.
+
+The same manifest pins the first implementation's reviewed resource ceilings and the exact upstream operation IDs in each confirmation class. Production code uses compile-time typed constants with those values; it does not load harness JSON at runtime. `tools/contractlint` detects drift in the independent evidence, while adapter, application, and CLI tests prove enforcement at the transport, list, upload, and rendered-output boundaries. The manifest's `coverage_status` is `planned` during incremental implementation and must become `complete` to close the work; in that state every one of the 32 operations must have at least one public capability owner.
 
 The default graph is:
 
@@ -195,6 +199,8 @@ argv
 ```
 
 For mutations, validation failure must occur before the external side effect. `app/execution.Invoker` provides the common ordering and has no permissive default policy. Dry-run, human approval, OS authentication, authorization reuse, confirmation, and audit behavior remain derived policy rather than command-local conventions.
+
+The Chatwork policy implementation derives one of three confirmation requirements from typed impact and the fixed operation contract: exact invocation only, exact `--confirm access-change`, or exact `--confirm destructive`. CLI parsing supplies the typed confirmation, application policy compares it with the snapshotted intent, and infrastructure never interprets the flag. Every logical provider operation permits one transport attempt. An unclassified post-action result routes only to a catalog-declared read-only reconciliation task.
 
 ## Error ownership
 

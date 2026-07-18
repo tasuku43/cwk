@@ -43,12 +43,12 @@ If the thesis does not decide a design trade-off, update the thesis or an
 architecture decision before implementation.
 
 For relationship-rich Chatwork reads, define the outcome's typed semantic
-result and answer key before choosing presentation. Raw provider JSON plus
-documented post-processing does not complete the outcome, but neither does one
-unmeasured compact syntax become the product by default. Record a repeated
-external pipeline as thesis evidence. Compare materially different
-presentation candidates in isolated worktrees under the protocol in
-`docs/09_agent_readiness_validation.md` before stabilizing a format.
+result and answer key before presentation. Raw provider JSON plus documented
+post-processing does not complete the outcome. The first complete Chatwork
+implementation uses the accepted candidate-C context capsule. Record a
+repeated external pipeline as thesis evidence. Compare materially different
+future presentation candidates in isolated worktrees under the protocol in
+`docs/09_agent_readiness_validation.md` before replacing that stable format.
 
 Separate discovery from action. Discovery commands may accept ambiguity and
 must return stable, opaque IDs. Acting commands accept one opaque ID or another
@@ -95,6 +95,17 @@ For every external action, specify:
 
 Route all equivalent effects through one central enforcement boundary. A new
 command must not create a second raw transport or bypass validation.
+
+For the fixed Chatwork first implementation, use the checked policy in
+`.harness/chatwork_api_v2.json`: one attempt; 20-second metadata/read and
+non-upload timeout; 60-second upload timeout; 8 MiB success, 64 KiB provider
+error, 16 MiB output, 10,000-item aggregate, documented 100-item endpoint, and
+5 MiB upload ceilings. Ordinary exact creates/updates need no extra
+confirmation. The reviewed access-changing operation set requires exact
+`--confirm access-change`; the reviewed destructive set requires exact
+`--confirm destructive`. Unknown mutation outcomes are non-retryable and name
+only an exact read-only reconciliation task. Runtime code uses typed constants
+and tests rather than reading the harness manifest dynamically.
 
 ## 4. Update the command catalog
 
@@ -232,10 +243,12 @@ Add the smallest set that proves the capability:
   proximity, and indentation-looking text do not fabricate reply edges;
 - canonical-reference round trips that reject presentation-derived shorthand
   unless a separate typed contract explicitly defines it;
-- a no-post-processing agent transcript and a presentation competition that
-  pins candidates, agent/model versions, prompts, repetitions, answer scoring,
-  token accounting, quality floor, latency, and raw result retention;
-- golden fixtures only for the presentation selected through reviewed evidence.
+- a no-post-processing agent transcript and candidate-C baseline; any future
+  replacement uses a presentation competition that pins candidates,
+  agent/model versions, prompts, repetitions, answer scoring, token accounting,
+  quality floor, latency, and raw result retention;
+- golden fixtures for the accepted candidate-C first contract; future
+  replacements receive them only after reviewed competition evidence.
 
 Tests must use temporary directories, fixed clocks, fake credentials, and local
 test servers. They must not require a developer account or live network.

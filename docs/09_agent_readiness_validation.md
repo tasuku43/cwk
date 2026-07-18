@@ -1,6 +1,6 @@
 # Agent Readiness Validation
 
-This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. It also defines how presentation candidates are compared before one becomes public.
+This validation asks whether an agent can translate a user's Chatwork request into an exact `cwk` task, invoke it safely, and understand the task result without guessing or routine external reconstruction. Candidate C is the first accepted context-capsule presentation; this document also defines how future candidates are compared before replacing it.
 
 ## Interaction budgets
 
@@ -11,6 +11,8 @@ This validation asks whether an agent can translate a user's Chatwork request in
 - Failure recovery: the next corrective command comes from structured metadata.
 
 Direct extraction of a declared canonical reference or fact is allowed. Rebuilding semantics that `cwk` claims to provide is not.
+
+Provider-call evaluation uses the first-implementation ceilings: one attempt, 20 seconds for metadata/read/non-upload operations, 60 seconds for upload, 8 MiB successful response, 64 KiB provider error, 16 MiB output, 10,000 aggregate list items, five documented 100-item endpoint results, and 5 MiB upload. A transcript fails if it raises a limit, hides a lower provider bound, or treats a bound failure as partial success.
 
 ## Presentation-independent semantic fixture
 
@@ -53,9 +55,11 @@ A candidate is ineligible regardless of token savings when it:
 - requires undocumented parsing or a nonzero external-reconstruction count;
 - violates stdout, stderr, exit, failure, completeness, or untrusted-data contracts.
 
-## Parallel-worktree presentation competition
+## Candidate-C baseline and future parallel-worktree competition
 
-Before implementation, the competition work packet pins:
+The first complete implementation tests candidate C directly against the semantic fixture and exact answers. It must preserve canonical references, bounds, unresolved relationships, hostile-text framing, deterministic bytes, and zero external reconstruction. These tests form the baseline that a later experiment may not silently weaken.
+
+For a future replacement, before experimental implementation the competition work packet pins:
 
 - fixture corpus and exact semantic answer keys;
 - candidate hypotheses and the boundaries they may change;
@@ -94,6 +98,8 @@ Each eligible candidate must preserve the same recovery decisions for:
 - bounded results with missing referenced context;
 - output write failure with no zero-status partial success;
 - future mutation rejection and unclassified post-mutation outcomes.
+
+Mutation probes also require the agent to distinguish the three typed policies without guessing: ordinary exact invocation, `--confirm access-change`, and `--confirm destructive`. The access-change fixture covers membership/link/contact exposure; the destructive fixture covers room leave/delete, message deletion, invite-link deletion, and request rejection. Missing/wrong confirmation must make zero provider calls, and an uncertain outcome must select the declared read-only reconciliation task rather than repeat the mutation.
 
 ## No-post-processing audit
 

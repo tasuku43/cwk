@@ -1,5 +1,10 @@
 # Context
 
+> Superseded implementation decision (2026-07-18): the axioms remain
+> representation-independent, while
+> `docs/work/chatwork-public-api-v2/goal.md` selects candidate C as the first
+> stable implementation contract and defers comparative optimization.
+
 ## Verified product evidence
 
 - The primary product concern is reducing an agent's cognitive load and token consumption while preserving task correctness.

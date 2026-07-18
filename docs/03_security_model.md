@@ -124,6 +124,19 @@ Cancellation is interpreted relative to that boundary. Before step 4, the invoke
 
 Application ports treat both a nil interface and an interface containing a typed nil pointer as missing configuration. The shared port check prevents a dependency-wiring mistake from becoming a panic after validation or policy approval.
 
+### Chatwork mutation policy
+
+The first Chatwork implementation treats a fully specified exact invocation as sufficient confirmation for ordinary creates and updates. It does not add a generic “confirm every write” prompt that an agent could satisfy mechanically without understanding the operation.
+
+Two higher-impact classes fail before provider I/O unless argv contains the exact typed confirmation:
+
+- `--confirm access-change` for room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance;
+- `--confirm destructive` for room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection.
+
+The catalog binds each confirmation to the corresponding operation impact; a confirmation for one class does not satisfy the other, persist across invocations, or prove human approval. Missing, duplicated, misspelled, or inapplicable confirmation is invalid input or policy rejection with zero mutation attempts.
+
+No Chatwork operation is retried automatically in this implementation. After an uncertain mutation result, the only recovery is the exact read-only reconciliation command declared by that mutation's catalog contract. A reconciliation may report absence or ambiguity; it never converts uncertainty into permission to repeat the write.
+
 ## Credentials and secrets
 
 The base template contains a secret-free authentication contract, an ephemeral non-serialized session binding, and an application gate, but no concrete credential acquisition or storage implementation. A derived project must document:
@@ -136,6 +149,10 @@ The base template contains a secret-free authentication contract, an ephemeral n
 - tests and scans that fail on unsafe handling.
 
 Secrets must not cross from infrastructure into domain or application values and must not be accepted through command-line arguments when a safer channel is available. Do not persist tokens in plaintext configuration or test real credentials in CI. Read [Authentication](07_authentication.md) and [ADR 0001](decisions/0001-oauth-library-boundary.md) before implementing OAuth or PAT support.
+
+The first Chatwork implementation selects one API token from the `CWK_API_TOKEN` process environment. This is an explicit non-persistent automation trade-off, not a claim that environment variables are a secure credential store. The CLI does not accept the token in argv, configuration, stdin data payloads, or command output; infrastructure reads it once, keeps it in memory behind an ephemeral authentication binding, and redacts it from every error and test diagnostic. Credential-store integration, OAuth, refresh, and multiple accounts are separate decisions.
+
+Production credentials may be sent only to the exact HTTPS origin `https://api.chatwork.com` under the `/v2` base path. Redirect following is disabled for credential-bearing requests. A different base URL can be injected only through internal test construction with synthetic tokens and a local server; there is no public flag or environment override for the destination.
 
 ## Filesystem, process, and network policy
 
@@ -160,6 +177,8 @@ Secrets must not cross from infrastructure into domain or application values and
 - Validate protocol and host before sending credentials or user data.
 - Treat remote names and content as unsafe terminal and machine context.
 
+For the first Chatwork implementation, metadata and ordinary provider requests have a 20-second timeout, file uploads have a 60-second timeout, and every logical operation has one transport attempt. Successful response bodies are capped at 8 MiB and provider error bodies at 64 KiB. The complete rendered result is capped at 16 MiB, aggregate lists at 10,000 items, and uploads at 5 MiB. The five provider-documented 100-item list operations retain their lower bound. Exceeding any limit fails closed without partial successful output; user configuration cannot raise a ceiling.
+
 Machine-readable policy belongs in `.harness/project.json` or a project-specific typed manifest and is checked by `tools/repoguard` or a dedicated contract test.
 
 ## Output and terminal safety
@@ -182,6 +201,8 @@ A derived project must decide:
 Do not let presentation sanitization change the identity used for authorization. Authorization uses validated domain values; display labels/content use a visible projection. Opaque references bypass that projection and retain the exact validated value.
 
 For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the `external_text_trust: untrusted_data` meaning already published by scoped agent help. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
+
+For the selected context capsule, local aliases exist only inside one output document. They are not accepted by command parsers, mutation policy, audit identity, or infrastructure. Each actionable item exposes a separately validated canonical reference that is passed unchanged to the next command.
 
 ## Supply-chain boundary
 

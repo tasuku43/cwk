@@ -76,6 +76,10 @@ Contract lint validates the executable catalog before checking two repository le
 
 Both ledgers are strict JSON and must themselves be regular files reached without symbolic links. Unknown or duplicate object keys, duplicate IDs, malformed lowercase dot IDs, trailing values, and implicit `null` lists fail. Capability command paths remain owned only by the catalog; adding them to the ledger creates forbidden duplication rather than useful documentation.
 
+The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-operation snapshot rather than a public-command registry. Its exact 32 operation IDs and method/path pairs are pinned to the official 2026-07-18 documentation index and map only to capability IDs. Contract validation rejects a same-sized substituted operation set, missing or duplicate operation IDs, method/path drift, unknown capabilities, or a Chatwork-backed capability with no upstream owner. `coverage_status: planned` permits incremental implementation; closing the active goal requires changing it to `complete`, which rejects any operation without at least one public capability owner. Future provider additions require a new reviewed snapshot decision; they do not silently extend the active goal.
+
+The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm access-change` or `--confirm destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
+
 Capability status has a narrow meaning:
 
 | Status | Meaning |
@@ -153,6 +157,9 @@ Every strong statement should identify its enforcement path.
 | Presentation selection | Parallel-worktree comparison with pinned agent tasks, model/tool versions, repetitions, token accounting, latency, and raw per-candidate results |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
+| Fixed Chatwork API coverage | Strict 32-operation snapshot plus bidirectional operation-to-public-capability validation |
+| Fixed Chatwork resource bounds | Exact typed snapshot values plus transport, aggregation, upload, and output boundary tests |
+| Chatwork mutation confirmation | Exact operation-ID policy sets plus typed invoker/CLI zero-call tests |
 | External schema compatibility | Vendored fixture, generator, and drift test |
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures |
 | Reproducible generation | Regenerate and require a clean diff |

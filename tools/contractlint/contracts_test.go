@@ -35,7 +35,9 @@ func TestInspectContractsAcceptsPublicCapabilitiesAndSchemaFixture(t *testing.T)
 	writeJSON(t, root, capabilitiesPath, []capability{
 		{ID: "items.read", Status: "public"},
 		{ID: "items.write", Status: "deferred", Reason: "The mutation policy is not selected."},
+		{ID: "chatwork.items.read", Status: "deferred", Reason: "Synthetic upstream mapping for this contract fixture."},
 	})
+	writeJSON(t, root, chatworkAPIPath, validChatworkSnapshot("chatwork.items.read"))
 	fixturePath := "internal/infra/example/testdata/schema.json"
 	fixture := []byte("{\"version\":1}\n")
 	writeFixture(t, root, fixturePath, fixture)
@@ -53,6 +55,111 @@ func TestInspectContractsAcceptsPublicCapabilitiesAndSchemaFixture(t *testing.T)
 	}
 	if len(issues) != 0 {
 		t.Fatalf("contract issues = %+v", issues)
+	}
+}
+
+func TestChatworkSnapshotRejectsCoverageAndShapeErrors(t *testing.T) {
+	snapshot := validChatworkSnapshot("items.read")
+	snapshot.SnapshotDate = "latest"
+	snapshot.Source = "https://example.com"
+	snapshot.BaseURL = "http://api.chatwork.com/v2"
+	snapshot.Operations = snapshot.Operations[:2]
+	snapshot.Operations[0].ID = "Bad ID"
+	snapshot.Operations[0].Method = "PATCH"
+	snapshot.Operations[0].Path = "https://api.chatwork.com/v2/me"
+	snapshot.Operations[0].CapabilityIDs = []string{"items.read", "items.read", "chatwork.unknown"}
+	snapshot.Operations[1] = snapshot.Operations[0]
+	issues := validateChatworkSnapshot(snapshot, []capability{
+		{ID: "items.read", Status: "public"},
+		{ID: "chatwork.unmapped", Status: "deferred", Reason: "Later."},
+	})
+	assertIssuesContain(t, issues,
+		"snapshot_date must remain",
+		"source must be the official",
+		"base_url must be the fixed",
+		"exactly the reviewed 32-operation",
+		"lowercase upstream operation syntax",
+		"method must be",
+		"relative resource-template syntax",
+		"duplicate operation id",
+		"duplicate operation route",
+		"is not in the reviewed official",
+		"reviewed operation \"get-me\" is missing",
+		"duplicate capability id",
+		"absent from .harness/capabilities.json",
+		"must use the chatwork namespace",
+		"has no upstream operation mapping",
+	)
+}
+
+func TestChatworkSnapshotPinsEveryOfficialOperationIdentity(t *testing.T) {
+	snapshot := validChatworkSnapshot("chatwork.items.read")
+	snapshot.Operations[0].Method = "POST"
+	snapshot.Operations[1].Path = "/my/changed"
+	snapshot.Operations[2].ID = "get-invented-operation"
+	issues := validateChatworkSnapshot(snapshot, []capability{{
+		ID: "chatwork.items.read", Status: "deferred", Reason: "Synthetic contract fixture.",
+	}})
+	assertIssuesContain(t, issues,
+		"operation \"get-me\" method must remain GET",
+		"operation \"get-my-status\" path must remain /my/status",
+		"operation id \"get-invented-operation\" is not in the reviewed official",
+		"reviewed operation \"get-my-tasks\" is missing",
+	)
+}
+
+func TestChatworkSnapshotCompleteCoverageRequiresPublicOwnerForEveryOperation(t *testing.T) {
+	snapshot := validChatworkSnapshot("chatwork.items.read")
+	snapshot.CoverageStatus = "complete"
+	issues := validateChatworkSnapshot(snapshot, []capability{{
+		ID: "chatwork.items.read", Status: "deferred", Reason: "Synthetic contract fixture.",
+	}})
+	assertIssuesContain(t, issues, "complete coverage requires operation \"get-me\" to map to at least one public capability")
+
+	issues = validateChatworkSnapshot(snapshot, []capability{{ID: "chatwork.items.read", Status: "public"}})
+	if len(issues) != 0 {
+		t.Fatalf("public complete coverage issues = %+v", issues)
+	}
+}
+
+func TestChatworkSnapshotPinsLimitsAndMutationPolicy(t *testing.T) {
+	snapshot := validChatworkSnapshot("chatwork.items.read")
+	snapshot.Limits.MetadataReadTimeoutSeconds = 21
+	snapshot.Limits.UploadBytes = 1
+	snapshot.CoverageStatus = "latest"
+	snapshot.Documented100ItemOperationIDs = append(snapshot.Documented100ItemOperationIDs, "get-rooms")
+	snapshot.MutationPolicy.DefaultConfirmation = "always-confirm"
+	snapshot.MutationPolicy.AccessChangeOperationIDs = snapshot.MutationPolicy.AccessChangeOperationIDs[1:]
+	snapshot.MutationPolicy.DestructiveConfirmation = "none"
+	snapshot.MutationPolicy.UncertainOutcome = "retry"
+	issues := validateChatworkSnapshot(snapshot, []capability{{
+		ID: "chatwork.items.read", Status: "deferred", Reason: "Synthetic contract fixture.",
+	}})
+	assertIssuesContain(t, issues,
+		"coverage_status must be planned during implementation or complete at goal closure",
+		"metadata_read_timeout_seconds must remain 20",
+		"upload_bytes must remain 5242880",
+		"operation id \"get-rooms\" is not in the reviewed documented_100_item_operation_ids set",
+		"default_confirmation must remain exact-invocation",
+		"reviewed operation id \"post-rooms\" is missing",
+		"destructive_confirmation must remain --confirm destructive",
+		"uncertain_outcome must remain read-only-reconciliation",
+	)
+}
+
+func TestStrictChatworkSnapshotRejectsUnknownAndDuplicateFields(t *testing.T) {
+	for name, data := range map[string]string{
+		"unknown":   `{"snapshot_date":"2026-07-18","source":"x","base_url":"x","operations":[],"latest":true}`,
+		"duplicate": `{"snapshot_date":"2026-07-18","snapshot_date":"2026-07-19","source":"x","base_url":"x","operations":[]}`,
+		"trailing":  `{"snapshot_date":"2026-07-18","source":"x","base_url":"x","operations":[]} {}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeFile(t, root, chatworkAPIPath, []byte(data))
+			if _, err := loadStrictObject[chatworkAPISnapshot](root, chatworkAPIPath); err == nil {
+				t.Fatal("strict snapshot parsing succeeded")
+			}
+		})
 	}
 }
 
@@ -250,6 +357,45 @@ func writeJSON(t *testing.T, root, relative string, value any) {
 		t.Fatal(err)
 	}
 	writeFile(t, root, relative, append(data, '\n'))
+}
+
+func validChatworkSnapshot(capabilityID string) chatworkAPISnapshot {
+	operations := make([]chatworkOperation, len(reviewedChatworkOperations))
+	for index, reviewed := range reviewedChatworkOperations {
+		operations[index] = chatworkOperation{
+			ID:            reviewed.ID,
+			Method:        reviewed.Method,
+			Path:          reviewed.Path,
+			CapabilityIDs: []string{capabilityID},
+		}
+	}
+	return chatworkAPISnapshot{
+		SnapshotDate:   "2026-07-18",
+		Source:         "https://developer.chatwork.com/llms.txt",
+		BaseURL:        "https://api.chatwork.com/v2",
+		CoverageStatus: "planned",
+		Limits: chatworkLimits{
+			MetadataReadTimeoutSeconds:  20,
+			UploadTimeoutSeconds:        60,
+			MaxAttempts:                 1,
+			SuccessResponseBytes:        8 * 1024 * 1024,
+			ProviderErrorResponseBytes:  64 * 1024,
+			OutputBytes:                 16 * 1024 * 1024,
+			ListItems:                   10_000,
+			DocumentedEndpointListItems: 100,
+			UploadBytes:                 5 * 1024 * 1024,
+		},
+		Documented100ItemOperationIDs: append([]string(nil), documented100ItemOperationIDs...),
+		MutationPolicy: chatworkMutationPolicy{
+			DefaultConfirmation:      "exact-invocation",
+			AccessChangeConfirmation: "--confirm access-change",
+			AccessChangeOperationIDs: append([]string(nil), accessChangeOperationIDs...),
+			DestructiveConfirmation:  "--confirm destructive",
+			DestructiveOperationIDs:  append([]string(nil), destructiveOperationIDs...),
+			UncertainOutcome:         "read-only-reconciliation",
+		},
+		Operations: operations,
+	}
 }
 
 func writeFixture(t *testing.T, root, relative string, data []byte) {

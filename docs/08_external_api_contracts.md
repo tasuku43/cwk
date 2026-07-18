@@ -70,6 +70,8 @@ The adapter contract must distinguish a request that was not sent, a confirmed r
 
 The template does not select a backoff formula or universal numeric ceiling because vendor limits and latency budgets differ. A derived security/product contract records the maximum accepted timeout and attempt count, formula, jitter source, caps, and tests; user configuration above those bounds must fail rather than create an effectively unbounded call.
 
+Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result.
+
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 
 ## Side-effect and impact boundary
@@ -88,6 +90,10 @@ Each impact dimension uses an explicit declaration; omitted values fail closed. 
 The binding rules distinguish an object that does not exist yet from an existing object being changed. A `create` declares exactly one `parent_input`, consumes that input as an opaque parent or scope reference, and declares no `target_id_input`. A `write` declares `target_id_input` as an opaque reference whose kind equals `TargetKind`; it may also declare a distinct opaque `parent_input`. `target_inputs` contains exactly those named roles. Missing roles, extra or duplicate inputs, non-reference inputs, and target-kind mismatches fail catalog validation before any mutation policy or adapter call.
 
 `app/execution.Invoker` snapshots and validates command, effect, target, and impact; applies an injected policy; checks cancellation; then calls one logical mutation action. It deliberately does not decide whether policy means human approval, dry-run, OS authentication, role authorization, or another mechanism.
+
+For Chatwork, the injected policy has three finite decisions. Ordinary creates and updates need no extra flag after exact references, payload, effect, target, and impact validate. Room creation, room-member replacement, invite-link creation/update, and incoming-request acceptance require exact `--confirm access-change`. Room leave/delete, message deletion, invite-link deletion, and incoming-request rejection require exact `--confirm destructive`. The flag is invocation-local typed policy input, not reusable approval. Failure to supply the required exact value makes zero provider calls.
+
+All Chatwork mutations are unsafe for automatic retry under this first contract because the provider snapshot supplies no CLI-owned idempotency guarantee. An unknown post-send outcome is non-retryable and its catalog fault names a read-only reconciliation command. That command may inspect the target or parent scope but cannot call a create/write task.
 
 ## Failure and recovery contract
 
@@ -139,13 +145,13 @@ The first message-context semantic fixture must declare:
 
 An internally complete semantic result over a partial upstream window is still partial room context. Every eligible presentation must make that answer recoverable. A zero exit status means the declared bounded result was produced completely; it does not claim that all room history was retrieved.
 
-A supported evaluation outcome must consume each candidate directly. If its acceptance transcript uses `jq`, a custom join, Chatwork-tag parsing, or an undocumented follow-up request, that candidate is ineligible or the capability's stated outcome is too broad. Concrete schemas and grammars are decided by the later presentation competition, not this API contract.
+A supported evaluation outcome must consume each candidate directly. If its acceptance transcript uses `jq`, a custom join, Chatwork-tag parsing, or an undocumented follow-up request, that candidate is ineligible or the capability's stated outcome is too broad. Candidate C is the selected first context-capsule grammar and is tested against this semantic boundary; a later competition is required only to replace it, not to complete the current API implementation.
 
 ## Capability and coverage discipline
 
 The command catalog is the only registry of public commands. Do not create a second dispatcher from an OpenAPI document, SDK, or capability ledger.
 
-A derived project may maintain a coverage ledger for planning. Each entry has a stable capability ID and one status:
+The first complete Chatwork implementation maintains a fixed upstream operation snapshot for coverage evidence. It is not a dispatcher or public command list: entries contain reviewed method/path identity and capability ownership only. Each capability still has one ledger status:
 
 - `public`: linked to exactly one catalog task or one documented composed workflow;
 - `internal`: required by an implementation but not a user task;
@@ -153,6 +159,8 @@ A derived project may maintain a coverage ledger for planning. Each entry has a 
 - `excluded`: outside the thesis or security boundary.
 
 Generation may update evidence about upstream operations, but it cannot promote a capability to `public`, select an effect, or invent an impact declaration. Those are reviewed product decisions.
+
+For the 2026-07-18 Chatwork snapshot, completion means exactly 32 documented REST operations map to public task capabilities and every Chatwork-backed public capability maps back to at least one of those operations. A later provider operation is outside this work until a reviewed snapshot update changes the finite coverage universe.
 
 ## Adapter completion checklist
 

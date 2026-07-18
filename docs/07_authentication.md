@@ -183,6 +183,12 @@ PAT support uses the same requirement, session, gate, fault, and adapter boundar
 
 Do not accept a PAT as a normal command-line flag: argv commonly reaches shell history, process inspection, logs, and agent transcripts. Never persist it in plaintext project configuration.
 
+### Chatwork first implementation
+
+Chatwork CLI selects PAT authentication for one account. Infrastructure reads `CWK_API_TOKEN` from the process environment, creates one ephemeral binding record, and sends the token only as the `x-chatworktoken` header to the fixed production Chatwork origin. `cwk` never writes the token to disk and never accepts a destination override in its public CLI or environment contract.
+
+Environment delivery is chosen because it is non-interactive and non-persistent from the CLI's perspective; it still inherits environment-inspection and parent-process risks. Documentation must recommend setting it only for the command process and clearing inherited values. A future operating-system credential store can replace the source behind the same infrastructure boundary but is not required for the fixed first implementation.
+
 ## Decisions left to a derived project
 
 The template intentionally does not fix these choices:
