@@ -69,10 +69,34 @@ relationships, safe message selection without mutation, created file and
 parent verification, explicit zero after mark-read, structured failure
 recovery, a 100-room selection, and hostile prompt-like message data.
 
-Run the simulator as:
+Run one candidate-local scenario through the pinned Codex runner as:
 
 ```sh
-go run ./tools/presentationeval cwk --scenario <id> -- <cwk-arguments...>
+go run ./tools/presentationeval run \
+  --candidate <c0|p|l|r|j> \
+  --scenario <id> \
+  --codex <absolute-path-to-codex-0.141.0> \
+  --model <pinned-model-id> \
+  --out <runs.jsonl>
+```
+
+The runner builds the candidate-local evaluator as a disposable executable
+named `cwk`, supplies only the fixed scenario and candidate through the agent
+shell policy, and invokes public `cwk` argv. Codex uses `workspace-write` with
+approval `never`; agent-shell environment inheritance and sandbox network are
+disabled, as are installed apps, plugins, browser/web tools, and multi-agent
+features. Unknown JSONL events, item types, non-`cwk` commands, and shell
+operators fail closed. Tests use a fake Codex process and no network.
+
+The paired no-tool measurement is also independently runnable:
+
+```sh
+go run ./tools/presentationeval token-probe \
+  --candidate <c0|p|l|r|j> \
+  --scenario <id> \
+  --codex <absolute-path-to-codex-0.141.0> \
+  --model <pinned-model-id> \
+  --out <probe.json>
 ```
 
 The machine-readable draft is `benchmark-protocol.json`, validated against
@@ -106,8 +130,9 @@ declared canonical field directly is allowed.
 - Five primary repetitions per candidate/task pair.
 - Three additional repetitions for the predeclared high-variance relation and
   100-item-list task families.
-- Six scored agent tasks: 150 primary runs plus 30 high-variance confirmation
-  runs, for at most 180 scored runs.
+- Eight scored agent situations: 40 primary runs per candidate, plus 12
+  high-variance confirmation runs per candidate, for 52 runs per candidate
+  and at most 260 scored runs across the fixed five candidates.
 - Alternate candidate order with a Latin-square schedule using fixed seed
   `20260718`.
 - Do not run two candidates in the same agent context.

@@ -79,11 +79,11 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 	if submission.Schema != runSchema {
 		return scoredRun{}, fmt.Errorf("schema must be %q", runSchema)
 	}
-	if submission.RunID == "" || submission.Agent == "" || submission.Model == "" {
-		return scoredRun{}, fmt.Errorf("run_id, agent, and model are required")
+	if submission.RunID == "" || submission.Agent == "" || submission.Model == "" || len(submission.Commit) != 40 || submission.WallTimeMS < 0 {
+		return scoredRun{}, fmt.Errorf("run_id, agent, model, full commit, and non-negative wall time are required")
 	}
-	if submission.Candidate != baselineName {
-		return scoredRun{}, fmt.Errorf("scaffold currently replays only candidate %q", baselineName)
+	if err := validateCandidate(submission.Candidate); err != nil {
+		return scoredRun{}, err
 	}
 	if submission.Repetition < 1 {
 		return scoredRun{}, fmt.Errorf("repetition must be positive")
@@ -102,7 +102,8 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 	paths := make([]string, 0, len(submission.Steps))
 	transcriptPass := true
 	for index, step := range submission.Steps {
-		if len(step.Argv) == 0 {
+		parsedArgv, parseErr := parseCWKCommand(step.Command)
+		if step.EventID == "" || parseErr != nil || !reflect.DeepEqual(parsedArgv, step.Argv) || len(step.Argv) == 0 {
 			value.Violations = append(value.Violations, fmt.Sprintf("step %d has no cwk argv", index+1))
 			transcriptPass = false
 			continue
@@ -115,7 +116,8 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 		if strings.HasPrefix(result.Path, "help") {
 			value.DiscoveryCalls++
 		}
-		if step.ExitCode != result.ExitCode || step.StdoutSHA256 != hashBytes(result.Stdout) || step.StderrSHA256 != hashBytes(result.Stderr) {
+		combined := append(append([]byte{}, result.Stdout...), result.Stderr...)
+		if step.ExitCode != result.ExitCode || step.ObservedOutputSHA256 != hashBytes(combined) || step.StdoutSHA256 != hashBytes(result.Stdout) || step.StderrSHA256 != hashBytes(result.Stderr) {
 			value.Violations = append(value.Violations, fmt.Sprintf("step %d transcript does not match deterministic simulator replay", index+1))
 			transcriptPass = false
 		}
@@ -161,6 +163,10 @@ func scoreSubmission(submission runSubmission) (scoredRun, error) {
 
 func validateUsage(submission runSubmission, violations *[]string) bool {
 	pass := true
+	if !reflect.DeepEqual(submission.AllowedTools, []string{"cwk"}) || len(submission.ForbiddenTools) != 0 {
+		*violations = append(*violations, "allowed/forbidden tool record is inconsistent")
+		pass = false
+	}
 	if len(submission.NonCWKTools) != 0 {
 		*violations = append(*violations, "non-cwk tool use: "+strings.Join(submission.NonCWKTools, ","))
 		pass = false

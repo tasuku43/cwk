@@ -3,7 +3,7 @@
   "status": "scaffold-not-frozen",
   "unit": "natural-language-agent-workflow",
   "simulator": {
-    "invocation": "go run ./tools/presentationeval cwk --scenario <id> -- <cwk-arguments...>",
+    "invocation": "candidate-local tools/presentationeval compiled as disposable bin/cwk by the trusted runner",
     "uses_public_help": true,
     "fixture_backed_tasks": true,
     "network_allowed": false,
@@ -15,7 +15,15 @@
     "high_variance_additional_repetitions": 3,
     "max_help_calls": 2,
     "exact_reference_reuse": true,
-    "preserve_failed_runs": true
+    "preserve_failed_runs": true,
+    "candidate_labels": ["c0", "p", "l", "r", "j"],
+    "situation_count": 8,
+    "primary_runs_per_candidate": 40,
+    "high_variance_runs_per_candidate": 12,
+    "maximum_runs_per_candidate": 52,
+    "maximum_total_runs": 260,
+    "codex_cli": "codex-cli 0.141.0",
+    "codex_event_policy": "unknown lifecycle events, item types, non-cwk commands, and shell operators fail closed"
   },
   "usage": {
     "end_to_end_total_tokens": "recorded separately with command and tool counts",

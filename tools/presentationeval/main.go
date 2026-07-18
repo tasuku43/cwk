@@ -3,23 +3,35 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 )
 
 const usage = `usage:
-  presentationeval prepare --out <empty-directory> [--iterations <n>]
+  presentationeval prepare --candidate <c0|p|l|r|j> --out <empty-directory> [--iterations <n>]
   presentationeval cwk --scenario <id> -- <cwk-arguments...>
+  presentationeval run --candidate <c0|p|l|r|j> --scenario <id> --codex <absolute-path> --model <id> --out <runs.jsonl> [--repetitions <1..8>]
+  presentationeval token-probe --candidate <c0|p|l|r|j> --scenario <id> --codex <absolute-path> --model <id> --out <probe.json>
   presentationeval score --runs <runs.jsonl> --out <empty-directory>
   presentationeval situations
 `
 
 func main() {
-	os.Exit(run(os.Args[1:]))
+	if filepath.Base(os.Args[0]) == "cwk" {
+		os.Exit(runFixtureBinary(os.Args[1:]))
+	}
+	os.Exit(runWithDeps(os.Args[1:], runnerDependencies{Processes: osProcessRunner{}, Now: time.Now}))
 }
 
 func run(args []string) int {
+	return runWithDeps(args, runnerDependencies{Processes: osProcessRunner{}, Now: time.Now})
+}
+
+func runWithDeps(args []string, dependencies runnerDependencies) int {
 	if len(args) == 0 {
 		fmt.Fprint(os.Stderr, usage)
 		return 2
@@ -31,6 +43,7 @@ func run(args []string) int {
 		set := flag.NewFlagSet("prepare", flag.ContinueOnError)
 		set.SetOutput(os.Stderr)
 		out := set.String("out", "", "empty artifact directory")
+		candidate := set.String("candidate", baselineName, "candidate label: c0, p, l, r, or j")
 		iterations := set.Int("iterations", 20, "render repetitions used for latency evidence")
 		if parseErr := set.Parse(args[1:]); parseErr != nil {
 			return 2
@@ -39,7 +52,7 @@ func run(args []string) int {
 			fmt.Fprint(os.Stderr, usage)
 			return 2
 		}
-		err = prepareArtifacts(*out, *iterations)
+		err = prepareArtifacts(*out, *candidate, *iterations)
 	case "cwk":
 		set := flag.NewFlagSet("cwk", flag.ContinueOnError)
 		set.SetOutput(os.Stderr)
@@ -59,6 +72,39 @@ func run(args []string) int {
 		_, _ = os.Stdout.Write(result.Stdout)
 		_, _ = os.Stderr.Write(result.Stderr)
 		return result.ExitCode
+	case "run":
+		set := flag.NewFlagSet("run", flag.ContinueOnError)
+		set.SetOutput(os.Stderr)
+		candidate := set.String("candidate", "", "candidate label")
+		scenario := set.String("scenario", "", "benchmark situation ID")
+		codex := set.String("codex", "", "absolute pinned codex executable path")
+		model := set.String("model", "", "pinned model identifier")
+		out := set.String("out", "", "JSONL run output")
+		repetitions := set.Int("repetitions", 1, "finite repetition count")
+		if parseErr := set.Parse(args[1:]); parseErr != nil {
+			return 2
+		}
+		if set.NArg() != 0 || *candidate == "" || *scenario == "" || *codex == "" || *model == "" || *out == "" || *repetitions < 1 || *repetitions > 8 {
+			fmt.Fprint(os.Stderr, usage)
+			return 2
+		}
+		err = runBenchmark(context.Background(), dependencies, benchmarkRequest{Candidate: *candidate, SituationID: *scenario, CodexPath: *codex, Model: *model, OutputPath: *out, Repetitions: *repetitions})
+	case "token-probe":
+		set := flag.NewFlagSet("token-probe", flag.ContinueOnError)
+		set.SetOutput(os.Stderr)
+		candidate := set.String("candidate", "", "candidate label")
+		scenario := set.String("scenario", "", "benchmark situation ID")
+		codex := set.String("codex", "", "absolute pinned codex executable path")
+		model := set.String("model", "", "pinned model identifier")
+		out := set.String("out", "", "probe JSON output")
+		if parseErr := set.Parse(args[1:]); parseErr != nil {
+			return 2
+		}
+		if set.NArg() != 0 || *candidate == "" || *scenario == "" || *codex == "" || *model == "" || *out == "" {
+			fmt.Fprint(os.Stderr, usage)
+			return 2
+		}
+		err = runProbeCommand(context.Background(), dependencies, benchmarkRequest{Candidate: *candidate, SituationID: *scenario, CodexPath: *codex, Model: *model, OutputPath: *out, Repetitions: 1})
 	case "score":
 		set := flag.NewFlagSet("score", flag.ContinueOnError)
 		set.SetOutput(os.Stderr)

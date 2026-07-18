@@ -74,22 +74,22 @@ func TestSimulatorReturnsStructuredReadOnlyRecovery(t *testing.T) {
 	}
 }
 
-func TestPrepareRecordsDeterministicC0AndCriticalGates(t *testing.T) {
+func TestPrepareRecordsCandidateNeutralStaticGates(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "evidence")
-	if err := prepareArtifacts(output, 3); err != nil {
+	if err := prepareArtifacts(output, baselineName, 3); err != nil {
 		t.Fatal(err)
 	}
 	var summary struct {
-		Schema   string          `json:"schema"`
-		Critical bool            `json:"critical_render_gates_pass"`
-		Renders  []renderSummary `json:"renders"`
+		Schema  string          `json:"schema"`
+		Static  bool            `json:"static_render_gates_pass"`
+		Renders []renderSummary `json:"renders"`
 	}
 	readJSONFile(t, filepath.Join(output, "summary-input.json"), &summary)
-	if summary.Schema != toolSchema || !summary.Critical {
-		t.Fatalf("summary = %#v, want repaired C0 to pass critical render gates", summary)
+	if summary.Schema != toolSchema || !summary.Static {
+		t.Fatalf("summary = %#v, want linked renderer to pass candidate-neutral static gates", summary)
 	}
 	for _, render := range summary.Renders {
-		if !render.Determinism || !render.Critical || len(render.Failures) != 0 {
+		if !render.Determinism || !render.StaticPass || len(render.Failures) != 0 {
 			t.Errorf("render gate failed after shared contract repair: %#v", render)
 		}
 	}
@@ -106,12 +106,13 @@ func TestScoreReplaysWorkflowAndSeparatesPresentationTokenDelta(t *testing.T) {
 	}
 	submission := runSubmission{
 		Schema: runSchema, RunID: "run-1", Candidate: baselineName, SituationID: "attention.rooms", Repetition: 1,
-		Agent: "synthetic-agent", Model: "synthetic-model",
-		Steps:             []runStep{{Argv: []string{"rooms", "list"}, ExitCode: result.ExitCode, StdoutSHA256: hashBytes(result.Stdout), StderrSHA256: hashBytes(result.Stderr)}},
+		Agent: "synthetic-agent", Model: "synthetic-model", Commit: strings.Repeat("a", 40), WallTimeMS: 1,
+		Steps:             []runStep{{EventID: "item-1", Command: "cwk rooms list", Argv: []string{"rooms", "list"}, ExitCode: result.ExitCode, ObservedOutputSHA256: hashBytes(result.Stdout), StdoutSHA256: hashBytes(result.Stdout), StderrSHA256: hashBytes(result.Stderr)}},
 		Answer:            raw(`{"attention_room_refs":["4101","4102","4104"]}`),
 		Usage:             tokenUsage{Prompt: 12000, Cached: 10000, Completion: 20, Total: 12020},
 		PresentationProbe: presentationProbe{ProbeID: "paired-1", CandidateInputTokens: 420, ControlInputTokens: 100, InputTokenDelta: 320},
-		NonCWKTools:       []string{}, ExternalProcessing: []string{},
+		AllowedTools:      []string{"cwk"}, ForbiddenTools: []string{},
+		NonCWKTools: []string{}, ExternalProcessing: []string{},
 	}
 	runs := filepath.Join(t.TempDir(), "runs.jsonl")
 	file, err := os.Create(runs)

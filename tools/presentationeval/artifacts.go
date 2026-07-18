@@ -37,15 +37,18 @@ type renderSummary struct {
 	MedianNS    int64    `json:"median_latency_ns"`
 	P95NS       int64    `json:"p95_latency_ns"`
 	Determinism bool     `json:"deterministic_bytes"`
-	Critical    bool     `json:"critical_semantic_gate"`
+	StaticPass  bool     `json:"static_render_gate"`
 	Failures    []string `json:"failures"`
 }
 
-func prepareArtifacts(outputDirectory string, iterations int) error {
+func prepareArtifacts(outputDirectory, candidate string, iterations int) error {
+	if err := validateCandidate(candidate); err != nil {
+		return err
+	}
 	if err := createEmptyDirectory(outputDirectory); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Join(outputDirectory, "rendered", baselineName), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outputDirectory, "rendered", candidate), 0o755); err != nil {
 		return err
 	}
 
@@ -68,12 +71,12 @@ func prepareArtifacts(outputDirectory string, iterations int) error {
 			if operation.Failure != nil {
 				continue
 			}
-			summary, rawMetrics, output, renderErr := measureRender(scenario.ID, operation, iterations)
+			summary, rawMetrics, output, renderErr := measureRender(candidate, scenario.ID, operation, iterations)
 			if renderErr != nil {
 				return renderErr
 			}
 			filename := artifactName(scenario.ID, path) + ".txt"
-			if err := os.WriteFile(filepath.Join(outputDirectory, "rendered", baselineName, filename), output, 0o644); err != nil {
+			if err := os.WriteFile(filepath.Join(outputDirectory, "rendered", candidate, filename), output, 0o644); err != nil {
 				return err
 			}
 			for _, measurement := range rawMetrics {
@@ -90,12 +93,12 @@ func prepareArtifacts(outputDirectory string, iterations int) error {
 
 	manifest := map[string]any{
 		"schema":                 toolSchema,
-		"candidate":              baselineName,
-		"candidate_schema":       baselineVersion,
+		"candidate":              candidate,
+		"candidate_schema":       candidateSchema(candidate),
 		"fixture_source":         "synthetic typed chatwork.Result values",
 		"network_allowed":        false,
 		"credential_input":       false,
-		"simulator_invocation":   "go run ./tools/presentationeval cwk --scenario <id> -- <cwk-arguments...>",
+		"runner_invocation":      "go run ./tools/presentationeval run --candidate <label> --scenario <id> --codex <absolute-path> --model <id> --out <runs.jsonl>",
 		"situation_count":        len(situations()),
 		"render_iterations":      iterations,
 		"go_version":             runtime.Version(),
@@ -118,13 +121,13 @@ func prepareArtifacts(outputDirectory string, iterations int) error {
 			"max_commands": scenario.MaxCommands,
 		})
 	}
-	critical := true
+	staticPass := true
 	for _, summary := range summaries {
-		critical = critical && summary.Determinism && summary.Critical
+		staticPass = staticPass && summary.Determinism && summary.StaticPass
 	}
 	summaryInput := map[string]any{
-		"schema": toolSchema, "candidate": baselineName, "render_count": len(summaries),
-		"critical_render_gates_pass": critical, "renders": summaries,
+		"schema": toolSchema, "candidate": candidate, "render_count": len(summaries),
+		"static_render_gates_pass": staticPass, "renders": summaries,
 	}
 
 	for name, value := range map[string]any{
@@ -139,7 +142,7 @@ func prepareArtifacts(outputDirectory string, iterations int) error {
 	return nil
 }
 
-func measureRender(situationID string, operation fixtureOperation, iterations int) (renderSummary, []renderMeasurement, []byte, error) {
+func measureRender(candidate, situationID string, operation fixtureOperation, iterations int) (renderSummary, []renderMeasurement, []byte, error) {
 	latencies := make([]int64, 0, iterations)
 	metrics := make([]renderMeasurement, 0, iterations)
 	var first []byte
@@ -159,28 +162,23 @@ func measureRender(situationID string, operation fixtureOperation, iterations in
 		}
 		latencies = append(latencies, latency)
 		metrics = append(metrics, renderMeasurement{
-			Schema: toolSchema, Candidate: baselineName, SituationID: situationID, CommandPath: operation.Path,
+			Schema: toolSchema, Candidate: candidate, SituationID: situationID, CommandPath: operation.Path,
 			Iteration: iteration, Bytes: len(output), SHA256: hashBytes(output), LatencyNS: latency,
 		})
 	}
 
-	failures := renderGateFailures(first, operation.RequiredContains)
+	failures := renderGateFailures(first)
 	sort.Slice(latencies, func(i, j int) bool { return latencies[i] < latencies[j] })
 	return renderSummary{
 		SituationID: situationID, CommandPath: operation.Path, Bytes: len(first), SHA256: hashBytes(first),
 		MedianNS: quantile(latencies, 0.50), P95NS: quantile(latencies, 0.95), Determinism: deterministic,
-		Critical: len(failures) == 0, Failures: failures,
+		StaticPass: len(failures) == 0, Failures: failures,
 	}, metrics, first, nil
 }
 
-func renderGateFailures(output []byte, required []string) []string {
+func renderGateFailures(output []byte) []string {
 	var failures []string
 	text := string(output)
-	for _, value := range required {
-		if !strings.Contains(text, value) {
-			failures = append(failures, "missing required semantic marker: "+value)
-		}
-	}
 	for _, r := range text {
 		if r == '\n' {
 			continue
