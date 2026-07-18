@@ -6,13 +6,13 @@
 - [x] Freeze goal, non-goals, facts, plan, and completion definition.
 - [x] Replace the pre-implementation indented-tree decision with the owner's
   latest flat chronological adjacency-list decision.
-- [ ] Add and bind exact message-list room scope.
-- [ ] Add presentation-independent semantic fixture coverage.
-- [ ] Implement deterministic actor dictionary and flat reply adjacency list.
-- [ ] Add the complete synthetic renderer test matrix and golden output.
-- [ ] Verify canonical reference reuse and unchanged machine-oriented outputs.
-- [ ] Update catalog and durable documentation.
-- [ ] Record same-tokenizer before/after token counts.
+- [x] Add and bind exact message-list room scope.
+- [x] Add presentation-independent semantic fixture coverage.
+- [x] Implement deterministic actor dictionary and flat reply adjacency list.
+- [x] Add the complete synthetic renderer test matrix and golden output.
+- [x] Verify canonical reference reuse and unchanged machine-oriented outputs.
+- [x] Update catalog and durable documentation.
+- [x] Record same-tokenizer before/after token counts.
 - [ ] Run focused tests and `task check`.
 - [ ] Review diff for unrelated or sensitive material.
 - [ ] Commit coherent implementation/documentation slices.

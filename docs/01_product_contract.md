@@ -65,11 +65,13 @@ Candidate C (`cwk-context-capsule/1`) is the first stable data-presentation base
 The current default is the headerless task projection, a further reviewed subtraction of the P-derived `cwk-task-projection/1`. It starts directly with the task result and emits only:
 
 - catalog-declared fields required by the task result;
-- exact canonical references, without a display-alias dictionary;
+- exact canonical references; `messages list` additionally uses a deterministic
+  document-local actor dictionary to factor repeated sender identity and name,
+  without replacing any canonical action reference;
 - task-relevant bounds, completeness, and uncertainty;
 - structural trust framing for every external-text field.
 
-It does not publish an in-band schema/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes`. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
+It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes`. `messages list` emits its room, trust classification, and local field schema once, then an actor dictionary and one physical record per provider-returned message in unchanged order. `#N` is the one-based provider sequence; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 ## Future presentation-selection lifecycle
 
@@ -85,7 +87,7 @@ A future replacement becomes a public contract through a dedicated competition a
 6. select a winner, combination, or another iteration through reviewed evidence;
 7. only then make and record the compatibility decision that changes the current schema/grammar version, default, compatibility promises, and golden tests.
 
-Candidate worktrees are experimental. Their output is not public merely because it runs. Raw runs, score summaries, audit findings, and known benchmark defects remain evidence even when the experiment is inconclusive; they must not be rewritten to imply that the subsequently selected format won.
+Candidate worktrees are experimental. Their output is not public merely because it runs. Raw runs, score summaries, audit findings, and known benchmark defects remain evidence even when the experiment is inconclusive; they must not be rewritten to imply that the subsequently selected format won. The flat `messages list` adjacency refinement is a separate explicit owner compatibility decision, not a retroactive Competition 1 result.
 
 ## Filtering and task composition
 
@@ -159,7 +161,7 @@ Every provider operation has one transport attempt. An uncertain mutation result
 
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
-Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the current headerless projection makes a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
+Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the headerless projection made a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. The flat chronological `messages list` adjacency contract is a third explicit pre-1.0 refinement and superseded an unimplemented indented-tree proposal. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
 
 ## Explicit non-goals
 

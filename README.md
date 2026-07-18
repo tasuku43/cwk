@@ -98,11 +98,12 @@ input fails before a Chatwork request and scoped help identifies
 ### Read agent output
 
 Chatwork success output starts directly with the task result. Its text contract
-is versioned by the `cwk` release and enforced by catalog fields and goldens;
-normal output does not spend a line repeating a schema or command name. It
-prints canonical references directly and keeps only the fields declared for
-that task, plus applicable bounds/completeness and explicit trust framing. For
-example, a synthetic room collection is shaped as:
+is versioned by the `cwk` release and enforced by catalog fields and goldens. It
+prints canonical references directly and keeps only the facts declared for that
+task, plus applicable bounds/completeness and explicit trust framing. Most
+commands do not repeat a schema or command name; `messages list` uses one local
+schema line because its compact actor and reply-edge notation is positional.
+For example, a synthetic room collection is shaped as:
 
 ```text
 rooms count=2 complete=true
@@ -110,13 +111,29 @@ rooms count=2 complete=true
   room-ref=4102 name=untrusted:"Synthetic Archive" type="group" role="member" unread=0 mentions=0 tasks=0
 ```
 
-Pass a value such as `4101` unchanged to a declared `--room` input. Display
-aliases, provider organization IDs, icon URLs, empty descriptions, empty
-download URLs, zero coverage limits, provider coverage kinds, and other
-non-contract fields are not emitted. A bounded message window still declares
-`window=recent|changes`, `complete=false`, its positive limit, unresolved
-relationship count, typed To/reply/quote facts, and message bodies as
-`untrusted` external text.
+Pass a value such as `4101` unchanged to a declared `--room` input. Provider
+organization IDs, icon URLs, empty descriptions, empty download URLs, zero
+coverage limits, provider coverage kinds, and other non-contract fields are not
+emitted. A bounded message window declares `window=recent|changes`,
+`complete=false`, its positive limit, unresolved relationship count, typed
+To/reply/quote facts, and message bodies under one `untrusted escaped` framing.
+It factors repeated sender data into a document-local actor dictionary, but
+keeps every canonical message reference directly reusable by the next command.
+For example, a two-message synthetic window is shaped as:
+
+```text
+messages room-ref=4101 count=2 window=recent limit=100 complete=false unresolved-relations=0
+external-text=untrusted escaped
+schema: #sequence message-ref actor sent [reply] [to] [quote] body
+actors
+  a1 account-ref=7001 name="Aki"
+  a2 account-ref=7002 name="Beni"
+#1 message-ref=9001 a1 sent=1700000000 body="Release time?"
+#2 message-ref=9002 a2 sent=1700000010 reply=#1 to=a1 body="15:00 works."
+```
+
+`reply=#1` is a document-local edge. Use `9001` or `9002`, not `#1` or an actor
+alias, when a later command requires `--message`.
 
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 

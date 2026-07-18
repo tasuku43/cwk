@@ -56,9 +56,9 @@
 - No blank lines appear between message records.
 - Existing collection bounds and completeness remain once on the header because
   they are required uncertainty facts, not per-message repetition.
-- Send timestamps remain available in the typed semantic fixture. The flat list's
-  public temporal contract is provider sequence; absolute timestamp selection is
-  an implementation decision to verify against the updated catalog and golden.
+- Send timestamps remain available in the typed semantic fixture and are emitted
+  once per node as `sent=<unix-time>`. Provider sequence, not timestamp sorting,
+  determines physical output order and `#N`.
 
 ## Unknowns closed by this packet
 
@@ -68,3 +68,15 @@
   this change.
 - Quote relations will not become reply edges. Their existing typed facts must not
   be silently reclassified or inferred.
+
+## Implementation evidence
+
+- `196ad1c` preserves and request-binds the exact room scope, including empty
+  windows, while retaining provider slice order.
+- `8c5b2f4` implements the flat adjacency renderer, catalog contract, golden,
+  50-message linear-growth check, hostile-text check, and canonical round trip.
+- `d79ae72` adds the active presentation-independent semantic fixture,
+  no-post-processing readiness scenario, before/after goldens, and pinned token
+  measurement.
+- The representative `o200k_base` count is 541 tokens before and 365 after, a
+  32.5% reduction; hashes and byte counts are in `token-measurement.md`.

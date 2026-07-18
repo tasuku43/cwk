@@ -67,7 +67,7 @@ Chatwork data is converted into a typed, provider-independent task result before
 
 ## Axiom 4: Presentation is versioned and replaceable
 
-No concrete output syntax is a thesis. The first complete implementation deliberately selected the context-capsule presentation, candidate C (`cwk-context-capsule/1`), so API work could close against one high-quality contract. It remains the first stable baseline. A P-derived task projection (`cwk-task-projection/1`) later replaced it through an explicit owner compatibility decision after Competition 1 was inconclusive. The current default is a further reviewed, headerless subtraction of that projection: normal success output starts directly with the task result and carries compatibility through the release, catalog, documentation, and golden tests rather than an in-band schema/task preamble. These decisions accepted breaking text-contract migrations; neither is a claim that P won the defective benchmark. Later presentation changes remain evidence-informed and require an explicit compatibility decision.
+No concrete output syntax is a thesis. The first complete implementation deliberately selected the context-capsule presentation, candidate C (`cwk-context-capsule/1`), so API work could close against one high-quality contract. It remains the first stable baseline. A P-derived task projection (`cwk-task-projection/1`) later replaced it through an explicit owner compatibility decision after Competition 1 was inconclusive. The default then received a reviewed, headerless subtraction. The latest explicit pre-1.0 decision refines only `messages list` into a flat chronological adjacency list with one actor dictionary and explicit reply edges; it does not physically reorder or indent the provider window. Normal success output still starts directly with the task result and carries compatibility through the release, catalog, documentation, and golden tests. These decisions accepted breaking text-contract migrations; none claims that P won the defective benchmark. Later presentation changes remain evidence-informed and require an explicit compatibility decision.
 
 ### Hard constraints
 
@@ -80,14 +80,17 @@ Every eligible presentation must:
 - require no undocumented parsing convention or external post-processing for the evaluated outcome;
 - preserve stdout, stderr, exit, failure, and completeness contracts.
 
-The current headerless task projection additionally follows a subtractive rule: it emits
-only catalog-declared task fields, exact canonical references, task-relevant
-bounds/completeness/uncertainty, and structural trust framing for external
-text. It does not add display aliases, raw Chatwork notation as semantic
-structure, undeclared provider or wire fields, duplicated coverage prose, or
-helpful non-contract defaults. Declared message bodies remain visible as
-untrusted external text; they are not reparsed by presentation to invent
-semantics.
+The current headerless task projection additionally follows a subtractive rule:
+it emits only catalog-declared task facts, exact canonical references,
+task-relevant bounds/completeness/uncertainty, and structural trust framing for
+external text. `messages list` may factor repeated sender identity and name into
+one deterministic document-local actor dictionary; each message still carries
+its full canonical message reference, provider sequence, and explicit typed
+edges. The actor alias is never command identity. The projection does not add
+raw Chatwork notation as semantic structure, undeclared provider or wire fields,
+duplicated coverage prose, derived depth/thread/root/child facts, or helpful
+non-contract defaults. Declared message bodies remain visible as untrusted
+external text; they are not reparsed by presentation to invent semantics.
 
 ### Optimization objectives
 
@@ -112,12 +115,12 @@ The historical context capsule, the current task projection, and any future pres
 - Candidate worktrees cannot change semantics, coverage, or answer keys to improve their score.
 - The evaluation pins task prompts, model/agent versions, invocation budgets, token accounting, repetitions, and scoring.
 - A presentation owns only its grammar, ordering, schemas, and output modes; none leaks into domain or application semantics.
-- Historical candidate-C aliases were display-local and never replaced canonical references accepted by commands; the current task projection emits exact canonical references directly and defines no display aliases.
+- Historical candidate-C aliases were display-local and never replaced canonical references accepted by commands. The current `messages list` actor aliases have the same non-identity status: canonical account and message references remain directly visible and are accepted unchanged.
 - An inconclusive experiment does not establish a benchmark winner. A default may still change through a separately recorded owner compatibility decision that explicitly accepts the migration, as occurred first for `cwk-task-projection/1` and then for its headerless subtraction.
 
 ### Enforcement
 
-- Candidate C retains its status and evidence as the deterministic first stable baseline; the current headerless task projection receives the active golden, semantic-answer, hostile-output, canonical-reference, and subtractive-field tests.
+- Candidate C retains its status and evidence as the deterministic first stable baseline; the current headerless task projection, including the flat message adjacency list, receives the active golden, semantic-answer, hostile-output, canonical-reference, order, and subtractive-field tests.
 - A future presentation-competition work packet defines candidates and measurement before experimental implementations begin.
 - Comparison reports identify each worktree/commit and record raw results, benchmark defects, and audit findings, not only a winner summary. Later compatibility decisions must not relabel inconclusive evidence as a win.
 
