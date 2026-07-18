@@ -248,6 +248,31 @@ func TestArgumentSyntaxRequiredAndAllowedValuesMatchAgentInputs(t *testing.T) {
 	}
 }
 
+func TestCatalogRejectsUnsafeNonArgvInputNamesBeforeHumanHelpProjection(t *testing.T) {
+	hostileNames := map[string]string{
+		"terminal escape":    "ENV\x1b[2J",
+		"line separator":     "ENV\u2028NEXT",
+		"format control":     "ENV\u2066NEXT",
+		"unicode whitespace": "ENV\u00a0NEXT",
+		"invalid utf8":       string([]byte{'E', 'N', 'V', 0xff}),
+	}
+	for _, source := range []InputSource{InputSourceEnvironment, InputSourceConfiguration, InputSourceStdin} {
+		for name, hostile := range hostileNames {
+			t.Run(string(source)+"_"+name, func(t *testing.T) {
+				spec := utilitySpec("inspect")
+				spec.Agent.Inputs = []CommandInput{{
+					Name: hostile, Source: source, Required: false,
+					Description: "Synthetic non-argv input.", AllowedValues: []string{},
+				}}
+				err := NewCatalog(spec).Validate()
+				if err == nil || !strings.Contains(err.Error(), "input name is missing or invalid") {
+					t.Fatalf("Validate() error = %v, want unsafe input-name rejection", err)
+				}
+			})
+		}
+	}
+}
+
 func TestArgumentSyntaxAllowsOneExactFixedFlagValue(t *testing.T) {
 	spec := utilitySpec("items apply")
 	spec.Args = "--confirm=destructive"

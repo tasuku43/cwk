@@ -127,6 +127,17 @@ The test suite has complementary levels:
 - Catalog pagination tests require an exact optional-input/top-level-string-output opaque cursor binding, typed empty-cursor completion, and JSON-only presentation for `paged` results, and forbid that binding for `complete` results. Renderer fixtures reject an omitted, null, or non-string cursor.
 - Infrastructure tests fix protocol conversion and boundary failure.
 - CLI tests fix routing, help, rendering, and exit behavior.
+- Human-help navigation tests require one root entry per direct command or
+  top-level namespace, catalog-relative ordering within the direct and
+  namespace sections, exact namespace membership/counts, no leaf duplication at
+  root, relative namespace listings, natural trailing-help equivalence, and
+  unchanged unknown-command faults.
+- Exact human-help tests derive required, repeatable, source, allowed-value,
+  reference-kind, and description facts from catalog inputs, including the
+  multi-sender message selection contract.
+- Catalog hostile-input tests reject invalid UTF-8, terminal controls, Unicode
+  format controls, line separators, and whitespace in non-argv input names
+  before exact help can render them.
 - Agent-help shape and size-growth tests keep root discovery index-only while scoped help retains the complete invocation and recovery contract.
 - JSON-output contract tests compare each built-in renderer's schema version, envelope, and item keys with its catalog `CommandOutput` declaration, and enforce the always-present string cursor for any paged probe.
 - Adversarial output tests keep TSV/JSON records and stdout/stderr ownership intact across controls, Unicode format/line separators, existing backslashes, and printable prompt-like data while preserving opaque IDs exactly.
@@ -166,7 +177,8 @@ Every strong statement should identify its enforcement path.
 | Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only presentation, and agent-help/reference-workflow projection |
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
-| Bounded root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
+| Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
+| Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
 | Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |
 | Supported outcome completeness | Transcript assertion of zero external post-processing and declared provider/context coverage |

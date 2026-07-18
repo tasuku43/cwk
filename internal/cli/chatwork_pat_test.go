@@ -11,17 +11,30 @@ import (
 )
 
 func TestProductionHelpDoesNotResolvePAT(t *testing.T) {
-	t.Setenv(chatworkapi.TokenEnvironment, "")
-	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
-	if command.chatwork != nil || command.chatworkAuth != nil {
-		t.Fatal("production CLI eagerly constructed the authenticated adapter")
-	}
-	if code := command.RunContext(context.Background(), []string{"help", "rooms", "--format", "agent"}); code != ExitOK {
-		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
-	}
-	if command.chatwork != nil || command.chatworkAuth != nil {
-		t.Fatal("help resolved the process-local PAT")
+	for _, test := range []struct {
+		args  []string
+		token string
+	}{
+		{args: []string{"--help"}},
+		{args: []string{"rooms", "--help"}, token: "synthetic-valid-token"},
+		{args: []string{"rooms", "list", "--help"}, token: "synthetic-valid-token"},
+		{args: []string{"help", "rooms", "--format", "agent"}, token: "synthetic-valid-token"},
+	} {
+		t.Run(strings.Join(test.args, "_"), func(t *testing.T) {
+			t.Setenv(chatworkapi.TokenEnvironment, test.token)
+			var stdout, stderr bytes.Buffer
+			command := New(strings.NewReader(""), &stdout, &stderr)
+			command.chatworkFactory = nil
+			if command.chatwork != nil || command.chatworkAuth != nil {
+				t.Fatal("production CLI eagerly constructed the authenticated adapter")
+			}
+			if code := command.RunContext(context.Background(), test.args); code != ExitOK {
+				t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+			}
+			if command.chatwork != nil || command.chatworkAuth != nil {
+				t.Fatal("help resolved the process-local PAT")
+			}
+		})
 	}
 }
 

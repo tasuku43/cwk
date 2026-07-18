@@ -387,14 +387,67 @@ func TestE2EDoctorUsesProductionOfflineAdapter(t *testing.T) {
 	}
 }
 
-func TestEveryCatalogCommandDispatchesThroughItsSpec(t *testing.T) {
+func TestEveryCatalogCommandMatchesExactlyAndHasHelp(t *testing.T) {
 	for _, spec := range DefaultCatalog().Commands() {
+		matched, rest, found := DefaultCatalog().Match(strings.Fields(spec.Path))
+		if !found || matched.Path != spec.Path || len(rest) != 0 {
+			t.Errorf("Match(%q) = %q/%v/%t, want exact match", spec.Path, matched.Path, rest, found)
+		}
 		inspector := passingInspector("test/test")
 		command, _, stderr := newTestCLI(inspector)
 		args := strings.Split(spec.Path, " ")
 		args = append(args, "--help")
 		if code := runCLI(command, args); code != ExitOK {
 			t.Errorf("Run(%q) code = %d, stderr = %q", spec.Path, code, stderr.String())
+		}
+	}
+}
+
+func TestTrailingHelpAliasesMatchCanonicalHelpSelectors(t *testing.T) {
+	command := New(strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{})
+	namespaces := make(map[string]struct{})
+	for _, spec := range command.catalog.Commands() {
+		if strings.Contains(spec.Path, " ") {
+			namespaces[commandNamespace(spec.Path)] = struct{}{}
+		}
+		assertHelpAliasMatchesSelector(t, strings.Fields(spec.Path))
+	}
+	for namespace := range namespaces {
+		assertHelpAliasMatchesSelector(t, []string{namespace})
+	}
+}
+
+func assertHelpAliasMatchesSelector(t *testing.T, selector []string) {
+	t.Helper()
+	for _, flag := range []string{"--help", "-h"} {
+		var aliasOut, aliasErr bytes.Buffer
+		alias := New(strings.NewReader(""), &aliasOut, &aliasErr)
+		aliasArgs := append(append([]string{}, selector...), flag)
+		if code := runCLI(alias, aliasArgs); code != ExitOK {
+			t.Fatalf("Run(%v) code = %d, stderr = %q", aliasArgs, code, aliasErr.String())
+		}
+
+		var canonicalOut, canonicalErr bytes.Buffer
+		canonical := New(strings.NewReader(""), &canonicalOut, &canonicalErr)
+		canonicalArgs := append([]string{"help"}, selector...)
+		if code := runCLI(canonical, canonicalArgs); code != ExitOK {
+			t.Fatalf("Run(%v) code = %d, stderr = %q", canonicalArgs, code, canonicalErr.String())
+		}
+		if aliasOut.String() != canonicalOut.String() || aliasErr.String() != canonicalErr.String() {
+			t.Fatalf("Run(%v) = %q/%q, Run(%v) = %q/%q", aliasArgs, aliasOut.String(), aliasErr.String(), canonicalArgs, canonicalOut.String(), canonicalErr.String())
+		}
+	}
+}
+
+func TestUnknownNamespaceHelpSuffixRemainsUnknownCommand(t *testing.T) {
+	for _, args := range [][]string{{"missing", "--help"}, {"missing", "-h"}, {"rooms", "missing", "--help"}} {
+		command, stdout, stderr := newTestCLI(passingInspector("unused"))
+		if code := runCLI(command, args); code != ExitUsage {
+			t.Errorf("Run(%v) code = %d, want %d", args, code, ExitUsage)
+		}
+		if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: unknown_command") ||
+			!strings.Contains(stderr.String(), "next_action: cwk help") {
+			t.Errorf("Run(%v) stdout = %q, stderr = %q", args, stdout.String(), stderr.String())
 		}
 	}
 }

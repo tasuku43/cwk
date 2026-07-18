@@ -163,7 +163,7 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 	if exact {
 		return c.emit(ctx, renderCommandHelp(commands[0]))
 	}
-	return c.emit(ctx, renderCommandIndex("Commands in namespace "+selector+":", commands))
+	return c.emit(ctx, renderNamespaceHelp(selector, commands))
 }
 
 func parseHelpArgs(args []string) (helpFormat, string, error) {
@@ -236,6 +236,7 @@ func (c Catalog) Select(selector string) ([]CommandSpec, bool) {
 }
 
 func (c *CLI) renderRootHelp() []byte {
+	directCommands, namespaces := rootTextHelpEntries(c.catalog.Commands())
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
@@ -244,26 +245,104 @@ func (c *CLI) renderRootHelp() []byte {
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "Global options:")
 	fmt.Fprintln(&output, "  --error-format text|json  Select structured failure presentation (default: text)")
+	if len(directCommands) > 0 {
+		fmt.Fprintln(&output)
+		output.Write(renderTextHelpIndex("Commands:", directCommands))
+	}
+	if len(namespaces) > 0 {
+		fmt.Fprintln(&output)
+		output.Write(renderNamespaceIndex("Namespaces:", namespaces))
+	}
 	fmt.Fprintln(&output)
-	output.Write(renderCommandIndex("Commands:", c.catalog.Commands()))
-	fmt.Fprintln(&output)
-	fmt.Fprintf(&output, "Run '%s help <command-or-namespace>' for scoped details.\n", ProgramName)
+	fmt.Fprintf(&output, "Run '%s <namespace> --help' to choose a command.\n", ProgramName)
+	fmt.Fprintln(&output, "Append '--help' to any exact command for details.")
 	fmt.Fprintf(&output, "Run '%s help <command-or-namespace> --format agent' for a scoped machine contract.\n", ProgramName)
 	return output.Bytes()
 }
 
-func renderCommandIndex(title string, commands []CommandSpec) []byte {
+type textHelpEntry struct {
+	Name    string
+	Summary string
+}
+
+type textHelpNamespace struct {
+	Name         string
+	CommandCount int
+}
+
+func rootTextHelpEntries(commands []CommandSpec) ([]textHelpEntry, []textHelpNamespace) {
+	directCommands := make([]textHelpEntry, 0)
+	namespaces := make([]textHelpNamespace, 0)
+	namespaceIndexes := make(map[string]int)
+	for _, command := range commands {
+		namespace := commandNamespace(command.Path)
+		if namespace == command.Path {
+			directCommands = append(directCommands, textHelpEntry{Name: command.Path, Summary: command.Summary})
+			continue
+		}
+		index, exists := namespaceIndexes[namespace]
+		if !exists {
+			index = len(namespaces)
+			namespaceIndexes[namespace] = index
+			namespaces = append(namespaces, textHelpNamespace{Name: namespace})
+		}
+		namespaces[index].CommandCount++
+	}
+	return directCommands, namespaces
+}
+
+func renderTextHelpIndex(title string, entries []textHelpEntry) []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, title)
 	width := 0
-	for _, command := range commands {
-		if len(command.Path) > width {
-			width = len(command.Path)
+	for _, entry := range entries {
+		if len(entry.Name) > width {
+			width = len(entry.Name)
 		}
 	}
-	for _, command := range commands {
-		fmt.Fprintf(&output, "  %-*s  %s\n", width, command.Path, command.Summary)
+	for _, entry := range entries {
+		fmt.Fprintf(&output, "  %-*s  %s\n", width, entry.Name, entry.Summary)
 	}
+	return output.Bytes()
+}
+
+func renderNamespaceIndex(title string, namespaces []textHelpNamespace) []byte {
+	entries := make([]textHelpEntry, 0, len(namespaces))
+	for _, namespace := range namespaces {
+		unit := "commands"
+		if namespace.CommandCount == 1 {
+			unit = "command"
+		}
+		entries = append(entries, textHelpEntry{
+			Name:    namespace.Name,
+			Summary: fmt.Sprintf("%d %s", namespace.CommandCount, unit),
+		})
+	}
+	return renderTextHelpIndex(title, entries)
+}
+
+func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
+	entries := make([]textHelpEntry, 0, len(commands))
+	prefix := selector + " "
+	for _, command := range commands {
+		entries = append(entries, textHelpEntry{
+			Name:    strings.TrimPrefix(command.Path, prefix),
+			Summary: command.Summary,
+		})
+	}
+
+	var output bytes.Buffer
+	fmt.Fprintln(&output, "Chatwork CLI")
+	fmt.Fprintln(&output)
+	fmt.Fprintln(&output, "Usage:")
+	fmt.Fprintf(&output, "  %s %s <command> [arguments]\n", ProgramName, selector)
+	fmt.Fprintln(&output)
+	output.Write(renderTextHelpIndex("Commands:", entries))
+	fmt.Fprintln(&output)
+	fmt.Fprintf(&output, "Run '%s %s <command> --help' for exact command details.\n", ProgramName, selector)
+	fmt.Fprintf(&output, "Run '%s help %s <command> --format agent' for one command's machine contract.\n", ProgramName, selector)
+	fmt.Fprintf(&output, "Run '%s help %s --format agent' for all machine contracts in this namespace.\n", ProgramName, selector)
+	fmt.Fprintf(&output, "Run '%s --help' for all commands and namespaces.\n", ProgramName)
 	return output.Bytes()
 }
 
@@ -273,6 +352,10 @@ func renderCommandHelp(command CommandSpec) []byte {
 	fmt.Fprintln(&output, "  "+command.Usage())
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, command.Summary+".")
+	if len(command.Agent.Inputs) > 0 {
+		fmt.Fprintln(&output)
+		output.Write(renderCommandInputs(command.Agent.Inputs))
+	}
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "Capability: "+command.Agent.CapabilityID)
 	fmt.Fprintln(&output, "Outcome: "+command.Agent.Outcome)
@@ -283,6 +366,44 @@ func renderCommandHelp(command CommandSpec) []byte {
 	}
 	for _, reference := range command.ConsumedRefs() {
 		fmt.Fprintf(&output, "Consumes reference: %s from input %s\n", reference.Kind, reference.Argument)
+	}
+	fmt.Fprintln(&output)
+	namespace := commandNamespace(command.Path)
+	if namespace == command.Path {
+		fmt.Fprintf(&output, "Run '%s --help' for all commands and namespaces.\n", ProgramName)
+	} else {
+		fmt.Fprintf(&output, "Run '%s %s --help' for other commands in this namespace.\n", ProgramName, namespace)
+	}
+	fmt.Fprintf(&output, "Run '%s help %s --format agent' for the machine contract.\n", ProgramName, command.Path)
+	return output.Bytes()
+}
+
+func renderCommandInputs(inputs []CommandInput) []byte {
+	var output bytes.Buffer
+	fmt.Fprintln(&output, "Inputs:")
+	width := 0
+	for _, input := range inputs {
+		if len(input.Name) > width {
+			width = len(input.Name)
+		}
+	}
+	for _, input := range inputs {
+		requirement := "optional"
+		if input.Required {
+			requirement = "required"
+		}
+		if input.Repeatable {
+			requirement += " repeatable"
+		}
+		attributes := []string{requirement + " " + string(input.Source)}
+		if len(input.AllowedValues) > 0 {
+			attributes = append(attributes, "values="+strings.Join(input.AllowedValues, "|"))
+		}
+		if input.ReferenceKind != "" {
+			attributes = append(attributes, "reference="+input.ReferenceKind)
+		}
+		fmt.Fprintf(&output, "  %-*s  %s\n", width, input.Name, strings.Join(attributes, ", "))
+		fmt.Fprintf(&output, "    %s\n", input.Description)
 	}
 	return output.Bytes()
 }

@@ -179,9 +179,18 @@ required reference rather than forming a closed cycle.
 Verify that root agent help adds only the command's path, namespace, summary,
 capability, outcome, effect, and role. Then use an exact-command or
 namespace-scoped invocation to verify the complete contract and workflows.
-Root help must not regain inputs, output detail, authentication, errors,
+Root agent help must not regain inputs, output detail, authentication, errors,
 mutation facts, or workflows as the catalog grows, and each encoded command
 entry must remain within the 512-byte catalog budget.
+Keep human root help as a catalog-derived navigation projection: directly
+runnable single-word commands plus one entry per top-level namespace. Exact
+leaf summaries belong in namespace help, and each displayed selector must
+round-trip through the same catalog rather than a separate help registry.
+Exact human help must derive input requirements, repeatability, source, allowed
+values, reference kind, and descriptions from `AgentContract.Inputs`; do not
+reconstruct that contract from usage prose. Validate every projected input name
+as terminal structure regardless of whether its source is argv, environment,
+configuration, or stdin.
 
 Keep every recovery `command` executable under the template's small grammar:
 use one exact catalog path, or `help` plus an exact path/canonical namespace.

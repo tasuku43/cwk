@@ -131,6 +131,31 @@ expose login, status, logout, callback, or profile commands.
 
 `cli.Catalog` contains every public `cli.CommandSpec`. Routing, root help, command help, uniqueness checks, and catalog-wide effect tests derive from it.
 
+Human text help is a hierarchical catalog projection, not another registry.
+The root partitions the catalog into directly runnable single-word commands
+and first-seen top-level namespaces, renders the direct section before the
+namespace section, and preserves curated catalog-relative order within each
+section; each namespace appears once with its derived leaf count. Namespace
+help selects the same word-boundary prefix and renders its exact commands
+relative to that prefix. A trailing `--help` or `-h` is normalized to the
+existing local `help <selector>` task only after the catalog proves the
+preceding words are an exact command or namespace. Unknown selectors therefore
+preserve the normal unknown-command fault, and namespaces never become implicit
+executable operations.
+
+Exact human help projects `AgentContract.Inputs` rather than parsing usage text
+or maintaining flag prose. It emits required versus optional, repeatability,
+input source, allowed values, opaque-reference kind, and the validated
+description. Namespace help points first to an exact command's machine contract;
+the much larger all-namespace contract remains an explicitly labeled secondary
+choice.
+
+Because exact human help renders every input name as CLI-authored structure,
+catalog validation applies UTF-8, Unicode whitespace, control/format, and line
+separator rejection to names from every input source, including environment,
+configuration, and stdin. A non-argv source cannot bypass terminal-safe help
+structure.
+
 Do not add a second command list for documentation or dispatch. Internal adapters and generated operations are not public merely because they exist. A capability becomes public only when a user-task use case and command specification deliberately expose it.
 
 At minimum, catalog validation rejects:

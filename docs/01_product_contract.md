@@ -19,7 +19,8 @@ It is not an API explorer or a one-to-one endpoint wrapper. Its first complete i
 
 For every supported outcome, an agent can:
 
-1. select the exact task from the root outcome index and at most one scoped contract;
+1. select the exact task from the machine-readable root outcome index and at
+   most one scoped contract;
 2. supply declared inputs without guessing endpoints, name matches, URLs, or hidden defaults;
 3. identify task-relevant facts, bounds, missing context, uncertainty, and canonical references;
 4. complete the outcome without routine `jq`, `grep`, custom joins/parsers, raw Chatwork-notation interpretation, source inspection, or exploratory API calls;
@@ -31,6 +32,18 @@ Direct extraction of a declared field or canonical reference is allowed. Reconst
 ## Public runnable surface
 
 The public catalog exposes local `help`, `doctor`, and `version` utilities plus the task-oriented Chatwork workflows defined below. The former `sample list` and `sample read` scaffold is retained only as an offline test fixture; it is absent from root help and cannot be invoked through the default catalog. Public opaque-reference and output contracts are proven by the Chatwork workflows themselves.
+
+Human text discovery is hierarchical. Root help shows the directly runnable
+single-word utilities and each canonical top-level task namespace once; it does
+not repeat the namespace's leaf paths or summaries. `<namespace> --help` (or
+`help <namespace>`) then lists only that namespace's exact commands, and an
+exact trailing `--help` shows one command contract. Namespace membership,
+counts, section-relative ordering, and selectors derive from `cli.Catalog`;
+namespace nodes are not implicit executable commands. Exact human help projects
+each declared input's required/repeatable state, source, allowed values,
+reference kind, and description from the same command contract. Schema-v3 agent
+help deliberately retains its exact command-level outcome index and bounded
+scoped-contract path.
 
 ## Required first complete surface
 
@@ -197,6 +210,15 @@ Every provider operation has one transport attempt. An uncertain mutation result
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
 
 Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the headerless projection made a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. The flat chronological `messages list` adjacency contract is a third explicit pre-1.0 refinement and superseded an unimplemented indented-tree proposal. Applying fixed positional records to the seven reviewed homogeneous collections is a fourth explicit refinement. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
+
+Hierarchical human help is another explicit pre-1.0 text-contract change: the
+former flat root leaf list moved to catalog-derived namespace views, natural
+namespace `--help` became valid, namespace command names became relative, and
+exact help gained catalog-derived input facts and navigation links. Schema-v3
+root agent help, non-help scoped agent contracts, exact command paths, and
+command execution contracts did not change. The scoped `help` task contract
+changed only by correcting its stale invalid-selector recovery wording to name
+namespaces as valid selectors.
 
 ## Explicit non-goals
 

@@ -398,7 +398,7 @@ func DefaultCatalog() Catalog {
 				},
 				Prerequisites: []string{},
 				Errors: []CommandError{
-					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help", "Use text or agent format and an exact catalog command path."),
+					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help", "Use text or agent format and a command path or namespace from root help."),
 					declaredCommandError(fault.KindContract, "output_encoding_failed", false, "help", "Repair the agent help JSON projection."),
 					declaredCommandError(fault.KindInternal, "output_write_failed", true, "help", "Retry with a writable output stream."),
 					declaredCommandError(fault.KindCanceled, "operation_canceled", true, "help", "Retry when the caller is ready."),
@@ -1040,7 +1040,10 @@ func validateCapabilityID(value string) error {
 }
 
 func validateInputName(input CommandInput) error {
-	if input.Name == "" || strings.TrimSpace(input.Name) != input.Name || strings.ContainsAny(input.Name, "\t\r\n ") {
+	if input.Name == "" || len(input.Name) > 4096 || !utf8.ValidString(input.Name) ||
+		strings.IndexFunc(input.Name, func(r rune) bool {
+			return unicode.IsSpace(r) || isUnsafeContractRune(r)
+		}) >= 0 {
 		return fmt.Errorf("input name is missing or invalid: %q", input.Name)
 	}
 	switch input.Source {

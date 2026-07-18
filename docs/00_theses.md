@@ -36,6 +36,12 @@ An agent that knows the user's desired outcome should reach the exact command co
 
 - Root agent help is a compact outcome index.
 - An unknown outcome needs at most the root index and one scoped request; a known path needs one scoped request.
+- Human text help narrows from one root namespace entry to that namespace's
+  exact commands instead of repeating every leaf command at the root. Direct
+  single-word utilities remain directly visible.
+- Human and agent help are complementary projections: the human hierarchy
+  reduces visual duplication, while the machine root retains exact outcomes so
+  scoped invocation detail remains at most one further request away.
 - Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
 - Commands do not silently search again, choose a display-name match, or rely on hidden defaults.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
@@ -43,7 +49,9 @@ An agent that knows the user's desired outcome should reach the exact command co
 ### Enforcement
 
 - Catalog, routing, and help derive from `cli.Catalog`.
-- Root entries retain the 512-byte per-command budget.
+- Root agent entries retain the 512-byte per-command budget.
+- Human-help tests prove that every catalog command belongs to exactly one root
+  entry and round-trips through its canonical namespace.
 - Agent-readiness tests reject command probing, prose scraping, and undeclared follow-up calls.
 
 ## Axiom 3: Semantics precede presentation

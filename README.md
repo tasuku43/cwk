@@ -66,11 +66,21 @@ The bootstrap changes repository identity; it does not invent the product. A der
 
 ```sh
 go run ./cmd/cwk --help
+go run ./cmd/cwk rooms --help
+go run ./cmd/cwk rooms list --help
 go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk doctor
 ```
+
+Human help is hierarchical: root help shows direct local commands and one entry
+per task namespace, `<namespace> --help` lists that namespace's exact commands,
+and `<exact-command> --help` shows one command's usage and catalog-derived input
+facts, including repeatable flags and opaque-reference kinds. Machine-readable
+agent help keeps its compact exact-outcome root index so a known path can request
+its complete contract directly. All of these views are derived from the same
+catalog.
 
 The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API token from the command environment before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
 

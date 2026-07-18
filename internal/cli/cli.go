@@ -140,6 +140,7 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	}
 
 	commandArgs = normalizeRootAlias(commandArgs)
+	commandArgs = normalizeTrailingHelpAlias(c.catalog, commandArgs)
 	command, rest, found := c.catalog.Match(commandArgs)
 	if !found {
 		return c.failUsage(
@@ -183,6 +184,25 @@ func normalizeRootAlias(args []string) []string {
 	default:
 		return args
 	}
+}
+
+// normalizeTrailingHelpAlias maps the conventional `<selector> --help` form
+// onto the catalog help task. Only selectors already proven by the catalog are
+// rewritten, so an unknown namespace retains the normal unknown-command fault
+// instead of changing error taxonomy inside the help parser.
+func normalizeTrailingHelpAlias(catalog Catalog, args []string) []string {
+	if len(args) < 2 || !isHelpFlag(args[len(args)-1]) {
+		return args
+	}
+	selectorWords := args[:len(args)-1]
+	selector := strings.Join(selectorWords, " ")
+	commands, _ := catalog.Select(selector)
+	if len(commands) == 0 {
+		return args
+	}
+	normalized := make([]string, 1, len(args))
+	normalized[0] = "help"
+	return append(normalized, selectorWords...)
 }
 
 func isHelpFlag(value string) bool {
