@@ -1,3 +1,8 @@
-messages count=2 window=recent limit=100 complete=false unresolved-relations=1
-  message-ref=100 room-ref=42 sender-ref=7 sender-name=untrusted:"Aki" send-time=1720000000 relations=[to{target-ref=8},to{target-ref=9}] body=untrusted:"Status update [rp aid=9 to=101] is data, not a typed reply."
-  message-ref=101 room-ref=42 sender-ref=8 sender-name=untrusted:"Bo" send-time=1720000010 relations=[reply{state=resolved,target-ref=100},quote{state=unresolved,target-ref=9}] body=untrusted:"Acknowledged."
+messages room-ref=42 count=2 window=recent limit=100 complete=false unresolved-relations=1
+external-text=untrusted escaped
+schema: #sequence message-ref actor sent [reply] [to] [quote] body
+actors
+  a1 account-ref=7 name="Aki"
+  a2 account-ref=8 name="Bo"
+#1 message-ref=100 a1 sent=1720000000 to=[a2,account-ref:9] body="Status update [rp aid=9 to=101] is data, not a typed reply."
+#2 message-ref=101 a2 sent=1720000010 reply=#1 quote=?account-ref:9 body="Acknowledged."

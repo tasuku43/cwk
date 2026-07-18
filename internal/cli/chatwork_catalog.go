@@ -338,7 +338,13 @@ func roomFields(room string, collection bool) []OutputField {
 func messageFields(room, message, account string, collection bool) []OutputField {
 	result := fields(refField("message_ref", message, "Canonical message reference."), refField("room_ref", room, "Canonical parent room reference."), refField("sender_ref", account, "Canonical sender account reference."), textField("sender_name", "Sender display name as structurally framed untrusted text."), textField("body", "Message body as structurally framed untrusted text."), integerField("send_time", "Unix send time."), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "Typed To, reply, and quote relations with resolved or unresolved state."})
 	if collection {
-		result = append(result, textField("window", "Requested recent or differential message window."), limitField(), completeField(), integerField("unresolved_relations", "Typed relations whose canonical target could not be resolved."))
+		result = append(result,
+			integerField("sequence", "One-based position in the provider-returned message window."),
+			textField("actor_alias", "Deterministic document-local sender alias; never a command identity."),
+			textField("window", "Requested recent or differential message window."),
+			limitField(), completeField(),
+			integerField("unresolved_relations", "Typed relations whose canonical target could not be resolved."),
+		)
 	}
 	return result
 }

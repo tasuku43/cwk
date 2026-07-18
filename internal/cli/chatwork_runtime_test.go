@@ -57,8 +57,9 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	child := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "11")
 	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
 		return chatwork.Result{
-			Task:     request.Task,
-			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false, Description: "latest bounded window"},
+			Task:        request.Task,
+			MessageRoom: request.Room,
+			Coverage:    chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false, Description: "latest bounded window"},
 			Messages: []chatwork.Message{
 				{Ref: parent, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1")}, Body: "parent"},
 				{Ref: child, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2")}, Body: "child", Reply: &chatwork.Relation{Kind: "reply", Target: parent, ExternalID: room.Value}},
@@ -77,10 +78,9 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	if port.request.Room != room || !port.request.ForceRecent {
 		t.Fatalf("request = %+v, want exact room and recent window", port.request)
 	}
-	// Presentation candidates deliberately use different grammars. This
-	// integration test owns only the shared semantic boundary: both exact
-	// message references and the typed resolved reply facts must survive.
-	for _, want := range []string{"10", "11", "reply", "resolved"} {
+	// The flat presentation must preserve both exact references and project the
+	// typed resolved relation through the provider-sequence edge.
+	for _, want := range []string{"message-ref=10", "message-ref=11", "reply=#1"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, stdout.String())
 		}

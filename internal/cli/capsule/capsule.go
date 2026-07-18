@@ -1,8 +1,9 @@
-// Package capsule renders the candidate-P task-oriented projection.
+// Package capsule renders the selected task-oriented text projection.
 //
 // The projection is deliberately presentation-only. It selects a fixed set of
-// fields for each typed task result, preserves provider order, and never
-// derives relationships from external text.
+// fields for each typed task result. The messages.list route adds only
+// document-local aliases and sequence links while preserving provider order;
+// it never derives relationships from external text.
 package capsule
 
 import (
@@ -58,7 +59,9 @@ func Render(result chatwork.Result) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		renderMessages(&output, result.Messages, result.Coverage, window)
+		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, window); err != nil {
+			return "", err
+		}
 	case chatwork.TaskMessagesShow:
 		renderMessage(&output, result.Messages[0])
 	case chatwork.TaskMessagesSend:
@@ -156,15 +159,118 @@ func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) 
 		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 }
 
-func renderMessages(output *strings.Builder, messages []chatwork.Message, coverage chatwork.Coverage, window string) {
-	fmt.Fprintf(output, "messages count=%d window=%s", len(messages), window)
+func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, window string) error {
+	actors, actorByRef, err := messageActors(messages)
+	if err != nil {
+		return err
+	}
+	sequenceByRef := make(map[string]int, len(messages))
+	for index, message := range messages {
+		if _, exists := sequenceByRef[message.Ref.Value]; exists {
+			return fmt.Errorf("task projection message window contains a duplicate canonical message reference")
+		}
+		sequenceByRef[message.Ref.Value] = index + 1
+	}
+
+	fmt.Fprintf(output, "messages room-ref=%s count=%d window=%s", ref(room), len(messages), window)
 	if coverage.Limit > 0 {
 		fmt.Fprintf(output, " limit=%d", coverage.Limit)
 	}
 	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
-	for _, message := range messages {
-		renderMessageLine(output, "  ", message)
+	line(output, "external-text=untrusted escaped")
+	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] body")
+	line(output, "actors")
+	for index, actor := range actors {
+		line(output, "  a%d account-ref=%s name=%s", index+1, ref(actor.Ref), quoted(actor.Name))
 	}
+	for index, message := range messages {
+		fmt.Fprintf(output, "#%d message-ref=%s %s sent=%d", index+1, ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
+		if message.Reply != nil {
+			value, relationErr := messageReply(*message.Reply, sequenceByRef)
+			if relationErr != nil {
+				return relationErr
+			}
+			fmt.Fprintf(output, " reply=%s", value)
+		}
+		if len(message.Recipients) > 0 {
+			fmt.Fprintf(output, " to=%s", accountTargets(message.Recipients, actorByRef))
+		}
+		if len(message.Quotes) > 0 {
+			values := make([]string, len(message.Quotes))
+			for quoteIndex, quote := range message.Quotes {
+				values[quoteIndex] = accountRelation(quote, actorByRef)
+			}
+			fmt.Fprintf(output, " quote=%s", compactValues(values))
+		}
+		line(output, " body=%s", quoted(message.Body))
+	}
+	return nil
+}
+
+func messageActors(messages []chatwork.Message) ([]chatwork.Account, map[string]string, error) {
+	actors := make([]chatwork.Account, 0)
+	byReference := make(map[string]string)
+	names := make(map[string]string)
+	for _, message := range messages {
+		key := message.Sender.Ref.Value
+		if name, exists := names[key]; exists {
+			if name != message.Sender.Name {
+				return nil, nil, fmt.Errorf("task projection message sender name is inconsistent for one canonical account reference")
+			}
+			continue
+		}
+		names[key] = message.Sender.Name
+		actors = append(actors, message.Sender)
+		byReference[key] = fmt.Sprintf("a%d", len(actors))
+	}
+	return actors, byReference, nil
+}
+
+func messageReply(value chatwork.Relation, sequenceByRef map[string]int) (string, error) {
+	if !value.Resolved {
+		if value.Target == (chatwork.Reference{}) {
+			return "?", nil
+		}
+		return "?" + ref(value.Target), nil
+	}
+	sequence, found := sequenceByRef[value.Target.Value]
+	if !found {
+		return "", fmt.Errorf("task projection resolved reply target is outside the message window")
+	}
+	return fmt.Sprintf("#%d", sequence), nil
+}
+
+func accountTargets(values []chatwork.Reference, actorByRef map[string]string) string {
+	targets := make([]string, len(values))
+	for index, value := range values {
+		targets[index] = accountTarget(value, actorByRef)
+	}
+	return compactValues(targets)
+}
+
+func accountTarget(value chatwork.Reference, actorByRef map[string]string) string {
+	if alias, found := actorByRef[value.Value]; found {
+		return alias
+	}
+	return "account-ref:" + ref(value)
+}
+
+func accountRelation(value chatwork.Relation, actorByRef map[string]string) string {
+	if value.Target == (chatwork.Reference{}) {
+		return "?"
+	}
+	target := accountTarget(value.Target, actorByRef)
+	if !value.Resolved {
+		return "?" + target
+	}
+	return target
+}
+
+func compactValues(values []string) string {
+	if len(values) == 1 {
+		return values[0]
+	}
+	return "[" + strings.Join(values, ",") + "]"
 }
 
 func renderMessage(output *strings.Builder, message chatwork.Message) {

@@ -1,6 +1,9 @@
 package cli
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestChatworkCatalogSpecsValidateWithPublicCatalog(t *testing.T) {
 	if err := DefaultCatalog().Validate(); err != nil {
@@ -22,5 +25,18 @@ func TestChatworkCatalogContainsEveryTypedTaskOnce(t *testing.T) {
 	}
 	if len(seen) != 33 {
 		t.Fatalf("typed Chatwork task bindings = %d, want 33", len(seen))
+	}
+}
+
+func TestMessagePresentationChangeKeepsSuccessFormatsTextOnly(t *testing.T) {
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path != "messages list" && command.Path != "messages show" {
+			continue
+		}
+		if !reflect.DeepEqual(command.Agent.Output.Formats, []OutputFormat{OutputFormatText}) ||
+			command.Agent.Output.DefaultFormat != OutputFormatText ||
+			command.Agent.Output.JSONSchemaVersion != 0 || command.Agent.Output.JSONEnvelope != "" {
+			t.Fatalf("%s success output contract changed: %+v", command.Path, command.Agent.Output)
+		}
 	}
 }
