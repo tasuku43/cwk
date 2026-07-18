@@ -1,6 +1,6 @@
 # Work Goal: Select bounded messages by exact sender
 
-- Status: Accepted
+- Status: Completed
 - Owner: Project owner and Codex
 - Target: Current implementation cycle
 - Related ADRs: None; this extends the accepted typed message-selection rule
@@ -35,28 +35,28 @@ person-pair filtering and optional related-edge context.
 
 ## Acceptance criteria
 
-- [ ] `--sender <account-ref>` is repeatable and matches any listed exact sender.
-- [ ] Two repeated sender flags provide a truthful two-speaker slice without
+- [x] `--sender <account-ref>` is repeatable and matches any listed exact sender.
+- [x] Two repeated sender flags provide a truthful two-sender-focused slice without
   claiming that untyped posts are directed between them.
-- [ ] `--context none|replies` defaults to `none`, requires a sender filter, and
+- [x] `--context none|replies` defaults to `none`, requires a sender filter, and
   `replies` adds only direct in-window endpoints of typed reply edges touching a
   sender match.
-- [ ] Filtering occurs after the one bounded provider response and before
+- [x] Filtering occurs after the one bounded provider response and before
   presentation; it performs no additional I/O.
-- [ ] Provider source sequence remains stable and may contain gaps after
+- [x] Provider source sequence remains stable and may contain gaps after
   selection; displayed canonical references remain directly reusable.
-- [ ] Output records source count, exact sender filter, context mode, and the
+- [x] Output records source count, exact sender filter, context mode, and the
   source sequences that matched the sender condition once per document.
-- [ ] A reply whose parent is omitted becomes explicitly unresolved with its
+- [x] A reply whose parent is omitted becomes explicitly unresolved with its
   available canonical target; no false resolved edge remains.
-- [ ] Empty matches, duplicate/malformed references, invalid context use,
+- [x] Empty matches, duplicate/malformed references, invalid context use,
   interleaved branches, hostile text, and raw-notation canaries are covered by
   synthetic tests.
-- [ ] Existing unfiltered `messages list`, `messages show`, machine-format,
+- [x] Existing unfiltered `messages list`, `messages show`, machine-format,
   authentication, and provider-request contracts remain unchanged.
-- [ ] Scoped agent help makes sender OR semantics, direct reply context, bounds,
+- [x] Scoped agent help makes sender OR semantics, direct reply context, bounds,
   and canonical inputs discoverable in one invocation.
-- [ ] `task check` passes on the final committed state.
+- [x] `task check` passes on the final committed state.
 
 ## Governing documents
 

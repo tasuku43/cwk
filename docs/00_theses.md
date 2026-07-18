@@ -56,6 +56,9 @@ Chatwork data is converted into a typed, provider-independent task result before
 - Explicit To, reply, quote, identity, ordering, coverage, and unresolved-reference facts remain distinguishable when relevant to the outcome.
 - To does not become a reply; quoted prose, display names, and time proximity do not create relationships.
 - Missing or out-of-bound context remains observable rather than being hidden to make an output look complete.
+- Recurring bounded selection is expressed through finite typed task inputs and
+  applied to the typed result. It is not delegated to output parsing or pushed
+  into undocumented provider query parameters.
 - Canonical opaque references remain available for declared next actions.
 - Domain, application, and infrastructure contracts do not depend on a candidate presentation grammar.
 
@@ -93,6 +96,14 @@ raw Chatwork notation as semantic structure, undeclared provider or wire fields,
 duplicated coverage prose, derived depth/thread/root/child facts, or helpful
 non-contract defaults. Declared message bodies remain visible as untrusted
 external text; they are not reparsed by presentation to invent semantics.
+
+When `messages list` selects exact senders, repeated sender inputs use OR
+semantics. The optional `replies` context is a bounded, direct one-hop expansion
+over typed in-window reply edges; it does not mean a whole thread or include
+To/quote/body-derived neighbors. Selection preserves the original provider
+sequence, including gaps, distinguishes sender matches from added context once
+per document, and does not claim that two selected speakers form an exclusive
+conversation.
 
 The same fixed-schema rule applies to the reviewed homogeneous read
 collections for contacts, rooms, members, personal tasks, room tasks, files,

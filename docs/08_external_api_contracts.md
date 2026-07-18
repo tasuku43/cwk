@@ -94,6 +94,12 @@ The template does not select a backoff formula or universal numeric ceiling beca
 
 Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result.
 
+`messages list --sender` and `--context` are application-owned selection inputs
+over that single bounded message response. They never become Chatwork query
+parameters, trigger a second request, or fetch a referenced message outside the
+returned window; adapter request construction rejects them if they cross the
+application port boundary.
+
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 
 ## Side-effect and impact boundary

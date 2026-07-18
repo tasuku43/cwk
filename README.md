@@ -139,6 +139,26 @@ The fixed schema gives meaning to the positional values without repeating
 document-local edge. Use the second field (`9001` or `9002`), not `#1` or an
 actor alias, when a later command requires `--message`.
 
+To select exact speakers without post-processing, repeat `--sender` up to 100
+times; repeated values use OR semantics. Add `--context replies` only when
+direct typed reply parents and children from the same bounded provider window
+are useful:
+
+```sh
+go run ./cmd/cwk messages list --room 4101 --window recent --sender 7001
+go run ./cmd/cwk messages list --room 4101 --window recent \
+  --sender 7001 --sender 7002 --context replies
+```
+
+The filtered result keeps the original `#sequence`, including gaps, and lists
+which sequences were sender matches. Added records are one-hop reply context;
+the header `count` includes both anchors and added context, while
+`selection source-count` is the unfiltered provider-window size. The command
+does not infer relations from `[To]`/`[rp]` body text, walk whole
+threads, fetch an omitted parent, or claim that two speakers form an exclusive
+conversation. Account and message references remain canonical values accepted
+unchanged by later commands.
+
 File discovery follows the same rule and keeps an absent source-message
 position explicit:
 

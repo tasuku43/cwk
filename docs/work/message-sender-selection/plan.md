@@ -1,6 +1,6 @@
 # Work Plan: Message sender selection
 
-- Status: Accepted
+- Status: Completed
 - Goal: [goal.md](goal.md)
 - Context: [context.md](context.md)
 
@@ -77,7 +77,7 @@ validated room/sender/context inputs
 
 ### Error and cancellation behavior
 
-Invalid/missing/duplicate filter references, more than two incompatible modes,
+Invalid, missing, duplicate, or excessive filter references, an unknown context,
 or context without sender fail as invalid input before authentication/provider
 I/O. Provider faults, cancellation, retryability, timeout, and recovery remain
 unchanged. Selection itself performs no I/O and introduces no partial success.

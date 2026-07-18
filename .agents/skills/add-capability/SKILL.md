@@ -97,6 +97,15 @@ presentation. Do not let a renderer infer relations or let an adapter choose
 public output. Candidate-specific grammars and helpers must not leak into the
 shared semantic layers.
 
+When a recurring read needs filtering, prefer the smallest finite typed task
+input that can state the supported outcome. Apply it once to the typed bounded
+result in application, clear local-only fields before the provider port, and
+return enough metadata to distinguish matches from added context without
+reparsing presentation. Preserve source order/sequence and canonical references;
+name matching, raw-body inference, hidden additional calls, and an unbounded
+"related" mode are not acceptable shortcuts. For message reply context, test
+the exact hop bound and prove To/quote/raw notation cannot expand it.
+
 ## 3. Declare the operation contract
 
 For every external action, specify:
@@ -108,6 +117,9 @@ For every external action, specify:
 - for the exceptional command-bound target, one catalog-declared fixed `tool_local` singleton with a stable kind/ID/description, an explicitly empty `target_inputs`, and no `parent_input` or `target_id_input`; never use this for a remote, provider-owned, user-selected, or potentially multiple target;
 - validation performed before the external boundary;
 - finite timeout, pagination/completeness, maximum attempts, and upstream idempotency behavior;
+- whether each flag is repeatable as a structured catalog fact; parsing and
+  scoped agent help must consume the same declaration rather than a parallel
+  command-specific flag registry;
 - which derived policy applies at `app/execution.Invoker`; do not make the template assume approval, confirmation, OS authentication, or dry-run;
 - audit-safe fields and secret fields;
 - allowed network destination.
@@ -288,6 +300,10 @@ Add the smallest set that proves the capability:
   uses a presentation competition that pins candidates,
   agent/model versions, prompts, repetitions, answer scoring, token accounting,
   quality floor, latency, benchmark-defect reporting, and raw result retention;
+- finite-filter tests proving exact canonical inputs, OR/AND semantics,
+  invalid combinations before I/O, provider-call count, selection bounds,
+  source-order preservation, context-hop limits, match/context distinction,
+  and no inference from presentation or external text;
 - retained baseline fixtures for the candidate-C first contract and active
   golden fixtures for the current task projection; future replacements receive
   active compatibility fixtures only after reviewed evidence and an explicit

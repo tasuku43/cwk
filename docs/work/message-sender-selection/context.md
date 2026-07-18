@@ -56,6 +56,32 @@
 - [x] Context records are distinguished by a document-level list of sender-match
   source sequences rather than repeated per-record labels.
 
+## Measurement evidence
+
+The frozen 14-message readiness fixture and pinned `tiktoken==0.13.0`
+`o200k_base` measurement are recorded in [token-measurement.md](token-measurement.md).
+Exact sender anchors reduced the fixture from 443 to 208 tokens; direct reply
+context reduced it to 341 tokens while preserving the tested semantic answer.
+
+## Implementation evidence
+
+- `MessageFilter` and `MessageSelection` bind exact sender refs, context,
+  source count, original sequences, and anchor sequences in the typed result.
+- Domain validation proves anchors match requested senders and every added
+  context node is a direct resolved reply parent or child of an anchor; known
+  empty provenance uses explicit non-nil empty collections.
+- Application assembly clears local filter fields before one port call,
+  resolves the full source window, performs stable OR selection and optional
+  one-hop expansion, then re-resolves the displayed subset so omitted parents
+  remain canonically unresolved.
+- The Chatwork adapter rejects leaked selection fields. `messages show` retains
+  the strict relation-consistency check formerly applied at the CLI boundary.
+- Catalog input repeatability is machine-readable and is the parser's source of
+  truth; scoped help declares the sender OR rule, 100-reference bound, and
+  direct reply context.
+- Exact unfiltered and filtered goldens, hostile/raw-notation canaries,
+  canonical-reference round trips, and active semantic/readiness fixtures pass.
+
 ## Thesis evidence
 
 - Repeated external filtering would violate the no-post-processing outcome.
