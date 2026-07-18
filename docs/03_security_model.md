@@ -87,7 +87,7 @@ Discovery output may contain labels controlled by an external system, but action
 - Keep remote labels out of authorization identity and sanitize them separately for display.
 - Reject control/format runes and Unicode line or paragraph separators at opaque transport boundaries where they have no valid protocol role. Validation rejects; it never silently rewrites an ID, cursor, target part, or idempotency key.
 
-The sample contract accepts only `smp_` followed by twelve lowercase hexadecimal characters. Its negative tests reject alternate forms before the sample adapter runs.
+The internal sample test fixture accepts only `smp_` followed by twelve lowercase hexadecimal characters. Its negative tests remain as generic boundary evidence, but the fixture is not a public capability. Public Chatwork commands apply the same exact-byte rule to their typed canonical references.
 
 ### Presentation-derived identity
 

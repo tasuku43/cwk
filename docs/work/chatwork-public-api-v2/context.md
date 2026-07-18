@@ -3,8 +3,10 @@
 ## Current behavior
 
 - `.harness/project.json` reports `profile: ready`.
-- The runnable surface is still the scaffold: `help`, `doctor`, `sample list`,
-  `sample read`, and `version`.
+- The public sample scaffold has been removed from `DefaultCatalog`; its code is
+  retained only as an explicitly constructed offline test fixture. The public
+  Chatwork task catalog is being integrated alongside `help`, `doctor`, and
+  `version`.
 - No production Chatwork network adapter or credential source exists.
 - The repository has reusable effect, intent, authentication-gate, binding,
   pagination, fault, catalog, and output-safety foundations.
@@ -17,7 +19,8 @@
 - Entry point: `cmd/cwk/main.go`
 - Domain rules: `internal/domain/operation`, `authn`, `apicall`, `page`, `fault`
 - Application boundaries: `internal/app/authn`, `execution`, `pagination`
-- Infrastructure examples: `internal/infra/systemdoctor`, `sampledata`
+- Infrastructure examples: `internal/infra/systemdoctor`; `sampledata` is an
+  internal test fixture only.
 - CLI catalog/presentation: `internal/cli/catalog.go`, `help.go`, `output.go`
 - Coverage/schema ledgers: `.harness/capabilities.json`,
   `.harness/schemas.json`

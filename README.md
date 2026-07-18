@@ -67,16 +67,14 @@ The bootstrap changes repository identity; it does not invent the product. A der
 ```sh
 go run ./cmd/cwk --help
 go run ./cmd/cwk help --format agent
-go run ./cmd/cwk help sample --format agent
+go run ./cmd/cwk help rooms --format agent
+go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk doctor
-go run ./cmd/cwk sample list --format json
-go run ./cmd/cwk sample read --id <sample-id> --format json
-go run ./cmd/cwk --error-format json sample read --id <sample-id>
 ```
 
-The default `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. The synthetic `sample list` and `sample read --id` pair demonstrates discover-to-act composition: copy the lowercase `id` emitted by `sample list` unchanged into `sample read`. Keep these examples as references while adding the first real capability, then remove or rename them only when the replacement has equivalent architectural and catalog tests.
+The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Configure PAT or OAuth authentication from the exact scoped-help contract before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
 
-`doctor`, `sample list`, and `sample read` default to stable TSV and also support versioned JSON. The list result contains only `id` and `name`; read adds `content`. Success data is written to stdout only after the complete result has been bounded and rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
+Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 
 ## Repository map
 

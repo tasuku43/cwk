@@ -28,9 +28,9 @@ For every supported outcome, an agent can:
 
 Direct extraction of a declared field or canonical reference is allowed. Reconstructing product semantics from provider fields or multiple undocumented calls is not.
 
-## Current runnable surface
+## Public runnable surface
 
-Until the first Chatwork slice replaces scaffold examples, the repository exposes `help`, `doctor`, `sample list`, `sample read`, and `version`. These commands prove catalog, opaque-reference, output, error, and harness behavior. They do not prove a Chatwork outcome or settle its presentation.
+The public catalog exposes local `help`, `doctor`, and `version` utilities plus the task-oriented Chatwork workflows defined below. The former `sample list` and `sample read` scaffold is retained only as an offline test fixture; it is absent from root help and cannot be invoked through the default catalog. Public opaque-reference and output contracts are proven by the Chatwork workflows themselves.
 
 ## Required first complete surface
 

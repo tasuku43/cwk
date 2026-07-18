@@ -12,6 +12,11 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
+func newInternalSampleHelpCLI(out, errOut *bytes.Buffer) *CLI {
+	commands := append(DefaultCatalog().Commands(), sampleTestCommandSpecs()...)
+	return newCLI(strings.NewReader(""), out, errOut, NewCatalog(commands...), passingInspector("unused"))
+}
+
 func TestRootHelpIsDerivedFromCatalog(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)
@@ -28,7 +33,7 @@ func TestRootHelpIsDerivedFromCatalog(t *testing.T) {
 
 func TestCommandHelpUsesCatalogMetadataAndDerivedReferences(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"sample", "read", "--help"}); code != ExitOK {
 		t.Fatalf("Run(sample read --help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -217,7 +222,8 @@ func TestRootAgentHelpSizeGrowthContainsOnlyIndexFields(t *testing.T) {
 }
 
 func TestCatalogSelectReturnsDeepCopiesForScopedProjection(t *testing.T) {
-	catalog := DefaultCatalog()
+	commands := append(DefaultCatalog().Commands(), sampleTestCommandSpecs()...)
+	catalog := NewCatalog(commands...)
 	before := catalog.Commands()
 
 	namespace, exact := catalog.Select("sample")
@@ -249,6 +255,9 @@ func runAgentHelpForTest(t *testing.T, args []string) map[string]json.RawMessage
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)
+	if len(args) > 1 && args[1] == "sample" {
+		command = newInternalSampleHelpCLI(&stdout, &stderr)
+	}
 	if code := runCLI(command, args); code != ExitOK {
 		t.Fatalf("Run(%v) code = %d, stderr = %q", args, code, stderr.String())
 	}
@@ -283,7 +292,7 @@ func containsOutputFormat(formats []OutputFormat, wanted OutputFormat) bool {
 
 func TestAgentHelpCanSelectNamespaceWithoutLoadingWholeCatalog(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(namespace agent help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -306,7 +315,7 @@ func TestAgentHelpCanSelectNamespaceWithoutLoadingWholeCatalog(t *testing.T) {
 
 func TestTextHelpCanSelectNamespace(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample"}); code != ExitOK {
 		t.Fatalf("Run(namespace help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -317,7 +326,7 @@ func TestTextHelpCanSelectNamespace(t *testing.T) {
 
 func TestAgentHelpPreservesTopLevelCompatibilityFields(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample", "list", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(selected agent help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -339,7 +348,7 @@ func TestAgentHelpPreservesTopLevelCompatibilityFields(t *testing.T) {
 
 func TestAgentHelpCanSelectOneCatalogCommandWithItsWorkflow(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample", "read", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(selected agent help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -359,7 +368,7 @@ func TestAgentHelpCanSelectOneCatalogCommandWithItsWorkflow(t *testing.T) {
 
 func TestAgentHelpPublishesDiscoverToActReferenceFlow(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample", "--format", "agent"}); code != ExitOK {
 		t.Fatalf("Run(agent help) code = %d, stderr = %q", code, stderr.String())
 	}
@@ -392,7 +401,7 @@ func TestAgentHelpPublishesDiscoverToActReferenceFlow(t *testing.T) {
 
 func TestAgentRoundTripContractCoversDiscoveryActionAndRecovery(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := New(strings.NewReader(""), &stdout, &stderr)
+	command := newInternalSampleHelpCLI(&stdout, &stderr)
 	if code := runCLI(command, []string{"help", "sample", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run() code = %d, stderr = %q", code, stderr.String())
 	}

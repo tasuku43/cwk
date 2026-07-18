@@ -127,19 +127,18 @@ evaluation inputs or retained evidence.
 
 The transcript fails when a supported task contains an external parser, manual identifier join, raw notation parsing, guessed command/endpoint/cursor, or undeclared provider call. When this happens, decide whether the capability is incomplete, the outcome is too broad, or the presentation candidate failed. Do not patch the agent prompt with the workaround.
 
-## Runnable scaffold probes
+## Runnable public probes
 
-Before Chatwork commands and competition fixtures exist, retain:
+Use the public Chatwork catalog and synthetic authentication/adapter fixtures:
 
 ```sh
 go run ./cmd/cwk help --format agent
-go run ./cmd/cwk help sample --format agent
-go run ./cmd/cwk sample list --format json
-go run ./cmd/cwk sample read --id smp_2f4a6c8e0b1d --format json
-go run ./cmd/cwk --error-format json sample read --id smp_000000000000
+go run ./cmd/cwk help rooms --format agent
+go run ./cmd/cwk help messages list --format agent
+go test ./internal/cli -run 'TestChatwork|TestAgent'
 ```
 
-These prove bounded discovery, scoped contracts, structured output/error behavior, and exact reference reuse. They do not select or validate a Chatwork presentation.
+These prove bounded discovery, scoped contracts, structured output/error behavior, and exact Chatwork reference reuse without requiring a developer account. The candidate-C semantic and golden tests separately validate the selected presentation.
 
 ## Review record
 

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/domain/page"
 	"github.com/tasuku43/cwk/internal/domain/sample"
 )
@@ -64,15 +66,87 @@ func (r *cliSampleRepository) Get(_ context.Context, id string) (sample.Item, bo
 func newSampleCLI(repository *cliSampleRepository) (*CLI, *bytes.Buffer, *bytes.Buffer) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
+	commands := append(DefaultCatalog().Commands(), sampleTestCommandSpecs()...)
 	command := newCLIWithSamples(
-		strings.NewReader(""), stdout, stderr, DefaultCatalog(), passingInspector("unused"), repository,
+		strings.NewReader(""), stdout, stderr, NewCatalog(commands...), passingInspector("unused"), repository,
 	)
 	return command, stdout, stderr
 }
 
+// sampleTestCommandSpecs keeps the former scaffold executable as an internal
+// contract fixture without returning it from DefaultCatalog or public help.
+func sampleTestCommandSpecs() []CommandSpec {
+	return []CommandSpec{
+		{
+			Path: "sample list", Summary: "Discover offline samples and their opaque IDs", Args: "[--format tsv|json]",
+			Effect: operation.EffectRead, Role: RoleDiscover,
+			Agent: AgentContract{
+				CapabilityID: "sample.inspect", Outcome: "Discover every offline sample and its stable opaque reference",
+				Inputs: []CommandInput{{Name: "--format", Source: InputSourceFlag, Description: "Select the complete sample collection representation.", AllowedValues: []string{"tsv", "json"}}},
+				Output: CommandOutput{
+					Formats: []OutputFormat{OutputFormatTSV, OutputFormatJSON}, DefaultFormat: OutputFormatTSV,
+					Fields: []OutputField{
+						{Name: "id", Type: OutputFieldTypeString, Description: "Opaque sample reference accepted unchanged by sample read.", ReferenceKind: "sample"},
+						{Name: "name", Type: OutputFieldTypeString, Description: "Human-readable label with unsafe structural runes visibly escaped; never use it as an identifier."},
+					},
+					Completeness: OutputCompletenessComplete, JSONEnvelope: "items", JSONSchemaVersion: 1,
+				},
+				Prerequisites: []string{},
+				Errors: []CommandError{
+					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help sample list", "Correct the command arguments."),
+					declaredCommandError(fault.KindUnavailable, "page_fetch_failed", true, "sample list", "Retry after the sample source is available."),
+					declaredCommandError(fault.KindContract, "invalid_page_contract", false, "sample list", "Inspect the sample adapter page contract."),
+					declaredCommandError(fault.KindContract, "pagination_page_limit", false, "sample list", "Review the declared pagination page budget."),
+					declaredCommandError(fault.KindContract, "pagination_item_limit", false, "sample list", "Review the declared pagination item budget."),
+					declaredCommandError(fault.KindContract, "pagination_cursor_loop", false, "sample list", "Inspect the adapter cursor sequence."),
+					declaredCommandError(fault.KindContract, "output_contract_exceeded", false, "sample list", "Review the bounded output contract and sample adapter."),
+					declaredCommandError(fault.KindContract, "output_encoding_failed", false, "sample list", "Repair the sample list JSON projection."),
+					declaredCommandError(fault.KindInternal, "internal_error", false, "sample list", "Inspect the sample adapter and returned items."),
+					declaredCommandError(fault.KindInternal, "output_write_failed", true, "sample list", "Retry with a writable output stream."),
+					declaredCommandError(fault.KindCanceled, "operation_canceled", true, "sample list", "Retry when the caller is ready."),
+				},
+			},
+			handler: runSampleList,
+		},
+		{
+			Path: "sample read", Summary: "Read exactly one offline sample by opaque ID", Args: "--id <sample-id> [--format tsv|json]",
+			Effect: operation.EffectRead, Role: RoleAct,
+			Agent: AgentContract{
+				CapabilityID: "sample.inspect", Outcome: "Read one uniquely identified offline sample without rediscovery",
+				Inputs: []CommandInput{
+					{Name: "--id", Source: InputSourceFlag, Required: true, Description: "Pass an id from sample list byte-for-byte without parsing or transformation.", AllowedValues: []string{}, ReferenceKind: "sample"},
+					{Name: "--format", Source: InputSourceFlag, Description: "Select the single sample representation.", AllowedValues: []string{"tsv", "json"}},
+				},
+				Output: CommandOutput{
+					Formats: []OutputFormat{OutputFormatTSV, OutputFormatJSON}, DefaultFormat: OutputFormatTSV,
+					Fields: []OutputField{
+						{Name: "id", Type: OutputFieldTypeString, Description: "Exact opaque sample ID requested by the caller."},
+						{Name: "name", Type: OutputFieldTypeString, Description: "Human-readable label with unsafe structural runes rendered as visible escapes."},
+						{Name: "content", Type: OutputFieldTypeString, Description: "Complete content with unsafe structural runes rendered as visible escapes."},
+					},
+					Completeness: OutputCompletenessComplete, JSONEnvelope: "item", JSONSchemaVersion: 1,
+				},
+				Prerequisites: []string{},
+				Errors: []CommandError{
+					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help sample read", "Pass exactly one opaque sample ID through --id and choose a supported format."),
+					declaredCommandError(fault.KindNotFound, "sample_not_found", false, "sample list", "Discover a current opaque sample ID."),
+					declaredCommandError(fault.KindContract, "output_contract_exceeded", false, "sample read", "Review the bounded output contract and sample adapter."),
+					declaredCommandError(fault.KindContract, "output_encoding_failed", false, "sample read", "Repair the sample JSON projection."),
+					declaredCommandError(fault.KindInternal, "internal_error", false, "sample read", "Inspect the sample adapter and returned item."),
+					declaredCommandError(fault.KindInternal, "output_write_failed", true, "sample read", "Retry with a writable output stream."),
+					declaredCommandError(fault.KindCanceled, "operation_canceled", true, "sample read", "Retry when the caller is ready."),
+				},
+			},
+			handler: runSampleRead,
+		},
+	}
+}
+
 func TestE2ESampleListThenReadPassesIDsUnchanged(t *testing.T) {
-	var listOut, listErr bytes.Buffer
-	listCLI := New(strings.NewReader(""), &listOut, &listErr)
+	listCLI, listOut, listErr := newSampleCLI(&cliSampleRepository{items: []sample.Summary{
+		{ID: "smp_2f4a6c8e0b1d", Name: "Alpha"},
+		{ID: "smp_91b3d5f7a2c4", Name: "Beta"},
+	}})
 	if code := runCLI(listCLI, []string{"sample", "list"}); code != ExitOK {
 		t.Fatalf("sample list code = %d, stderr = %q", code, listErr.String())
 	}
@@ -86,8 +160,9 @@ func TestE2ESampleListThenReadPassesIDsUnchanged(t *testing.T) {
 	rows := strings.Split(strings.TrimSpace(listOut.String()), "\n")[1:]
 	for _, row := range rows {
 		id := strings.SplitN(row, "\t", 2)[0]
-		var readOut, readErr bytes.Buffer
-		readCLI := New(strings.NewReader(""), &readOut, &readErr)
+		readCLI, readOut, readErr := newSampleCLI(&cliSampleRepository{
+			item: sample.Item{ID: id, Name: "Name", Content: "Content"}, found: true,
+		})
 		if code := runCLI(readCLI, []string{"sample", "read", "--id", id}); code != ExitOK {
 			t.Fatalf("sample read --id %s code = %d, stderr = %q", id, code, readErr.String())
 		}

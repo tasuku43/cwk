@@ -67,7 +67,10 @@
 - [ ] Room-task list/create/show/status workflows.
 - [ ] File list/upload/show workflows.
 - [ ] Invite-link show/create/update/delete workflows.
-- [ ] Remove or internalize scaffold sample capabilities after replacement.
+- [x] Remove or internalize scaffold sample capabilities after replacement.
+  Evidence: `sample list`, `sample read`, and `sample.inspect` are absent from
+  `DefaultCatalog` and root help; the capability ledger marks `sample.inspect`
+  internal, while explicit test-only catalogs retain the generic fixture.
 
 ## Verify and close
 

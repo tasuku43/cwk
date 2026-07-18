@@ -136,6 +136,20 @@ func TestDefaultCatalogIsValidAndUnique(t *testing.T) {
 	}
 }
 
+func TestDefaultCatalogDoesNotExposeSampleScaffold(t *testing.T) {
+	catalog := DefaultCatalog()
+	for _, path := range []string{"sample list", "sample read"} {
+		if _, found := catalog.Lookup(path); found {
+			t.Fatalf("default catalog exposes internal scaffold command %q", path)
+		}
+	}
+	for _, spec := range catalog.Commands() {
+		if spec.Agent.CapabilityID == "sample.inspect" {
+			t.Fatalf("default catalog exposes internal scaffold capability through %q", spec.Path)
+		}
+	}
+}
+
 func TestCatalogRejectsIncompleteDeclarations(t *testing.T) {
 	valid := utilitySpec("valid")
 	missingEffect := utilitySpec("missing-effect")

@@ -91,7 +91,7 @@ cmd/cwk
   -> internal/infra/systemdoctor
 ```
 
-The `sample list` and `sample read --id` pair follows the same layering through `internal/app/samplecmd`, `internal/domain/sample`, `internal/infra/sampledata`, and `internal/cli/sample.go`. It is the reference implementation for discover/act roles and exact opaque-ID flow.
+The public Chatwork room/message workflows are the production reference for discover/act roles and exact opaque-reference flow. The `sample list` and `sample read --id` pair remains in `internal/app/samplecmd`, `internal/domain/sample`, `internal/infra/sampledata`, and `internal/cli/sample.go` only as an explicitly constructed offline test fixture; never add it back to `DefaultCatalog`.
 
 ## Working method
 

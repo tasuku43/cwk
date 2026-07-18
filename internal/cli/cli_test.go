@@ -212,7 +212,7 @@ func TestJSONErrorIsStableAndDoesNotExposePlainCause(t *testing.T) {
 
 func TestFaultNormalizationPreservesValidStructuredClassificationBeforeCancellation(t *testing.T) {
 	const canary = "private-deadline-canary"
-	ctx := withCommandPath(context.Background(), "sample read")
+	ctx := withCommandPath(context.Background(), "doctor")
 	providerFault := fault.Wrap(
 		fault.KindUnavailable,
 		"mutation_outcome_unknown",
@@ -392,9 +392,6 @@ func TestEveryCatalogCommandDispatchesThroughItsSpec(t *testing.T) {
 		inspector := passingInspector("test/test")
 		command, _, stderr := newTestCLI(inspector)
 		args := strings.Split(spec.Path, " ")
-		if spec.Path == "sample read" {
-			args = append(args, "--id", "smp_2f4a6c8e0b1d")
-		}
 		if code := runCLI(command, args); code != ExitOK {
 			t.Errorf("Run(%q) code = %d, stderr = %q", spec.Path, code, stderr.String())
 		}

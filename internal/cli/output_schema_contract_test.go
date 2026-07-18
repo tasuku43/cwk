@@ -33,8 +33,6 @@ func TestJSONOutputMatchesCatalogContract(t *testing.T) {
 			},
 		},
 		{path: "help", args: []string{"help", "--format=agent"}, build: newDefault},
-		{path: "sample list", args: []string{"sample", "list", "--format=json"}, build: newDefault},
-		{path: "sample read", args: []string{"sample", "read", "--id", "smp_2f4a6c8e0b1d", "--format=json"}, build: newDefault},
 	}
 
 	for _, current := range probes {

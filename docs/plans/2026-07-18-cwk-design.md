@@ -4,6 +4,11 @@
 - Date: 2026-07-18
 - Scope: Public Go CLI repository template
 
+Historical note: this design records the original public template scaffold.
+In the derived `cwk` product, the sample commands were later removed from the
+public catalog and retained only as explicitly constructed offline test
+fixtures after Chatwork workflows replaced their contract coverage.
+
 ## Problem
 
 Starting a CLI from an empty repository is deceptively cheap. The expensive decisions appear later: product vocabulary mirrors an external API, architecture exists only in one maintainer's memory, side effects bypass inconsistent checks, agent instructions drift, CI duplicates local commands, and private assumptions reach a repository intended for publication.
