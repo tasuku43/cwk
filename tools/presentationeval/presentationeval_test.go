@@ -74,7 +74,7 @@ func TestSimulatorReturnsStructuredReadOnlyRecovery(t *testing.T) {
 	}
 }
 
-func TestPrepareRecordsDeterministicC0AndKnownCriticalGaps(t *testing.T) {
+func TestPrepareRecordsDeterministicC0AndCriticalGates(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "evidence")
 	if err := prepareArtifacts(output, 3); err != nil {
 		t.Fatal(err)
@@ -85,23 +85,12 @@ func TestPrepareRecordsDeterministicC0AndKnownCriticalGaps(t *testing.T) {
 		Renders  []renderSummary `json:"renders"`
 	}
 	readJSONFile(t, filepath.Join(output, "summary-input.json"), &summary)
-	if summary.Schema != toolSchema || summary.Critical {
-		t.Fatalf("summary = %#v, want C0 critical gaps to remain observable", summary)
+	if summary.Schema != toolSchema || !summary.Critical {
+		t.Fatalf("summary = %#v, want repaired C0 to pass critical render gates", summary)
 	}
-	wantFailures := map[string]string{
-		"file.verify-created-parent": "canonical=4101",
-		"mark-read.explicit-zero":    "counts unread=0 mentions=0",
-	}
-	for situationID, marker := range wantFailures {
-		found := false
-		for _, render := range summary.Renders {
-			if render.SituationID != situationID {
-				continue
-			}
-			found = strings.Contains(strings.Join(render.Failures, "\n"), marker) && render.Determinism
-		}
-		if !found {
-			t.Errorf("missing deterministic C0 gap %s / %s", situationID, marker)
+	for _, render := range summary.Renders {
+		if !render.Determinism || !render.Critical || len(render.Failures) != 0 {
+			t.Errorf("render gate failed after shared contract repair: %#v", render)
 		}
 	}
 	metrics, err := os.ReadFile(filepath.Join(output, "render-metrics.jsonl"))

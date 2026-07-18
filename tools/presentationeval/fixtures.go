@@ -16,14 +16,15 @@ func situations() []situation {
 	fileUpload := chatwork.Result{
 		Task:     chatwork.TaskFilesUpload,
 		Coverage: singleCoverage(),
-		Created:  []chatwork.Reference{ref(chatwork.ReferenceFile, "6102")},
+		CreatedInRoom: &chatwork.RoomScopedCreation{
+			Refs:       []chatwork.Reference{ref(chatwork.ReferenceFile, "6102")},
+			ParentRoom: ref(chatwork.ReferenceRoom, "4101"),
+		},
 	}
 	markReadZero := chatwork.Result{
-		Task:     chatwork.TaskMessagesMarkRead,
-		Coverage: singleCoverage(),
-		Affected: []chatwork.Reference{ref(chatwork.ReferenceRoom, "4101")},
-		Unread:   0,
-		Mentions: 0,
+		Task:      chatwork.TaskMessagesMarkRead,
+		Coverage:  singleCoverage(),
+		ReadState: &chatwork.ReadState{Unread: 0, Mentions: 0},
 	}
 
 	values := []situation{
@@ -78,7 +79,7 @@ func situations() []situation {
 			AnswerKey:     raw(`{"room_ref":"4101","unread":0,"mentions":0}`),
 			CriticalPaths: []string{"/room_ref", "/unread", "/mentions"}, RequiredPaths: []string{"messages mark-read"}, MaxCommands: 3,
 			Operations: map[string]fixtureOperation{
-				"messages mark-read": operation("messages mark-read", markReadZero, map[string]string{"--room": "4101", "--message": "9006"}, "canonical=4101", "counts unread=0 mentions=0"),
+				"messages mark-read": operation("messages mark-read", markReadZero, map[string]string{"--room": "4101", "--message": "9006"}, "read-state unread=0 mentions=0"),
 			},
 		},
 		{
