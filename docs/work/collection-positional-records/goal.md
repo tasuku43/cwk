@@ -1,6 +1,6 @@
 # Work Goal: Apply fixed schemas to repeated collection records
 
-- Status: Accepted
+- Status: Complete
 - Owner: Project owner and Codex
 - Target: Current implementation cycle
 - Related ADRs: None; this propagates the accepted fixed-schema principle
@@ -36,17 +36,26 @@ references form a frequently queried fixed record.
 
 ## Acceptance criteria
 
-- [ ] Every in-scope collection always emits exactly one fixed schema and one
+- [x] Every in-scope collection always emits exactly one fixed schema and one
   `external-text=untrusted escaped` declaration, including empty collections.
-- [ ] Every item is one physical provider-order line conforming to its schema.
-- [ ] Canonical references remain directly reusable without reconstruction.
-- [ ] Optional contact organization and request message remain explicit without
+- [x] Every item is one physical provider-order line conforming to its schema.
+- [x] Canonical references remain directly reusable without reconstruction.
+- [x] Optional contact organization and request message remain explicit without
   shifting required positions; missing file message remains `absent`.
-- [ ] Hostile names/bodies cannot inject records or schema lines.
-- [ ] Existing single-record and machine-readable contracts remain unchanged.
-- [ ] Representative multi-item fixtures show a token reduction under one pinned
+- [x] Hostile names/bodies cannot inject records or schema lines.
+- [x] Existing single-record and machine-readable contracts remain unchanged.
+- [x] Representative multi-item fixtures show a token reduction under one pinned
   tokenizer; semantic accuracy remains the eligibility condition.
-- [ ] `task check` passes and changes are committed in coherent slices.
+- [x] `task check` passes and changes are committed in coherent slices.
+
+## Completion evidence
+
+- `b56449b` implements and contract-tests the seven positional renderers.
+- `a993b41` fixes catalog position guidance and the synthetic file-discovery
+  semantic/readiness/golden evidence.
+- `8c481f3` propagates the fixed-schema contract and records the pinned token
+  measurement.
+- `task check` passed on 2026-07-19 after those commits.
 
 ## Completion definition
 

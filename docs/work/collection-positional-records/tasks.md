@@ -8,4 +8,4 @@
 - [x] Preserve single-record and machine-readable contracts.
 - [x] Measure representative labeled versus positional outputs.
 - [x] Update catalog, Skill, and durable documentation.
-- [ ] Run `task check`, review, commit, and close.
+- [x] Run `task check`, review, commit, and close.
