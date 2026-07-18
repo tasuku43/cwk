@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/cwk/presentation-benchmark-protocol.schema.json",
+  "title": "cwk presentation benchmark protocol",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "status", "unit", "simulator", "run", "usage", "forbidden", "critical_gates"],
+  "properties": {
+    "schema": {"const": "cwk-presentation-benchmark-protocol/1"},
+    "status": {"enum": ["scaffold-not-frozen", "frozen"]},
+    "unit": {"const": "natural-language-agent-workflow"},
+    "simulator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["invocation", "uses_public_help", "fixture_backed_tasks", "network_allowed", "credential_input"],
+      "properties": {
+        "invocation": {"type": "string"},
+        "uses_public_help": {"const": true},
+        "fixture_backed_tasks": {"const": true},
+        "network_allowed": {"const": false},
+        "credential_input": {"const": false}
+      }
+    },
+    "run": {"type": "object"},
+    "usage": {"type": "object"},
+    "forbidden": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true},
+    "critical_gates": {"type": "array", "minItems": 1, "items": {"type": "string"}, "uniqueItems": true}
+  }
+}

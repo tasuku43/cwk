@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/cwk/presentation-run.schema.json",
+  "title": "One end-to-end cwk presentation agent run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "run_id", "candidate", "situation_id", "repetition", "agent", "model", "steps", "answer", "usage", "presentation_probe", "non_cwk_tools", "external_processing"],
+  "properties": {
+    "schema": {"const": "cwk-presentation-run/1"},
+    "run_id": {"type": "string", "minLength": 1},
+    "candidate": {"type": "string", "minLength": 1},
+    "situation_id": {"type": "string", "minLength": 1},
+    "repetition": {"type": "integer", "minimum": 1},
+    "agent": {"type": "string", "minLength": 1},
+    "model": {"type": "string", "minLength": 1},
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["argv", "exit_code", "stdout_sha256", "stderr_sha256"],
+        "properties": {
+          "argv": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "exit_code": {"type": "integer", "minimum": 0, "maximum": 255},
+          "stdout_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "stderr_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    },
+    "answer": {"type": "object"},
+    "usage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["prompt_tokens", "cached_tokens", "completion_tokens", "total_tokens"],
+      "properties": {
+        "prompt_tokens": {"type": "integer", "minimum": 0},
+        "cached_tokens": {"type": "integer", "minimum": 0},
+        "completion_tokens": {"type": "integer", "minimum": 0},
+        "total_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "presentation_probe": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["probe_id", "candidate_input_tokens", "control_input_tokens", "input_token_delta"],
+      "properties": {
+        "probe_id": {"type": "string", "minLength": 1},
+        "candidate_input_tokens": {"type": "integer", "minimum": 0},
+        "control_input_tokens": {"type": "integer", "minimum": 0},
+        "input_token_delta": {"type": "integer"}
+      }
+    },
+    "non_cwk_tools": {"type": "array", "maxItems": 0},
+    "external_processing": {"type": "array", "maxItems": 0}
+  }
+}

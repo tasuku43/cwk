@@ -53,7 +53,32 @@ command wiring, error rendering, fixtures, answer keys, prompts, protocol,
 evaluator, `go.mod`, and `go.sum` are forbidden paths. Validate every
 `<BASE_SHA>..HEAD` path mechanically before a run.
 
-## Agent tasks
+## Benchmark unit and agent tasks
+
+The scored unit is a realistic natural-language user situation, not a direct
+field-extraction question. A fresh agent receives the fixed system prompt, one
+user situation, and the offline simulator invocation. It chooses and executes
+real public `cwk` argv paths against fixture-backed state. Public help is
+rendered by the production catalog; task results use the candidate renderer.
+The scorer deterministically replays every recorded argv, verifies stdout and
+stderr hashes, checks command discovery and exact-reference flow, and then
+scores the final exact JSON outcome.
+
+The initial pilot situations cover attention rooms, recent-thread
+relationships, safe message selection without mutation, created file and
+parent verification, explicit zero after mark-read, structured failure
+recovery, a 100-room selection, and hostile prompt-like message data.
+
+Run the simulator as:
+
+```sh
+go run ./tools/presentationeval cwk --scenario <id> -- <cwk-arguments...>
+```
+
+The machine-readable draft is `benchmark-protocol.json`, validated against
+`benchmark-protocol.schema.json`. Run submissions conform to `run.schema.json`.
+
+## Exact outcome tasks
 
 Each run receives only the public root/scoped help allowed by the scenario and
 one candidate's direct output. It must return a small exact JSON answer for:
@@ -146,6 +171,16 @@ Record per run:
 - answer JSON, exact scored fields, failures, and critical-answer status;
 - agent tool calls, discovery calls, and external-processing violations;
 - wall time, timeout, and malformed-output state.
+
+End-to-end total tokens remain a workflow-cost measurement, but they are not
+the presentation-efficiency denominator: a minimal Codex probe has a large
+fixed context that can hide renderer differences. Each scored run therefore
+also records a model-authoritative paired no-tool probe. Candidate and control
+requests use identical model, prompt, configuration, and tool policy; the only
+difference is candidate rendered output versus a blank/control slot. The
+primary presentation-token input is
+`candidate_input_tokens - control_input_tokens`. Bytes and hashes remain
+deterministic transport measurements and are never treated as token counts.
 
 Report paired deltas against C0, medians, p95 latency, confidence intervals,
 failure counts, and every ineligibility reason. Retain raw runs; do not report

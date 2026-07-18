@@ -1,0 +1,45 @@
+{
+  "schema": "cwk-presentation-benchmark-protocol/1",
+  "status": "scaffold-not-frozen",
+  "unit": "natural-language-agent-workflow",
+  "simulator": {
+    "invocation": "go run ./tools/presentationeval cwk --scenario <id> -- <cwk-arguments...>",
+    "uses_public_help": true,
+    "fixture_backed_tasks": true,
+    "network_allowed": false,
+    "credential_input": false
+  },
+  "run": {
+    "schema": "cwk-presentation-run/1",
+    "primary_repetitions": 5,
+    "high_variance_additional_repetitions": 3,
+    "max_help_calls": 2,
+    "exact_reference_reuse": true,
+    "preserve_failed_runs": true
+  },
+  "usage": {
+    "end_to_end_total_tokens": "recorded separately with command and tool counts",
+    "presentation_token_probe": "model-authoritative paired no-tool requests with identical prompt/config; only candidate rendered output differs from blank/control",
+    "presentation_efficiency_metric": "candidate_input_tokens - control_input_tokens",
+    "bytes_are_tokens": false
+  },
+  "forbidden": [
+    "non-cwk tool",
+    "jq/grep/awk/sed/python",
+    "pipe or custom parser",
+    "source inspection",
+    "manual identifier join",
+    "raw Chatwork-notation interpretation",
+    "exploratory provider call",
+    "live network or credential"
+  ],
+  "critical_gates": [
+    "exact semantic answer",
+    "natural-language workflow completion",
+    "deterministic transcript replay",
+    "canonical reference reuse",
+    "relationship and completeness truth",
+    "structured recovery",
+    "zero forbidden usage"
+  ]
+}
