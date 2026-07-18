@@ -104,6 +104,8 @@ func TestChatworkAdapterContractBindsEveryTypedTask(t *testing.T) {
 
 func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 	want := map[string][]string{
+		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "coverage"},
+		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relations", "coverage"},
 		"messages send":           {"message_ref", "room_ref"},
 		"room-tasks create":       {"task_ref", "room_ref"},
 		"files upload":            {"file_ref", "room_ref"},

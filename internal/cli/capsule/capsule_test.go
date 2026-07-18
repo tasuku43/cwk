@@ -144,6 +144,138 @@ func TestRenderProjectsOnlyTaskDeclaredRoomFields(t *testing.T) {
 	}
 }
 
+func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
+	tests := []struct {
+		name      string
+		result    chatwork.Result
+		wantLine  string
+		forbidden []string
+	}{
+		{
+			name: "zero limit",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskRoomsList)
+				result.Coverage = chatwork.Coverage{
+					Kind: "provider-collection", Complete: true,
+					Description: "zero-limit-description-canary",
+				}
+				return result
+			}(),
+			wantLine:  `coverage kind="provider-collection" complete=true`,
+			forbidden: []string{"limit=0", "description=", "zero-limit-description-canary"},
+		},
+		{
+			name: "positive limit",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskMessagesList)
+				result.Coverage = chatwork.Coverage{
+					Kind: "recent-window", Limit: 100, Complete: false,
+					Description: "positive-limit-description-canary",
+				}
+				return result
+			}(),
+			wantLine:  `coverage kind="recent-window" limit=100 complete=false unresolved-relations=0`,
+			forbidden: []string{"description=", "positive-limit-description-canary"},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(got, test.wantLine+"\n") {
+				t.Errorf("output does not contain exact coverage line %q:\n%s", test.wantLine, got)
+			}
+			for _, forbidden := range test.forbidden {
+				if strings.Contains(got, forbidden) {
+					t.Errorf("coverage leaked %q:\n%s", forbidden, got)
+				}
+			}
+		})
+	}
+}
+
+func TestRenderDoesNotLeakProfileOnlyFieldsAcrossTaskProjections(t *testing.T) {
+	tests := []struct {
+		name   string
+		result chatwork.Result
+		want   string
+		canary string
+	}{
+		{
+			name: "own account",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskAccountShow)
+				result.Account.ChatworkID = "account-profile-only-canary"
+				return result
+			}(),
+			want: "account-ref=7", canary: "account-profile-only-canary",
+		},
+		{
+			name: "contact",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskContactsList)
+				result.Accounts[0].Title = "contact-profile-only-canary"
+				return result
+			}(),
+			want: "account-ref=7", canary: "contact-profile-only-canary",
+		},
+		{
+			name: "member",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskMembersList)
+				result.Accounts[0].OrganizationName = "member-profile-only-canary"
+				return result
+			}(),
+			want: "members count=1", canary: "member-profile-only-canary",
+		},
+		{
+			name: "message sender",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskMessagesList)
+				result.Messages[0].Sender.Mail = "message-profile-only-canary@example.com"
+				return result
+			}(),
+			want: `sender-name=untrusted:"Synthetic Account"`, canary: "message-profile-only-canary",
+		},
+		{
+			name: "task assignee",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskRoomTasksList)
+				result.Tasks[0].Account.Introduction = "task-profile-only-canary"
+				return result
+			}(),
+			want: "task-ref=200", canary: "task-profile-only-canary",
+		},
+		{
+			name: "file uploader",
+			result: func() chatwork.Result {
+				result := resultForTask(chatwork.TaskFilesList)
+				result.Files[0].Account.AvatarURL = "https://example.com/file-profile-only-canary"
+				return result
+			}(),
+			want: "file-ref=300", canary: "file-profile-only-canary",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := Render(test.result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(got, test.want) {
+				t.Errorf("output lost declared fact %q:\n%s", test.want, got)
+			}
+			if strings.Contains(got, test.canary) {
+				t.Errorf("output leaked profile-only canary %q:\n%s", test.canary, got)
+			}
+		})
+	}
+}
+
 func TestRenderFramesHostileTextAndDoesNotInferRelations(t *testing.T) {
 	result := resultForTask(chatwork.TaskMessagesList)
 	result.Messages[0].Sender.Name = "name\x1b\u202e\u200b"
