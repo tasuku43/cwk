@@ -269,13 +269,14 @@ type AgentContract struct {
 // CommandSpec is the single source of truth for dispatch, human help, and the
 // machine-readable agent specification.
 type CommandSpec struct {
-	Path    string
-	Summary string
-	Args    string
-	Effect  operation.Effect
-	Role    CommandRole
-	Agent   AgentContract
-	handler commandHandler
+	Path     string
+	Summary  string
+	Args     string
+	Effect   operation.Effect
+	Role     CommandRole
+	Agent    AgentContract
+	handler  commandHandler
+	chatwork *chatworkCommandDefinition
 }
 
 // Usage returns the complete command invocation without optional prose.
@@ -312,7 +313,7 @@ func declaredCommandError(kind fault.Kind, code string, retryable bool, command,
 
 // DefaultCatalog returns the public CLI contract.
 func DefaultCatalog() Catalog {
-	return NewCatalog(
+	commands := []CommandSpec{
 		CommandSpec{
 			Path:    "doctor",
 			Summary: "Run local, read-only diagnostics",
@@ -494,7 +495,8 @@ func DefaultCatalog() Catalog {
 			},
 			handler: runVersion,
 		},
-	)
+	}
+	return NewCatalog(commands...)
 }
 
 // Validate rejects incomplete command declarations before any handler runs.
@@ -1187,9 +1189,6 @@ func argumentSyntaxAllowedValues(value string) ([]string, error) {
 		return []string{}, nil
 	}
 	values := strings.Split(value, "|")
-	if len(values) < 2 {
-		return nil, fmt.Errorf("argument syntax value %q is outside the supported grammar", value)
-	}
 	for _, candidate := range values {
 		if err := validateContractText("argument syntax value", candidate); err != nil || strings.ContainsAny(candidate, "[]()<>|=") {
 			return nil, fmt.Errorf("argument syntax value %q is invalid", candidate)

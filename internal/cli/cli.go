@@ -7,10 +7,13 @@ import (
 	"io"
 	"strings"
 
+	appauthn "github.com/tasuku43/cwk/internal/app/authn"
+	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
 	"github.com/tasuku43/cwk/internal/app/doctorcmd"
 	"github.com/tasuku43/cwk/internal/app/samplecmd"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
+	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
 	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
 )
@@ -23,14 +26,25 @@ type CLI struct {
 	Version string
 	Commit  string
 
-	catalog Catalog
-	doctor  *doctorcmd.Service
-	samples *samplecmd.Service
+	catalog         Catalog
+	doctor          *doctorcmd.Service
+	samples         *samplecmd.Service
+	chatwork        *chatworkcmd.Service
+	chatworkAuth    *appauthn.Gate
+	chatworkInitErr error
 }
 
 // New builds the production CLI with offline template adapters.
 func New(in io.Reader, out, errOut io.Writer) *CLI {
-	return newCLI(in, out, errOut, DefaultCatalog(), systemdoctor.New())
+	cli := newCLI(in, out, errOut, DefaultCatalog(), systemdoctor.New())
+	client, err := chatworkapi.NewFromEnvironment()
+	if err != nil {
+		cli.chatworkInitErr = err
+		return cli
+	}
+	cli.chatwork = chatworkcmd.New(client)
+	cli.chatworkAuth = appauthn.New(client)
+	return cli
 }
 
 func newCLI(in io.Reader, out, errOut io.Writer, catalog Catalog, inspector doctorcmd.InspectorPort) *CLI {

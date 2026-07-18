@@ -219,6 +219,18 @@ func TestArgumentSyntaxRequiredAndAllowedValuesMatchAgentInputs(t *testing.T) {
 	}
 }
 
+func TestArgumentSyntaxAllowsOneExactFixedFlagValue(t *testing.T) {
+	spec := utilitySpec("items apply")
+	spec.Args = "--confirm=destructive"
+	spec.Agent.Inputs = []CommandInput{{
+		Name: "--confirm", Source: InputSourceFlag, Required: true,
+		Description: "Confirm the exact mutation class.", AllowedValues: []string{"destructive"},
+	}}
+	if err := NewCatalog(spec).Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+}
+
 func TestCatalogRequiresCommonRuntimeFailures(t *testing.T) {
 	removeError := func(spec *CommandSpec, code string) {
 		filtered := make([]CommandError, 0, len(spec.Agent.Errors))
