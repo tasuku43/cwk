@@ -1,13 +1,12 @@
-// Package capsule renders the candidate-C agent context capsule.
+// Package capsule renders the candidate-P task-oriented projection.
 //
-// It is deliberately a presentation-only package: callers provide a complete
-// provider-independent chatwork.Result, and the renderer neither fetches
-// missing context nor infers relations from text, names, or ordering.
+// The projection is deliberately presentation-only. It selects a fixed set of
+// fields for each typed task result, preserves provider order, and never
+// derives relationships from external text.
 package capsule
 
 import (
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 	"unicode"
@@ -16,395 +15,239 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
-const Schema = "cwk-context-capsule/1"
+const Schema = "cwk-task-projection/1"
 
-// Render returns the deterministic candidate-C projection of result.
+// Render returns the deterministic candidate-P projection of result.
 func Render(result chatwork.Result) (string, error) {
 	if err := result.Validate(); err != nil {
-		return "", fmt.Errorf("context capsule result: %w", err)
+		return "", fmt.Errorf("task projection result: %w", err)
 	}
-
-	references, err := collectReferences(result)
-	if err != nil {
+	if err := validateReferences(result); err != nil {
 		return "", err
 	}
-	aliases := newAliases(references)
 	if err := validateExternalText(result); err != nil {
 		return "", err
 	}
 
 	var output strings.Builder
-	line(&output, Schema)
-	line(&output, "task %s", result.Task)
-	line(&output, "alias-policy display-only; command-input=canonical-reference")
-	line(&output, "coverage kind=%s limit=%d complete=%t unresolved-relations=%d description=%s",
-		atom(result.Coverage.Kind), result.Coverage.Limit, result.Coverage.Complete,
-		countUnresolved(result.Messages), authored(result.Coverage.Description))
-
-	line(&output, "refs %d", len(references))
-	for _, ref := range references {
-		line(&output, "  %s kind=%s canonical=%s", aliases.forRef(ref), ref.Kind, ref.Value)
+	line(&output, "%s task=%s", Schema, result.Task)
+	if taskHasCoverage(result.Task) {
+		renderCoverage(&output, result)
 	}
 
-	line(&output, "result")
-	renderResult(&output, result, aliases)
+	switch result.Task {
+	case chatwork.TaskAccountShow:
+		renderOwnAccount(&output, *result.Account)
+	case chatwork.TaskAccountStatus:
+		renderStatus(&output, *result.Status)
+	case chatwork.TaskPersonalTasksList:
+		renderPersonalTasks(&output, result.Tasks)
+	case chatwork.TaskContactsList:
+		renderContacts(&output, result.Accounts)
+	case chatwork.TaskRoomsList, chatwork.TaskRoomsShow:
+		renderRooms(&output, result.Rooms)
+	case chatwork.TaskRoomsCreate:
+		line(&output, "created room-ref=%s", ref(result.Created[0]))
+	case chatwork.TaskRoomsUpdate:
+		line(&output, "updated room-ref=%s", ref(result.Affected[0]))
+	case chatwork.TaskRoomsLeave, chatwork.TaskRoomsDelete:
+		renderAcknowledgement(&output, *result.Acknowledgement)
+	case chatwork.TaskMembersList:
+		renderMembers(&output, result.Accounts)
+	case chatwork.TaskMembersReplace:
+		renderMembershipCounts(&output, *result.MembershipCounts)
+	case chatwork.TaskMessagesList, chatwork.TaskMessagesShow:
+		renderMessages(&output, result.Messages)
+	case chatwork.TaskMessagesSend:
+		line(&output, "created message-ref=%s room-ref=%s", ref(result.CreatedInRoom.Refs[0]), ref(result.CreatedInRoom.ParentRoom))
+	case chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread:
+		line(&output, "read-state unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
+	case chatwork.TaskMessagesUpdate:
+		line(&output, "updated message-ref=%s", ref(result.Affected[0]))
+	case chatwork.TaskMessagesDelete:
+		line(&output, "deleted message-ref=%s", ref(result.Affected[0]))
+	case chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksShow:
+		renderRoomTasks(&output, result.Tasks)
+	case chatwork.TaskRoomTasksCreate:
+		renderCreatedTasks(&output, *result.CreatedInRoom)
+	case chatwork.TaskRoomTasksSetStatus:
+		line(&output, "updated task-ref=%s", ref(result.Affected[0]))
+	case chatwork.TaskFilesList, chatwork.TaskFilesShow:
+		renderFiles(&output, result.Files)
+	case chatwork.TaskFilesUpload:
+		line(&output, "created file-ref=%s room-ref=%s", ref(result.CreatedInRoom.Refs[0]), ref(result.CreatedInRoom.ParentRoom))
+	case chatwork.TaskInviteLinkShow, chatwork.TaskInviteLinkCreate, chatwork.TaskInviteLinkUpdate, chatwork.TaskInviteLinkDelete:
+		renderInviteLink(&output, *result.InviteLink)
+	case chatwork.TaskContactRequestsList:
+		renderContactRequests(&output, result.Requests)
+	case chatwork.TaskContactRequestsAccept:
+		line(&output, "accepted account-ref=%s room-ref=%s", ref(result.Account.Ref), ref(result.Account.Room))
+	case chatwork.TaskContactRequestsReject:
+		renderAcknowledgement(&output, *result.Acknowledgement)
+	default:
+		return "", fmt.Errorf("task projection has no route for %s", result.Task)
+	}
 	return output.String(), nil
 }
 
-func renderResult(output *strings.Builder, result chatwork.Result, aliases aliasTable) {
-	if result.Account != nil {
-		line(output, "  account")
-		renderAccount(output, "    ", *result.Account, aliases)
-	}
-	if result.Status != nil {
-		status := result.Status
-		line(output, "  status unread-rooms=%d mention-rooms=%d task-rooms=%d unread=%d mentions=%d tasks=%d",
-			status.UnreadRooms, status.MentionRooms, status.TaskRooms, status.Unread, status.Mentions, status.Tasks)
-	}
-	if result.Rooms != nil {
-		line(output, "  rooms %d", len(result.Rooms))
-		for _, room := range result.Rooms {
-			renderRoom(output, "    ", room, aliases)
-		}
-	}
-	if result.Accounts != nil {
-		line(output, "  accounts %d", len(result.Accounts))
-		for _, account := range result.Accounts {
-			renderAccount(output, "    ", account, aliases)
-		}
-	}
-	if result.Messages != nil {
-		line(output, "  messages %d", len(result.Messages))
-		for _, message := range result.Messages {
-			renderMessage(output, "    ", message, aliases)
-		}
-	}
-	if result.Tasks != nil {
-		line(output, "  tasks %d", len(result.Tasks))
-		for _, task := range result.Tasks {
-			line(output, "    %s room=%s account=%s assigned-by=%s message=%s limit-time=%d status=%s limit-type=%s",
-				aliases.forRef(task.Ref), aliases.forRef(task.Room.Ref), aliases.forRef(task.Account.Ref),
-				aliases.forRef(task.AssignedBy.Ref), aliases.forRef(task.Message), task.LimitTime,
-				atom(task.Status), atom(task.LimitType))
-			line(output, "      body untrusted=%s", external(task.Body))
-		}
-	}
-	if result.Files != nil {
-		line(output, "  files %d", len(result.Files))
-		for _, file := range result.Files {
-			line(output, "    %s room=%s account=%s message=%s size=%d uploaded=%d",
-				aliases.forRef(file.Ref), aliases.forRef(file.Room), aliases.forRef(file.Account.Ref),
-				aliases.forRef(file.Message), file.Size, file.UploadTime)
-			line(output, "      name untrusted=%s", external(file.Name))
-			line(output, "      download-url untrusted=%s", external(file.DownloadURL))
-		}
-	}
-	if result.InviteLink != nil {
-		link := result.InviteLink
-		line(output, "  invite-link %s public=%t needs-approval=%t", aliases.forRef(link.Ref), link.Public, link.NeedsApproval)
-		line(output, "    url untrusted=%s", external(link.URL))
-		line(output, "    description untrusted=%s", external(link.Description))
-	}
-	if result.Requests != nil {
-		line(output, "  contact-requests %d", len(result.Requests))
-		for _, request := range result.Requests {
-			line(output, "    %s account=%s", aliases.forRef(request.Ref), aliases.forRef(request.Account.Ref))
-			line(output, "      name untrusted=%s", external(request.Account.Name))
-			line(output, "      message untrusted=%s", external(request.Message))
-		}
-	}
-	if result.Created != nil {
-		line(output, "  created %s", refList(result.Created, aliases))
-	}
-	if result.Affected != nil {
-		line(output, "  affected %s", refList(result.Affected, aliases))
-	}
-	if result.CreatedInRoom != nil {
-		renderRoomScopedCreation(output, result, aliases)
-	}
-	if result.ReadState != nil {
-		line(output, "  read-state unread=%d mentions=%d", result.ReadState.Unread, result.ReadState.Mentions)
-	}
-	if result.Acknowledgement != nil {
-		line(output, "  acknowledgement acknowledged=%t target-ref=%s",
-			result.Acknowledgement.Acknowledged, aliases.forRef(result.Acknowledgement.Target))
-	}
-	if result.MembershipCounts != nil {
-		line(output, "  membership-counts administrators=%d members=%d readonly=%d",
-			result.MembershipCounts.Administrators, result.MembershipCounts.Members, result.MembershipCounts.Readonly)
-	}
-}
-
-func renderRoomScopedCreation(output *strings.Builder, result chatwork.Result, aliases aliasTable) {
-	creation := result.CreatedInRoom
-	switch result.Task {
-	case chatwork.TaskMessagesSend:
-		line(output, "  creation message-ref=%s room-ref=%s",
-			aliases.forRef(creation.Refs[0]), aliases.forRef(creation.ParentRoom))
-	case chatwork.TaskRoomTasksCreate:
-		for _, ref := range creation.Refs {
-			line(output, "  creation task-ref=%s room-ref=%s",
-				aliases.forRef(ref), aliases.forRef(creation.ParentRoom))
-		}
-	case chatwork.TaskFilesUpload:
-		line(output, "  creation file-ref=%s room-ref=%s",
-			aliases.forRef(creation.Refs[0]), aliases.forRef(creation.ParentRoom))
-	}
-}
-
-func renderMessage(output *strings.Builder, indent string, message chatwork.Message, aliases aliasTable) {
-	line(output, "%s%s room=%s sender=%s sent=%d updated=%d", indent, aliases.forRef(message.Ref),
-		aliases.forRef(message.Room), aliases.forRef(message.Sender.Ref), message.SendTime, message.UpdateTime)
-	line(output, "%s  sender-name untrusted=%s", indent, external(message.Sender.Name))
-	line(output, "%s  to %s", indent, refList(message.Recipients, aliases))
-	if message.Reply == nil {
-		line(output, "%s  reply absent", indent)
-	} else {
-		renderRelation(output, indent+"  ", "reply", *message.Reply, aliases)
-	}
-	line(output, "%s  quotes %d", indent, len(message.Quotes))
-	for index, relation := range message.Quotes {
-		renderRelation(output, indent+"    ", fmt.Sprintf("quote[%d]", index+1), relation, aliases)
-	}
-	line(output, "%s  body untrusted=%s", indent, external(message.Body))
-}
-
-func renderRelation(output *strings.Builder, indent, label string, relation chatwork.Relation, aliases aliasTable) {
-	state := "unresolved"
-	if relation.Resolved {
-		state = "resolved"
-	}
-	target := "absent"
-	if relation.Target.Value != "" {
-		target = aliases.forRef(relation.Target)
-	}
-	line(output, "%s%s kind=%s state=%s target=%s external-id=untrusted:%s",
-		indent, label, atom(relation.Kind), state, target, external(relation.ExternalID))
-}
-
-func renderAccount(output *strings.Builder, indent string, account chatwork.Account, aliases aliasTable) {
-	line(output, "%s%s room=%s role=%s", indent, aliases.forRef(account.Ref), aliases.forRef(account.Room), atom(account.Role))
-	for _, field := range []struct {
-		name  string
-		value string
-	}{
-		{"name", account.Name}, {"chatwork-id", account.ChatworkID},
-		{"organization-id", account.OrganizationID}, {"organization-name", account.OrganizationName},
-		{"department", account.Department}, {"title", account.Title}, {"url", account.URL},
-		{"introduction", account.Introduction}, {"mail", account.Mail}, {"telephone", account.Telephone},
-		{"extension", account.Extension}, {"mobile", account.Mobile}, {"skype", account.Skype},
-		{"facebook", account.Facebook}, {"twitter", account.Twitter}, {"avatar-url", account.AvatarURL},
-		{"login-mail", account.LoginMail},
-	} {
-		if field.value != "" {
-			line(output, "%s  %s untrusted=%s", indent, field.name, external(field.value))
-		}
-	}
-}
-
-func renderRoom(output *strings.Builder, indent string, room chatwork.Room, aliases aliasTable) {
-	line(output, "%s%s type=%s role=%s sticky=%t unread=%d mentions=%d my-tasks=%d messages=%d files=%d tasks=%d updated=%d",
-		indent, aliases.forRef(room.Ref), atom(room.Type), atom(room.Role), room.Sticky, room.Unread,
-		room.Mentions, room.MyTasks, room.Messages, room.Files, room.Tasks, room.LastUpdateTime)
-	line(output, "%s  name untrusted=%s", indent, external(room.Name))
-	line(output, "%s  description untrusted=%s", indent, external(room.Description))
-	line(output, "%s  icon-url untrusted=%s", indent, external(room.IconURL))
-}
-
-type aliasTable map[string]string
-
-func newAliases(references []chatwork.Reference) aliasTable {
-	table := make(aliasTable, len(references))
-	counts := make(map[chatwork.ReferenceKind]int)
-	for _, ref := range references {
-		counts[ref.Kind]++
-		table[refKey(ref)] = aliasPrefix(ref.Kind) + strconv.Itoa(counts[ref.Kind])
-	}
-	return table
-}
-
-func (a aliasTable) forRef(ref chatwork.Reference) string {
-	if ref.Value == "" {
-		return "absent"
-	}
-	return a[refKey(ref)]
-}
-
-func aliasPrefix(kind chatwork.ReferenceKind) string {
-	switch kind {
-	case chatwork.ReferenceAccount:
-		return "a"
-	case chatwork.ReferenceRoom:
-		return "r"
-	case chatwork.ReferenceMessage:
-		return "m"
-	case chatwork.ReferenceTask:
-		return "t"
-	case chatwork.ReferenceFile:
-		return "f"
-	case chatwork.ReferenceInvite:
-		return "i"
-	case chatwork.ReferenceRequest:
-		return "q"
+func taskHasCoverage(task chatwork.Task) bool {
+	switch task {
+	case chatwork.TaskPersonalTasksList, chatwork.TaskContactsList,
+		chatwork.TaskRoomsList, chatwork.TaskRoomsShow,
+		chatwork.TaskMembersList,
+		chatwork.TaskMessagesList, chatwork.TaskMessagesShow,
+		chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksShow,
+		chatwork.TaskFilesList, chatwork.TaskFilesShow,
+		chatwork.TaskContactRequestsList:
+		return true
 	default:
-		panic("validated reference kind has no alias prefix")
+		return false
 	}
 }
 
-func collectReferences(result chatwork.Result) ([]chatwork.Reference, error) {
-	unique := make(map[string]chatwork.Reference)
-	add := func(ref chatwork.Reference) error {
-		if ref.Kind == "" && ref.Value == "" {
-			return nil
-		}
-		if err := chatwork.ValidateReference(ref.Kind, ref.Value); err != nil {
-			return fmt.Errorf("context capsule reference: %w", err)
-		}
-		unique[refKey(ref)] = ref
-		return nil
+func renderCoverage(output *strings.Builder, result chatwork.Result) {
+	if result.Task == chatwork.TaskMessagesList || result.Task == chatwork.TaskMessagesShow {
+		line(output, "coverage kind=%s limit=%d complete=%t unresolved-relations=%d description=authored:%s",
+			atom(result.Coverage.Kind), result.Coverage.Limit, result.Coverage.Complete,
+			countUnresolved(result.Messages), quoted(result.Coverage.Description))
+		return
 	}
-	addAccount := func(account chatwork.Account) error {
-		if err := add(account.Ref); err != nil {
-			return err
-		}
-		return add(account.Room)
-	}
-
-	if result.Account != nil {
-		if err := addAccount(*result.Account); err != nil {
-			return nil, err
-		}
-	}
-	for _, room := range result.Rooms {
-		if err := add(room.Ref); err != nil {
-			return nil, err
-		}
-	}
-	for _, account := range result.Accounts {
-		if err := addAccount(account); err != nil {
-			return nil, err
-		}
-	}
-	for _, message := range result.Messages {
-		for _, ref := range []chatwork.Reference{message.Ref, message.Room, message.Sender.Ref, message.Sender.Room} {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-		for _, ref := range message.Recipients {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-		if message.Reply != nil {
-			if err := add(message.Reply.Target); err != nil {
-				return nil, err
-			}
-		}
-		for _, quote := range message.Quotes {
-			if err := add(quote.Target); err != nil {
-				return nil, err
-			}
-		}
-	}
-	for _, task := range result.Tasks {
-		for _, ref := range []chatwork.Reference{task.Ref, task.Room.Ref, task.Account.Ref, task.Account.Room,
-			task.AssignedBy.Ref, task.AssignedBy.Room, task.Message} {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-	}
-	for _, file := range result.Files {
-		for _, ref := range []chatwork.Reference{file.Ref, file.Room, file.Account.Ref, file.Account.Room, file.Message} {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if result.InviteLink != nil {
-		if err := add(result.InviteLink.Ref); err != nil {
-			return nil, err
-		}
-	}
-	for _, request := range result.Requests {
-		for _, ref := range []chatwork.Reference{request.Ref, request.Account.Ref, request.Account.Room} {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-	}
-	for _, refs := range [][]chatwork.Reference{result.Created, result.Affected} {
-		for _, ref := range refs {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if result.CreatedInRoom != nil {
-		if err := add(result.CreatedInRoom.ParentRoom); err != nil {
-			return nil, err
-		}
-		for _, ref := range result.CreatedInRoom.Refs {
-			if err := add(ref); err != nil {
-				return nil, err
-			}
-		}
-	}
-	if result.Acknowledgement != nil {
-		if err := add(result.Acknowledgement.Target); err != nil {
-			return nil, err
-		}
-	}
-
-	references := make([]chatwork.Reference, 0, len(unique))
-	for _, ref := range unique {
-		references = append(references, ref)
-	}
-	sort.Slice(references, func(i, j int) bool {
-		left, right := references[i], references[j]
-		if left.Kind != right.Kind {
-			return referenceKindOrder(left.Kind) < referenceKindOrder(right.Kind)
-		}
-		if len(left.Value) != len(right.Value) {
-			return len(left.Value) < len(right.Value)
-		}
-		return left.Value < right.Value
-	})
-	return references, nil
+	line(output, "coverage kind=%s limit=%d complete=%t description=authored:%s",
+		atom(result.Coverage.Kind), result.Coverage.Limit, result.Coverage.Complete,
+		quoted(result.Coverage.Description))
 }
 
-func referenceKindOrder(kind chatwork.ReferenceKind) int {
-	switch kind {
-	case chatwork.ReferenceAccount:
-		return 0
-	case chatwork.ReferenceRoom:
-		return 1
-	case chatwork.ReferenceMessage:
-		return 2
-	case chatwork.ReferenceTask:
-		return 3
-	case chatwork.ReferenceFile:
-		return 4
-	case chatwork.ReferenceInvite:
-		return 5
-	case chatwork.ReferenceRequest:
-		return 6
-	default:
-		return 7
+func renderOwnAccount(output *strings.Builder, account chatwork.Account) {
+	line(output, "account account-ref=%s name=untrusted:%s organization=%s",
+		ref(account.Ref), quoted(account.Name), organization(account))
+}
+
+func renderStatus(output *strings.Builder, status chatwork.Status) {
+	line(output, "status unread=%d mentions=%d tasks=%d", status.Unread, status.Mentions, status.Tasks)
+}
+
+func renderContacts(output *strings.Builder, accounts []chatwork.Account) {
+	line(output, "contacts count=%d", len(accounts))
+	for _, account := range accounts {
+		line(output, "  account-ref=%s room-ref=%s name=untrusted:%s organization=%s",
+			ref(account.Ref), ref(account.Room), quoted(account.Name), organization(account))
 	}
 }
 
-func refKey(ref chatwork.Reference) string {
-	return string(ref.Kind) + "\x00" + ref.Value
+func renderMembers(output *strings.Builder, accounts []chatwork.Account) {
+	line(output, "members count=%d", len(accounts))
+	for _, account := range accounts {
+		line(output, "  account-ref=%s name=untrusted:%s role=%s",
+			ref(account.Ref), quoted(account.Name), atom(account.Role))
+	}
 }
 
-func refList(refs []chatwork.Reference, aliases aliasTable) string {
-	values := make([]string, len(refs))
-	for index, ref := range refs {
-		values[index] = aliases.forRef(ref)
+func renderRooms(output *strings.Builder, rooms []chatwork.Room) {
+	line(output, "rooms count=%d", len(rooms))
+	for _, room := range rooms {
+		line(output, "  room-ref=%s name=untrusted:%s type=%s role=%s unread=%d mentions=%d tasks=%d",
+			ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
+	}
+}
+
+func renderMessages(output *strings.Builder, messages []chatwork.Message) {
+	line(output, "messages count=%d", len(messages))
+	for _, message := range messages {
+		line(output, "  message-ref=%s room-ref=%s sender-ref=%s sender-name=untrusted:%s send-time=%d relations=%s body=untrusted:%s",
+			ref(message.Ref), ref(message.Room), ref(message.Sender.Ref), quoted(message.Sender.Name),
+			message.SendTime, relations(message), quoted(message.Body))
+	}
+}
+
+func relations(message chatwork.Message) string {
+	values := make([]string, 0, len(message.Recipients)+1+len(message.Quotes))
+	for _, recipient := range message.Recipients {
+		values = append(values, fmt.Sprintf("to{state=resolved,target-ref=%s}", ref(recipient)))
+	}
+	if message.Reply != nil {
+		values = append(values, relation("reply", *message.Reply))
+	}
+	for _, quote := range message.Quotes {
+		values = append(values, relation("quote", quote))
+	}
+	if len(values) == 0 {
+		return "none"
 	}
 	return "[" + strings.Join(values, ",") + "]"
+}
+
+func relation(kind string, value chatwork.Relation) string {
+	state := "unresolved"
+	if value.Resolved {
+		state = "resolved"
+	}
+	return fmt.Sprintf("%s{state=%s,target-ref=%s,external-id=untrusted:%s}",
+		kind, state, ref(value.Target), quoted(value.ExternalID))
+}
+
+func renderPersonalTasks(output *strings.Builder, tasks []chatwork.WorkTask) {
+	line(output, "personal-tasks count=%d", len(tasks))
+	for _, task := range tasks {
+		line(output, "  task-ref=%s room-ref=%s assigned-by-ref=%s message-ref=%s body=untrusted:%s status=%s",
+			ref(task.Ref), ref(task.Room.Ref), ref(task.AssignedBy.Ref), ref(task.Message), quoted(task.Body), atom(task.Status))
+	}
+}
+
+func renderRoomTasks(output *strings.Builder, tasks []chatwork.WorkTask) {
+	line(output, "room-tasks count=%d", len(tasks))
+	for _, task := range tasks {
+		line(output, "  task-ref=%s room-ref=%s account-ref=%s message-ref=%s body=untrusted:%s status=%s limit-time=%d",
+			ref(task.Ref), ref(task.Room.Ref), ref(task.Account.Ref), ref(task.Message), quoted(task.Body), atom(task.Status), task.LimitTime)
+	}
+}
+
+func renderCreatedTasks(output *strings.Builder, creation chatwork.RoomScopedCreation) {
+	line(output, "created-tasks count=%d room-ref=%s", len(creation.Refs), ref(creation.ParentRoom))
+	for _, task := range creation.Refs {
+		line(output, "  task-ref=%s", ref(task))
+	}
+}
+
+func renderFiles(output *strings.Builder, files []chatwork.File) {
+	line(output, "files count=%d", len(files))
+	for _, file := range files {
+		line(output, "  file-ref=%s room-ref=%s account-ref=%s message-ref=%s name=untrusted:%s size=%d download-url=untrusted:%s",
+			ref(file.Ref), ref(file.Room), ref(file.Account.Ref), ref(file.Message), quoted(file.Name), file.Size, quoted(file.DownloadURL))
+	}
+}
+
+func renderInviteLink(output *strings.Builder, invite chatwork.InviteLink) {
+	line(output, "invite-link invite-ref=%s public=%t url=untrusted:%s needs-approval=%t description=untrusted:%s",
+		ref(invite.Ref), invite.Public, quoted(invite.URL), invite.NeedsApproval, quoted(invite.Description))
+}
+
+func renderContactRequests(output *strings.Builder, requests []chatwork.ContactRequest) {
+	line(output, "contact-requests count=%d", len(requests))
+	for _, request := range requests {
+		line(output, "  request-ref=%s account-ref=%s name=untrusted:%s message=untrusted:%s",
+			ref(request.Ref), ref(request.Account.Ref), quoted(request.Account.Name), quoted(request.Message))
+	}
+}
+
+func renderAcknowledgement(output *strings.Builder, acknowledgement chatwork.Acknowledgement) {
+	line(output, "acknowledgement acknowledged=%t target-ref=%s", acknowledgement.Acknowledged, ref(acknowledgement.Target))
+}
+
+func renderMembershipCounts(output *strings.Builder, counts chatwork.MembershipCounts) {
+	line(output, "membership-counts administrators=%d members=%d readonly=%d",
+		counts.Administrators, counts.Members, counts.Readonly)
+}
+
+func organization(account chatwork.Account) string {
+	return fmt.Sprintf("{id=untrusted:%s,name=untrusted:%s,department=untrusted:%s}",
+		quoted(account.OrganizationID), quoted(account.OrganizationName), quoted(account.Department))
+}
+
+func ref(value chatwork.Reference) string {
+	if value.Kind == "" && value.Value == "" {
+		return "absent"
+	}
+	return value.Value
 }
 
 func countUnresolved(messages []chatwork.Message) int {
@@ -420,6 +263,112 @@ func countUnresolved(messages []chatwork.Message) int {
 		}
 	}
 	return count
+}
+
+func validateReferences(result chatwork.Result) error {
+	add := func(value chatwork.Reference) error {
+		if value.Kind == "" && value.Value == "" {
+			return nil
+		}
+		if err := chatwork.ValidateReference(value.Kind, value.Value); err != nil {
+			return fmt.Errorf("task projection reference: %w", err)
+		}
+		return nil
+	}
+	addAccount := func(account chatwork.Account) error {
+		if err := add(account.Ref); err != nil {
+			return err
+		}
+		return add(account.Room)
+	}
+
+	if result.Account != nil {
+		if err := addAccount(*result.Account); err != nil {
+			return err
+		}
+	}
+	for _, room := range result.Rooms {
+		if err := add(room.Ref); err != nil {
+			return err
+		}
+	}
+	for _, account := range result.Accounts {
+		if err := addAccount(account); err != nil {
+			return err
+		}
+	}
+	for _, message := range result.Messages {
+		for _, value := range []chatwork.Reference{message.Ref, message.Room, message.Sender.Ref, message.Sender.Room} {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+		for _, value := range message.Recipients {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+		if message.Reply != nil {
+			if err := add(message.Reply.Target); err != nil {
+				return err
+			}
+		}
+		for _, quote := range message.Quotes {
+			if err := add(quote.Target); err != nil {
+				return err
+			}
+		}
+	}
+	for _, task := range result.Tasks {
+		for _, value := range []chatwork.Reference{task.Ref, task.Room.Ref, task.Account.Ref, task.Account.Room,
+			task.AssignedBy.Ref, task.AssignedBy.Room, task.Message} {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+	}
+	for _, file := range result.Files {
+		for _, value := range []chatwork.Reference{file.Ref, file.Room, file.Account.Ref, file.Account.Room, file.Message} {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+	}
+	if result.InviteLink != nil {
+		if err := add(result.InviteLink.Ref); err != nil {
+			return err
+		}
+	}
+	for _, request := range result.Requests {
+		for _, value := range []chatwork.Reference{request.Ref, request.Account.Ref, request.Account.Room} {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+	}
+	for _, values := range [][]chatwork.Reference{result.Created, result.Affected} {
+		for _, value := range values {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+	}
+	if result.CreatedInRoom != nil {
+		if err := add(result.CreatedInRoom.ParentRoom); err != nil {
+			return err
+		}
+		for _, value := range result.CreatedInRoom.Refs {
+			if err := add(value); err != nil {
+				return err
+			}
+		}
+	}
+	if result.Acknowledgement != nil {
+		if err := add(result.Acknowledgement.Target); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func validateExternalText(result chatwork.Result) error {
@@ -468,27 +417,23 @@ func validateExternalText(result chatwork.Result) error {
 	}
 	for _, value := range values {
 		if !utf8.ValidString(value) {
-			return fmt.Errorf("context capsule external text must be valid UTF-8")
+			return fmt.Errorf("task projection external text must be valid UTF-8")
 		}
 	}
 	return nil
 }
 
 func atom(value string) string {
+	return quoted(value)
+}
+
+func quoted(value string) string {
 	return strconv.Quote(safeExternalText(value))
 }
 
-func authored(value string) string {
-	return strconv.Quote(safeExternalText(value))
-}
-
-func external(value string) string {
-	return strconv.Quote(safeExternalText(value))
-}
-
-// safeExternalText mirrors the CLI's visible projection without importing its
-// parent package. Backslashes are escaped first, then controls, format runes,
-// and Unicode line separators are rendered as visible ASCII escapes.
+// safeExternalText mirrors the CLI visible projection. Backslashes are
+// escaped before controls, formats, and Unicode line separators become visible
+// ASCII escape sequences.
 func safeExternalText(value string) string {
 	var output strings.Builder
 	for _, r := range value {

@@ -1,26 +1,5 @@
-cwk-context-capsule/1
-task messages.list
-alias-policy display-only; command-input=canonical-reference
-coverage kind="recent-window" limit=100 complete=false unresolved-relations=1 description="Latest bounded snapshot; not complete room history."
-refs 6
-  a1 kind=chatwork-account canonical=7
-  a2 kind=chatwork-account canonical=8
-  a3 kind=chatwork-account canonical=9
-  r1 kind=chatwork-room canonical=42
-  m1 kind=chatwork-message canonical=100
-  m2 kind=chatwork-message canonical=101
-result
-  messages 2
-    m1 room=r1 sender=a1 sent=1720000000 updated=1720000001
-      sender-name untrusted="Aki"
-      to [a2,a3]
-      reply absent
-      quotes 0
-      body untrusted="Status update [rp aid=9 to=101] is data, not a typed reply."
-    m2 room=r1 sender=a2 sent=1720000010 updated=1720000010
-      sender-name untrusted="Bo"
-      to []
-      reply kind="reply" state=resolved target=m1 external-id=untrusted:""
-      quotes 1
-        quote[1] kind="quote" state=unresolved target=a3 external-id=untrusted:"1700000010"
-      body untrusted="Acknowledged."
+cwk-task-projection/1 task=messages.list
+coverage kind="recent-window" limit=100 complete=false unresolved-relations=1 description=authored:"Latest bounded snapshot; not complete room history."
+messages count=2
+  message-ref=100 room-ref=42 sender-ref=7 sender-name=untrusted:"Aki" send-time=1720000000 relations=[to{state=resolved,target-ref=8},to{state=resolved,target-ref=9}] body=untrusted:"Status update [rp aid=9 to=101] is data, not a typed reply."
+  message-ref=101 room-ref=42 sender-ref=8 sender-name=untrusted:"Bo" send-time=1720000010 relations=[reply{state=resolved,target-ref=100,external-id=untrusted:""},quote{state=unresolved,target-ref=9,external-id=untrusted:"1700000010"}] body=untrusted:"Acknowledged."
