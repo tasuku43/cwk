@@ -57,3 +57,32 @@
 - Configuration hostile-file, symlink, size, atomicity, and permission tests.
 - Browser opener validation, zero-call, cancellation, and redaction tests.
 - OAuth no-fallback and zero-provider-task-call tests using persisted selection.
+
+## Completion evidence
+
+- The former first-use contract required profile discovery, three OAuth
+  configuration exports, a fixed profile argument, consent, and a callback
+  paste. The completed contract is one
+  `cwk auth login --client-id <public-client-id>` invocation, automatic browser
+  handoff when available, and one complete callback paste. Later login is
+  `cwk auth login`.
+- `cwk help auth login --format agent` returns the complete first-run flag,
+  stdin callback, browser fallback, fixed target, output, failure, and recovery
+  contract in one schema-v3 scoped response; it exposes no OAuth profile or
+  client-registration environment input.
+- Catalog negative tests preserve opaque references for remote/user-selected
+  targets while allowing only one reference-free `tool_local` singleton.
+- Configuration tests cover strict schema and bounds, duplicate/unknown fields,
+  permissions, symlink/special-file rejection, atomic replacement, cancellation,
+  XDG resolution, AppData resolution, and platform cross-builds. Reads are
+  confined through `os.Root` to the validated `cwk` application directory.
+- Browser tests cover the exact Chatwork origin/path, exact redirect and scope,
+  canonical single-value OAuth query, PKCE S256, hostile URLs, cancellation,
+  redacted launcher faults, and compatibility with `oauth2.Config.AuthCodeURL`.
+- Selection and CLI tests prove first-login ordering, later login without client
+  ID, no PAT/OAuth probing or fallback, one callback line, automatic-open and
+  fallback prompts, bounded output, and callback/code/state redaction.
+- On 2026-07-18 with Go 1.26.5, `task check`, `task security`, and
+  `task public:check` passed. The full gate included format, architecture,
+  catalog, unit, race, vet, tidy, security, vulnerability, release, and public
+  repository checks.

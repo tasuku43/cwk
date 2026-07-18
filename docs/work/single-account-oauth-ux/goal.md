@@ -1,6 +1,6 @@
 # Work Goal: One-command single-account OAuth login
 
-- Status: In progress
+- Status: Complete
 - Owner: Codex
 - Target: Current implementation cycle
 - Related ADRs: ADR 0002 (to be amended)
@@ -38,27 +38,27 @@ when an exact command already binds a tool-owned singleton.
 
 ## Acceptance criteria
 
-- [ ] First login is `cwk auth login --client-id <public-client-id>`; the exact
+- [x] First login is `cwk auth login --client-id <public-client-id>`; the exact
       redirect is fixed to `cwk://oauth/callback`.
-- [ ] The CLI opens the Chatwork authorization URL in the default browser when
+- [x] The CLI opens the Chatwork authorization URL in the default browser when
       the platform opener is available, otherwise prints the transient URL as
       a fallback, then reads exactly one complete callback URL from stdin.
-- [ ] Later login/status/logout commands take no profile argument, and
+- [x] Later login/status/logout commands take no profile argument, and
       `auth profiles` is no longer public.
-- [ ] A successful OAuth login makes later API tasks use the stored explicit
+- [x] A successful OAuth login makes later API tasks use the stored explicit
       OAuth selection without `CWK_AUTH_METHOD`, `CWK_OAUTH_CLIENT_ID`, or
       `CWK_OAUTH_REDIRECT_URI` exports.
-- [ ] An explicit `CWK_AUTH_METHOD=pat` remains possible for PAT automation;
+- [x] An explicit `CWK_AUTH_METHOD=pat` remains possible for PAT automation;
       invalid or failed selected methods never probe or fall back.
-- [ ] Public configuration contains only schema version, `oauth2`, client ID,
+- [x] Public configuration contains only schema version, `oauth2`, client ID,
       and the fixed redirect; token material remains only in the OS credential
       store and callback/code/verifier material remains transient.
-- [ ] The fixed command-bound singleton target is mechanically declared and
+- [x] The fixed command-bound singleton target is mechanically declared and
       validated rather than implemented as an undocumented default.
-- [ ] Agent help reaches login in one scoped request and names the first-run
+- [x] Agent help reaches login in one scoped request and names the first-run
       client ID, browser, callback, storage, and recovery behavior without
       requiring discovery of a synthetic profile.
-- [ ] `task check`, `task security`, and `task public:check` pass.
+- [x] `task check`, `task security`, and `task public:check` pass.
 
 ## Governing documents
 
