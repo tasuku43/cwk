@@ -15,6 +15,7 @@ const usage = `usage:
   presentationeval prepare --candidate <c0|p|l|r|j> --out <empty-directory> [--iterations <n>]
   presentationeval cwk --scenario <id> -- <cwk-arguments...>
   presentationeval run --candidate <c0|p|l|r|j> --scenario <id> --codex <absolute-path> --model <id> --out <runs.jsonl> [--repetitions <1..8>]
+  presentationeval run-suite --candidate <c0|p|l|r|j> --codex <absolute-path> --model <id> --out <new-runs.jsonl>
   presentationeval token-probe --candidate <c0|p|l|r|j> --scenario <id> --codex <absolute-path> --model <id> --out <probe.json>
   presentationeval score --runs <runs.jsonl> --out <empty-directory>
   presentationeval situations
@@ -89,6 +90,21 @@ func runWithDeps(args []string, dependencies runnerDependencies) int {
 			return 2
 		}
 		err = runBenchmark(context.Background(), dependencies, benchmarkRequest{Candidate: *candidate, SituationID: *scenario, CodexPath: *codex, Model: *model, OutputPath: *out, Repetitions: *repetitions})
+	case "run-suite":
+		set := flag.NewFlagSet("run-suite", flag.ContinueOnError)
+		set.SetOutput(os.Stderr)
+		candidate := set.String("candidate", "", "candidate label")
+		codex := set.String("codex", "", "absolute pinned codex executable path")
+		model := set.String("model", "", "pinned model identifier")
+		out := set.String("out", "", "new JSONL suite output")
+		if parseErr := set.Parse(args[1:]); parseErr != nil {
+			return 2
+		}
+		if set.NArg() != 0 || *candidate == "" || *codex == "" || *model == "" || *out == "" {
+			fmt.Fprint(os.Stderr, usage)
+			return 2
+		}
+		err = runSuite(context.Background(), dependencies, benchmarkRequest{Candidate: *candidate, CodexPath: *codex, Model: *model, OutputPath: *out})
 	case "token-probe":
 		set := flag.NewFlagSet("token-probe", flag.ContinueOnError)
 		set.SetOutput(os.Stderr)

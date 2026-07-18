@@ -162,6 +162,18 @@ func TestRecordedAgentFailureIsPreservedAsIneligible(t *testing.T) {
 	}
 }
 
+func TestFrozenSuiteSchedulesTwelveScoredRunsAndEightProbePairs(t *testing.T) {
+	runs := 0
+	probes := 0
+	for _, scenario := range situations() {
+		runs += suiteRepetitions(scenario)
+		probes++
+	}
+	if runs != 12 || probes != 8 {
+		t.Fatalf("suite schedule = %d runs, %d probes; want 12 and 8", runs, probes)
+	}
+}
+
 func TestCandidateLabelsAreFixedAndAnswerSchemaDoesNotLeakValues(t *testing.T) {
 	for _, candidate := range []string{"c0", "p", "l", "r", "j"} {
 		if err := validateCandidate(candidate); err != nil {

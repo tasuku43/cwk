@@ -82,6 +82,16 @@ go run ./tools/presentationeval run \
   --out <runs.jsonl>
 ```
 
+Run the complete frozen 12-run candidate schedule as:
+
+```sh
+go run ./tools/presentationeval run-suite \
+  --candidate <c0|p|l|r|j> \
+  --codex <absolute-path-to-codex-0.145.0-alpha.18> \
+  --model gpt-5.6-terra \
+  --out <new-runs.jsonl>
+```
+
 The runner builds the candidate-local evaluator as a disposable executable
 named `cwk`, supplies only the fixed scenario and candidate through the agent
 shell policy, and invokes public `cwk` argv. Codex uses `workspace-write` with

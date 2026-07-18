@@ -233,6 +233,38 @@ func runBenchmark(ctx context.Context, dependencies runnerDependencies, request 
 	return nil
 }
 
+func runSuite(ctx context.Context, dependencies runnerDependencies, request benchmarkRequest) error {
+	if err := validateCandidate(request.Candidate); err != nil {
+		return err
+	}
+	if request.Model == "" || request.OutputPath == "" || !filepath.IsAbs(request.CodexPath) {
+		return fmt.Errorf("candidate, absolute codex path, model, and output path are required")
+	}
+	if info, err := os.Stat(request.OutputPath); err == nil {
+		if info.IsDir() || info.Size() != 0 {
+			return fmt.Errorf("suite output must be a new path or an empty file")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	for _, scenario := range situations() {
+		item := request
+		item.SituationID = scenario.ID
+		item.Repetitions = suiteRepetitions(scenario)
+		if err := runBenchmark(ctx, dependencies, item); err != nil {
+			return fmt.Errorf("suite scenario %s: %w", scenario.ID, err)
+		}
+	}
+	return nil
+}
+
+func suiteRepetitions(scenario situation) int {
+	if scenario.HighVariance {
+		return 2
+	}
+	return 1
+}
+
 func requireCleanRepository(ctx context.Context, runner processRunner, repository string) error {
 	response, err := runner.Run(ctx, processRequest{Path: "git", Args: []string{"status", "--porcelain", "--untracked-files=all"}, Dir: repository, Env: os.Environ(), StdoutLimit: 1 << 20, StderrLimit: 1 << 20})
 	if err != nil || response.ExitCode != 0 {
