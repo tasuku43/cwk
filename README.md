@@ -74,6 +74,37 @@ go run ./cmd/cwk doctor
 
 The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Configure PAT or OAuth authentication from the exact scoped-help contract before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
 
+### Authenticate
+
+Every API task requires `CWK_AUTH_METHOD` to be exactly `pat` or `oauth2`.
+There is no credential probing or fallback.
+
+For PAT, inject `CWK_API_TOKEN` into the command process through your shell or
+secret manager, without putting the token in argv, a command literal, or a
+project file:
+
+```sh
+export CWK_AUTH_METHOD=pat
+cwk rooms list
+```
+
+For OAuth, register a public client with a non-HTTP custom redirect URI. The
+client ID and redirect URI are non-secret configuration; no client secret is
+accepted. Discover and establish the one supported profile:
+
+```sh
+cwk auth profiles
+export CWK_OAUTH_CLIENT_ID=<public-client-id>
+export CWK_OAUTH_REDIRECT_URI=<registered-custom-uri>
+cwk auth login --profile cwk_chatwork_oauth_public_v1
+```
+
+Open the transient authorization URL written to stderr, then paste the complete
+redirected callback URL into stdin once. Tokens are stored only in the operating
+system credential store. OAuth API tasks need the same public registration
+values plus `CWK_AUTH_METHOD=oauth2`; `auth status` and `auth logout` remain
+available after those environment values are cleared.
+
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 
 ## Repository map

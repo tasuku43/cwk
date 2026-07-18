@@ -61,48 +61,48 @@ operation.
 
 ## Acceptance criteria
 
-- [ ] The governing theses, product contract, architecture, security model,
+- [x] The governing theses, product contract, architecture, security model,
   harness, capability ledger, and add-capability workflow agree with exhaustive
   coverage of the fixed 32-operation snapshot.
-- [ ] A machine-checked manifest proves 32/32 operation coverage and rejects an
+- [x] A machine-checked manifest proves 32/32 operation coverage and rejects an
   unowned operation, unknown operation, duplicate operation key, non-public
   capability, or Chatwork capability with no upstream operation.
-- [ ] Root/scoped agent help lets an agent select and invoke every task within
+- [x] Root/scoped agent help lets an agent select and invoke every task within
   the existing two-invocation discovery budget.
-- [ ] Discover commands produce exact room, account, message, task, file, and
+- [x] Discover commands produce exact room, account, message, task, file, and
   incoming-request references required by action commands; round trips preserve
   every byte.
-- [ ] A single-account authentication boundary supports exact
+- [x] A single-account authentication boundary supports exact
   `CWK_AUTH_METHOD=pat|oauth2` selection without fallback. PAT remains
   process-local; OAuth uses the reviewed public-client Authorization Code +
   state + PKCE S256 flow, a registered non-HTTP custom redirect, full callback
   through stdin, and operating-system credential storage. Both keep secrets in
   infrastructure, bind the validated session to each task call, and allow only
   the documented Chatwork HTTPS destinations in production.
-- [ ] `auth profiles` produces one opaque OAuth profile reference consumed
+- [x] `auth profiles` produces one opaque OAuth profile reference consumed
   unchanged by login/status/logout. Login refuses overwrite, status is
   secret-free and read-only, logout removes only local credential material, and
   unknown local mutation outcomes reconcile through exact `auth status`.
-- [ ] Metadata/read and non-upload calls time out at 20 seconds, upload at 60
+- [x] Metadata/read and non-upload calls time out at 20 seconds, upload at 60
   seconds; every operation has one attempt; success/error bodies are capped at
   8 MiB/64 KiB, output at 16 MiB, aggregate lists at 10,000 items, documented
   endpoint lists at 100 items, and upload at 5 MiB. Declared partial provider
   windows remain explicit in successful results.
-- [ ] Every mutation declares effect, exact target roles, impact, idempotency,
+- [x] Every mutation declares effect, exact target roles, impact, idempotency,
   policy, and read-only reconciliation for an uncertain outcome. Ordinary exact
   creates/updates require no extra flag; the reviewed access-changing and
   destructive sets require exact `--confirm=access-change` and
   `--confirm=destructive`. Rejection, malformed input, authentication failure,
   and permission failure make zero mutation attempts.
-- [ ] Candidate C renders deterministic context capsules from typed task
+- [x] Candidate C renders deterministic context capsules from typed task
   results. Its compact aliases are display-only; the same capsule exposes exact
   canonical references for subsequent commands.
-- [ ] Synthetic fixtures and a local HTTP test server verify the request,
+- [x] Synthetic fixtures and a local HTTP test server verify the request,
   successful response, empty response, provider fault, cancellation, bounds,
   hostile text, and secret-redaction behavior for all 32 operations.
-- [ ] Agent-readiness transcripts complete representative reads and mutations
+- [x] Agent-readiness transcripts complete representative reads and mutations
   without external post-processing, provider exploration, or guessed identity.
-- [ ] `task check`, `task security`, and `task public:check` pass.
+- [x] `task check`, `task security`, and `task public:check` pass.
 
 ## Governing documents
 

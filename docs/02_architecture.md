@@ -48,7 +48,12 @@ Unknown effects and incomplete mutation intent are invalid domain states at an e
 
 The application layer depends on domain values and primitive types. It does not import infrastructure, parse CLI arguments, render terminal output, or construct transport requests.
 
-`internal/app/doctorcmd` is the default utility example. `internal/app/samplecmd` owns the synthetic discover/list and act/read use cases. Reusable application boundaries include authentication gating, complete-or-no-result pagination, and policy-neutral mutation invocation.
+`internal/app/doctorcmd` owns the local utility, while `internal/app/chatworkcmd`
+and `internal/app/chatworkauthcmd` own the public provider tasks and OAuth
+lifecycle. `internal/app/samplecmd` remains only as an explicitly constructed
+synthetic test fixture. Reusable application boundaries include authentication
+gating, complete-or-no-result pagination, and policy-neutral mutation
+invocation.
 
 ### Infrastructure
 
@@ -65,7 +70,10 @@ strategy and returns only secret-free authentication metadata across its
 domain-facing boundary. [ADR 0002](decisions/0002-chatwork-oauth-public-client.md)
 pins the dependency and platform trade-offs.
 
-`internal/infra/systemdoctor` is the default diagnostic adapter. `internal/infra/sampledata` is a deterministic offline repository used to prove opaque reference flow without network access.
+`internal/infra/systemdoctor` is the diagnostic adapter. `chatworkapi`,
+`chatworkoauth`, and the narrow `chatworkconfig` environment projection own the
+production provider boundaries. `internal/infra/sampledata` is a deterministic
+offline repository retained only for generic contract tests.
 
 ### CLI
 
@@ -206,23 +214,26 @@ Candidate C is the first public presentation by explicit product decision and re
 
 Upstream coverage is separately pinned in `.harness/chatwork_api_v2.json`. That manifest may prove that every fixed official operation has a public task owner, but it cannot dispatch a request or generate a command. `cli.Catalog` remains the only public-command source of truth.
 
-The same manifest pins the first implementation's reviewed resource ceilings and the exact upstream operation IDs in each confirmation class. Production code uses compile-time typed constants with those values; it does not load harness JSON at runtime. `tools/contractlint` detects drift in the independent evidence, while adapter, application, and CLI tests prove enforcement at the transport, list, upload, and rendered-output boundaries. The manifest's `coverage_status` is `planned` during incremental implementation and must become `complete` to close the work; in that state every one of the 32 operations must have at least one public capability owner.
+The same manifest pins the first implementation's reviewed resource ceilings and the exact upstream operation IDs in each confirmation class. Production code uses compile-time typed constants with those values; it does not load harness JSON at runtime. `tools/contractlint` detects drift in the independent evidence, while adapter, application, and CLI tests prove enforcement at the transport, list, upload, and rendered-output boundaries. Its current `coverage_status` is `complete`, so every one of the fixed 32 operations must retain at least one public capability owner.
 
-The default graph is:
+The representative public graph is:
 
 ```text
-sample list
+rooms list
   RoleDiscover
-  produces {kind: sample, field: id}
+  produces {kind: chatwork-room, field: room_ref}
        |
        | exact opaque value
        v
-sample read --id <sample-id>
+messages list --room <room-ref>
   RoleAct
-  consumes {kind: sample, argument: --id}
+  consumes {kind: chatwork-room, argument: --room}
 ```
 
-`sample list` renders lowercase `id<TAB>name`; `sample read` renders `id<TAB>name<TAB>content`. The ID validator accepts only `smp_` plus twelve lowercase hexadecimal characters. It validates shape but never transforms the value.
+The candidate-C capsule may assign a compact display alias, but it also emits
+the exact canonical `room_ref`; only that canonical value is accepted by the
+action. The former sample graph is absent from `DefaultCatalog` and remains an
+offline test fixture for generic boundary checks.
 
 ## Operation effect and intent
 

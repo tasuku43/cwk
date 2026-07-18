@@ -1,6 +1,6 @@
 # Work Plan: Complete the first Chatwork API-backed CLI
 
-- Status: Accepted
+- Status: Completed
 - Goal: [goal.md](goal.md)
 - Context: [context.md](context.md)
 
@@ -143,8 +143,8 @@ between typed intent and the infrastructure request.
    hostile-output and agent-readiness validation.
 7. Full, security, and public gates; evidence closure.
 
-The final closure step changes the manifest from `coverage_status: planned` to
-`complete`; contractlint then rejects any one of the 32 operations without a
+The closure step changed the manifest from `coverage_status: planned` to
+`complete`; contractlint now rejects any one of the 32 operations without a
 public capability owner.
 
 ## Verification
@@ -164,9 +164,11 @@ public capability owner.
 ## Rollout and rollback
 
 Before `1.0`, the new public surface may replace the sample commands in one
-reviewed change. Rollback is source rollback only; `cwk` creates no local state.
-Remote mutations are never rolled back automatically. Their read-only
-reconciliation commands remain available whenever the mutation is public.
+reviewed change. Source rollback does not revoke remote effects or erase an
+OAuth credential already stored by the operating system; use `auth logout`
+first when local credential removal is intended. Remote mutations are never
+rolled back automatically. Their read-only reconciliation commands remain
+available whenever the mutation is public.
 
 ## Documentation promotion
 

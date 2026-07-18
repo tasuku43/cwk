@@ -31,42 +31,56 @@
   creates/updates need no extra flag; exact access-changing and destructive
   operation-ID sets are pinned to `--confirm=access-change` and
   `--confirm=destructive`; uncertain results are non-retryable and read-only.
-- [ ] Propagate the selected OAuth public-client/profile contract through the
+- [x] Propagate the selected OAuth public-client/profile contract through the
   architecture, harness enforcement, add-capability workflow, capability
-  ledger, provider-specific dependency/store ADR, and public catalog.
-- [ ] Bind every mutation's uncertain-outcome fault to its exact implemented
-  read-only reconciliation command.
+  ledger, provider-specific dependency/store ADR, and public catalog. Evidence:
+  `b8bf3b4`, `ed199d8`, ADR 0002, and `3f5e894`.
+- [x] Bind every mutation's uncertain-outcome fault to its exact implemented
+  read-only reconciliation command. Evidence: catalog contract tests and
+  `8689dd3` reject missing, mutating, or divergent recovery.
 
 ## Implement shared foundations
 
-- [ ] Add synthetic schema fixtures and schema-manifest digests.
-- [ ] Implement environment PAT authentication and infrastructure binding.
-- [ ] Review and pin `golang.org/x/oauth2` plus the selected OS credential-store
+- [x] Add synthetic schema fixtures and schema-manifest digests. Evidence:
+  `0513d3b` pins the publishable corpus and digest.
+- [x] Implement environment PAT authentication and infrastructure binding.
+  Evidence: `e425249`; `cafbff9` isolates the non-secret selector projection.
+- [x] Review and pin `golang.org/x/oauth2` plus the selected OS credential-store
   dependency, including license, maintenance, transitive graph, supported
-  platforms, vulnerability, and failure behavior.
-- [ ] Implement `auth profiles` and exact opaque OAuth profile-reference flow.
-- [ ] Implement public-client OAuth login with state, PKCE S256, fixed endpoints,
+  platforms, vulnerability, and failure behavior. Evidence: ADR 0002,
+  `43265a9`, `go mod verify`, `task security`, and zero reported vulnerabilities.
+- [x] Implement `auth profiles` and exact opaque OAuth profile-reference flow.
+- [x] Implement public-client OAuth login with state, PKCE S256, fixed endpoints,
   non-HTTP custom redirect, full callback stdin, and zero secret output.
-- [ ] Implement secret-free OAuth status and local-only logout with read-only
+- [x] Implement secret-free OAuth status and local-only logout with read-only
   unknown-outcome reconciliation.
-- [ ] Persist OAuth token material only in the OS credential store and implement
+- [x] Persist OAuth token material only in the OS credential store and implement
   bounded refresh/revalidation within the exact ephemeral binding.
-- [ ] Require exact `CWK_AUTH_METHOD=pat|oauth2` on API tasks and prove missing,
+- [x] Require exact `CWK_AUTH_METHOD=pat|oauth2` on API tasks and prove missing,
   invalid, unavailable, and failed selections never fall back or call the API.
-- [ ] Implement fixed-origin bounded HTTP transport and provider fault mapping.
-- [ ] Implement typed Chatwork semantic values and exact reference validation.
-- [ ] Implement candidate-C context-capsule renderer and contract tests.
+  Evidence for the five OAuth/selection items: `2d716dc`, `43265a9`, `3f5e894`,
+  CLI selection tests, OAuth race tests, and [agent-readiness.md](agent-readiness.md).
+- [x] Implement fixed-origin bounded HTTP transport and provider fault mapping.
+  Evidence: `e425249`, `8689dd3`, and the all-operation local-server matrix.
+- [x] Implement typed Chatwork semantic values and exact reference validation.
+  Evidence: `baa1ed5` and `fb033fc`.
+- [x] Implement candidate-C context-capsule renderer and contract tests.
+  Evidence: `baa1ed5`, golden/determinism/hostile-output tests, and runtime
+  relationship projection tests.
 
 ## Implement public task slices
 
-- [ ] Account/status and personal-task reads.
-- [ ] Contact and incoming-request workflows.
-- [ ] Room discovery, create/show/update/leave/delete workflows.
-- [ ] Room-member list/change workflows.
-- [ ] Message list/send/read-state/show/update/delete workflows.
-- [ ] Room-task list/create/show/status workflows.
-- [ ] File list/upload/show workflows.
-- [ ] Invite-link show/create/update/delete workflows.
+- [x] Account/status and personal-task reads.
+- [x] Contact and incoming-request workflows.
+- [x] Room discovery, create/show/update/leave/delete workflows.
+- [x] Room-member list/change workflows.
+- [x] Message list/send/read-state/show/update/delete workflows.
+- [x] Room-task list/create/show/status workflows.
+- [x] File list/upload/show workflows.
+- [x] Invite-link show/create/update/delete workflows.
+  Evidence for all public slices: `1e426c7` covers every typed task and fixed
+  operation through local transport; `c6434b0` and `3f5e894` bind all 33 task
+  outcomes into the validated public catalog.
 - [x] Remove or internalize scaffold sample capabilities after replacement.
   Evidence: `sample list`, `sample read`, and `sample.inspect` are absent from
   `DefaultCatalog` and root help; the capability ledger marks `sample.inspect`
@@ -74,19 +88,37 @@
 
 ## Verify and close
 
-- [ ] Coverage checker reports exactly 32/32 with all negative fixtures passing.
-- [ ] Set `.harness/chatwork_api_v2.json` `coverage_status` to `complete` and
-  prove that every operation has a public capability owner.
-- [ ] Local-server E2E covers every operation and stable provider faults.
-- [ ] Reference graph and exact round trips pass for all resource kinds.
-- [ ] Mutation preflight zero-call and unknown-outcome reconciliation tests pass.
-- [ ] Hostile-output, secret-canary, cancellation, bounds, and writer tests pass.
-- [ ] Agent-readiness transcripts meet discovery and no-processing budgets.
-- [ ] OAuth synthetic transcript covers profile discovery, callback/state/PKCE,
+- [x] Coverage checker reports exactly 32/32 with all negative fixtures passing.
+- [x] Set `.harness/chatwork_api_v2.json` `coverage_status` to `complete` and
+  prove that every operation has a public capability owner. Evidence: `3f5e894`;
+  `contractlint: OK` in every final gate.
+- [x] Local-server E2E covers every operation and stable provider faults.
+  Evidence: `1e426c7` and `8689dd3`.
+- [x] Reference graph and exact round trips pass for all resource kinds.
+  Evidence: catalog validation, adapter/runtime contracts, and hostile reference
+  tests pass in `task check`.
+- [x] Mutation preflight zero-call and unknown-outcome reconciliation tests pass.
+  Evidence: `21254db`, `8689dd3`, and runtime zero-call tests.
+- [x] Hostile-output, secret-canary, cancellation, bounds, and writer tests pass.
+  Evidence: capsule, CLI, API, and OAuth suites pass in `task check`.
+- [x] Agent-readiness transcripts meet discovery and no-processing budgets.
+  Evidence: [agent-readiness.md](agent-readiness.md) links the executable help,
+  runtime, and local-adapter checks.
+- [x] OAuth synthetic transcript covers profile discovery, callback/state/PKCE,
   store denial/unavailability, expiry/refresh identity, method selection,
-  redaction, and zero-task-call rejection without live credentials.
-- [ ] `task check` passes. Evidence:
-- [ ] `task security` passes. Evidence:
-- [ ] `task public:check` passes. Evidence:
-- [ ] Acceptance criteria and durable documentation are complete.
-- [ ] Temporary diagnostics, test tokens, and local artifacts are absent.
+  redaction, and zero-task-call rejection without live credentials. Evidence:
+  [agent-readiness.md](agent-readiness.md), `43265a9`, `3f5e894`, and OAuth race
+  tests.
+- [x] `task check` passes. Evidence: full gate passed on 2026-07-18 with Go
+  1.26.5, including race, module verification, security, vulnerability,
+  release-lint, public-boundary, and contract checks.
+- [x] `task security` passes. Evidence: `repoguard (security): OK`, dependency
+  verification, and `No vulnerabilities found.` on 2026-07-18.
+- [x] `task public:check` passes. Evidence: `repoguard (public): OK` and
+  `contractlint: OK` on 2026-07-18.
+- [x] Acceptance criteria and durable documentation are complete. Evidence:
+  governing docs, ADR 0002, this work packet, README, and executable contracts
+  agree on the finished public surface.
+- [x] Temporary diagnostics, test tokens, and local artifacts are absent.
+  Evidence: only deterministic synthetic fixtures remain tracked; repository
+  status contains the intentional documentation closure only.

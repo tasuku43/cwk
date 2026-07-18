@@ -254,7 +254,9 @@ The template intentionally does not fix these choices:
 | Whether a write requires human approval, reauthentication, or dry-run | Thesis, security model, and mutation policy |
 | Authentication commands and recovery command names | Selected above and enforced by the command catalog |
 
-These are not optional decisions. They are deliberately deferred until a real external API and user task make the tradeoffs concrete.
+These are not optional decisions. The Chatwork choices in the table are now
+concrete and enforced; any row still described generically is a decision point
+only for a future provider or a superseding reviewed contract.
 
 ## Derived adapter requirements
 

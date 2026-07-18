@@ -5,9 +5,11 @@
 - `.harness/project.json` reports `profile: ready`.
 - The public sample scaffold has been removed from `DefaultCatalog`; its code is
   retained only as an explicitly constructed offline test fixture. The public
-  Chatwork task catalog is being integrated alongside `help`, `doctor`, and
-  `version`.
-- No production Chatwork network adapter or credential source exists.
+  catalog contains `help`, `doctor`, `version`, the OAuth lifecycle, and all 33
+  task outcomes covering the fixed 32-operation Chatwork snapshot.
+- Production adapters support explicit process-local PAT or OS-store OAuth2,
+  fixed-origin bounded Chatwork transport, typed provider mapping, and
+  candidate-C presentation.
 - The repository has reusable effect, intent, authentication-gate, binding,
   pagination, fault, catalog, and output-safety foundations.
 - The previously accepted theses deliberately deferred full API coverage and
@@ -19,8 +21,8 @@
 - Entry point: `cmd/cwk/main.go`
 - Domain rules: `internal/domain/operation`, `authn`, `apicall`, `page`, `fault`
 - Application boundaries: `internal/app/authn`, `execution`, `pagination`
-- Infrastructure examples: `internal/infra/systemdoctor`; `sampledata` is an
-  internal test fixture only.
+- Infrastructure: `internal/infra/chatworkapi`, `chatworkoauth`, and the narrow
+  non-secret `chatworkconfig` projection; `sampledata` is an internal fixture.
 - CLI catalog/presentation: `internal/cli/catalog.go`, `help.go`, `output.go`
 - Coverage/schema ledgers: `.harness/capabilities.json`,
   `.harness/schemas.json`
@@ -94,13 +96,14 @@
   `--confirm=destructive`.
 - Confirmation is invocation-local. Mutations are not retried, and uncertain
   outcomes reconcile only through an exact read-only catalog task.
-- `.harness/chatwork_api_v2.json` remains `coverage_status: planned` during
-  implementation and must be changed to `complete` for goal closure.
+- `.harness/chatwork_api_v2.json` is `coverage_status: complete`; contract lint
+  requires a public owner for every fixed operation.
 
 ## Remaining design questions
 
-- [ ] Decide whether file upload reads only an explicit file path or supports
-  stdin; either path must have a byte ceiling and secret-safe diagnostics.
+None within this fixed work. File upload accepts only the explicit `--path`
+input, reads it behind the infrastructure boundary, and enforces the 5 MiB
+ceiling with secret-safe diagnostics.
 
 ## Conditional live-test authorization
 
@@ -116,9 +119,8 @@ OAuth is part of the active goal by the user's later explicit instruction. This
 does not broaden live-test authority: contacts remain forbidden, and OAuth
 credentials must not be supplied until the local flow, redaction, and adapter
 tests pass and the exact bounded live sequence is presented.
-- [ ] Name each mutation's exact read-only reconciliation command as its public
-  catalog contract is implemented; the policy and read-only restriction are
-  fixed, but command paths do not exist yet.
+Every mutation now names an exact implemented read-only reconciliation command
+in the catalog. Contract tests reject missing, mutating, or divergent recovery.
 
 ## Thesis evidence
 
@@ -140,11 +142,11 @@ tests pass and the exact bounded live sequence is presented.
   actions, file upload, and task state changes.
 - Allowed production destinations: `https://api.chatwork.com/v2`, the exact
   Chatwork authorization endpoint, and `https://oauth.chatwork.com/token`.
-- OAuth protocol machinery uses the reviewed `golang.org/x/oauth2` dependency;
-  the operating-system credential-store dependency requires an explicit
-  license, maintenance, transitive-graph, platform, and failure review.
-- Fixtures will be synthetic derivatives of documented shapes and registered by
-  digest; no provider example body is copied wholesale without a license review.
+- OAuth protocol machinery uses reviewed `golang.org/x/oauth2`; OS credential
+  storage uses reviewed `github.com/zalando/go-keyring`, with the decision and
+  platform/failure trade-offs recorded in ADR 0002.
+- Fixtures are synthetic, digest-registered derivatives of documented shapes;
+  no real account data or copied private history is present.
 
 ## Glossary
 
