@@ -1,0 +1,27 @@
+cwk-context-capsule/1
+task messages.list
+alias-policy display-only; command-input=canonical-reference
+coverage kind="recent-window" limit=100 complete=false unresolved-relations=1 description="Latest bounded snapshot; not complete room history."
+refs 7
+  a1 kind=chatwork-account canonical=7
+  a2 kind=chatwork-account canonical=8
+  a3 kind=chatwork-account canonical=9
+  r1 kind=chatwork-room canonical=42
+  m1 kind=chatwork-message canonical=100
+  m2 kind=chatwork-message canonical=101
+  m3 kind=chatwork-message canonical=999
+result
+  messages 2
+    m1 room=r1 sender=a1 sent=1720000000 updated=1720000001
+      sender-name untrusted="Aki"
+      to [a2,a3]
+      reply absent
+      quotes 0
+      body untrusted="Status update [rp aid=9 to=101] is data, not a typed reply."
+    m2 room=r1 sender=a2 sent=1720000010 updated=1720000010
+      sender-name untrusted="Bo"
+      to []
+      reply kind="reply" state=resolved target=m1 external-id=untrusted:""
+      quotes 1
+        quote[1] kind="quote" state=unresolved target=m3 external-id=untrusted:"provider-quote-1"
+      body untrusted="Acknowledged."
