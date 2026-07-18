@@ -433,7 +433,6 @@ func DefaultCatalog() Catalog {
 			handler: runVersion,
 		},
 	}
-	commands = append(commands, withChatworkAuthHandlers(chatworkAuthCommandSpecs(), nil)...)
 	commands = append(commands, chatworkCommandSpecs()...)
 	return NewCatalog(commands...)
 }

@@ -111,8 +111,8 @@ func assertChatworkAuthenticationContract(t *testing.T, spec CommandSpec) {
 	if err := requirement.Validate(); err != nil {
 		t.Fatalf("Chatwork authentication requirement is invalid: %v", err)
 	}
-	if len(requirement.Methods) != 2 || requirement.Methods[0] != authn.MethodPAT || requirement.Methods[1] != authn.MethodOAuth2 {
-		t.Errorf("authentication methods = %v, want [pat oauth2]", requirement.Methods)
+	if len(requirement.Methods) != 1 || requirement.Methods[0] != authn.MethodPAT {
+		t.Errorf("authentication methods = %v, want [pat]", requirement.Methods)
 	}
 	if requirement.Authority != chatwork.AuthenticationAuthority {
 		t.Errorf("authentication authority = %q, want %q", requirement.Authority, chatwork.AuthenticationAuthority)

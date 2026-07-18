@@ -850,7 +850,7 @@ func TestFixedTargetMutationsRequireExactUnboundTargetAndCompleteImpact(t *testi
 func TestAuthenticationRequirementRequiresGateFailureSurfaceAndDeepCopies(t *testing.T) {
 	spec := utilitySpec("items read")
 	spec.Agent.Authentication = &authn.Requirement{
-		Methods: []authn.Method{authn.MethodOAuth2, authn.MethodPAT}, Authority: "example",
+		Methods: []authn.Method{authn.MethodPAT}, Authority: "example",
 		Audience: "items", RequiredCapabilities: []string{"items.read"},
 	}
 	if err := validateAgentContract(spec); err == nil {
@@ -910,9 +910,9 @@ func TestAuthenticationRequirementRequiresGateFailureSurfaceAndDeepCopies(t *tes
 		t.Fatalf("provider-specific authentication fault: %v", err)
 	}
 	clone := cloneCommandSpec(spec)
-	clone.Agent.Authentication.Methods[0] = authn.MethodPAT
+	clone.Agent.Authentication.Methods[0] = authn.MethodUnknown
 	clone.Agent.Authentication.RequiredCapabilities[0] = "changed"
-	if spec.Agent.Authentication.Methods[0] != authn.MethodOAuth2 || spec.Agent.Authentication.RequiredCapabilities[0] != "items.read" {
+	if spec.Agent.Authentication.Methods[0] != authn.MethodPAT || spec.Agent.Authentication.RequiredCapabilities[0] != "items.read" {
 		t.Fatal("authentication requirement shares slice storage")
 	}
 }

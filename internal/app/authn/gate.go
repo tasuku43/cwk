@@ -14,8 +14,7 @@ import (
 
 // Authenticator resolves an infrastructure-owned credential and returns only
 // non-secret metadata about the resulting session. Implementations must keep
-// raw PATs, OAuth tokens, refresh material, and authenticated transports inside
-// internal/infra.
+// raw PATs and authenticated transports inside internal/infra.
 type Authenticator interface {
 	Authenticate(context.Context, domainauthn.Requirement) (domainauthn.Session, error)
 }

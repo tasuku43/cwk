@@ -11,8 +11,8 @@
   },
   {
     "id": "authentication.manage",
-    "status": "public",
-    "reason": ""
+    "status": "excluded",
+    "reason": "CWK_API_TOKEN is supplied process-locally; cwk does not own a credential lifecycle or persistent authentication state."
   },
   {
     "id": "chatwork.account.inspect",

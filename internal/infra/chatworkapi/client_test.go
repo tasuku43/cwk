@@ -26,27 +26,21 @@ func TestTransportPolicyIsPinnedAndSingleAttempt(t *testing.T) {
 	}
 }
 
-func TestCredentialHeaderStrategyKeepsPATAndBearerInsideInfrastructure(t *testing.T) {
-	for name, test := range map[string]struct {
-		credential requestCredential
-		header     string
-		want       string
-	}{
-		"pat":         {requestCredential{method: authn.MethodPAT, header: credentialHeaderChatworkToken, secret: syntheticToken}, "x-chatworktoken", syntheticToken},
-		"bearer seam": {requestCredential{method: authn.MethodOAuth2, header: credentialHeaderBearer, secret: "synthetic-access-token"}, "Authorization", "Bearer synthetic-access-token"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			request, err := http.NewRequest(http.MethodGet, "https://example.test", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := test.credential.authorize(request); err != nil {
-				t.Fatal(err)
-			}
-			if got := request.Header.Get(test.header); got != test.want {
-				t.Fatalf("header = %q", got)
-			}
-		})
+func TestCredentialAuthorizationKeepsPATInsideInfrastructure(t *testing.T) {
+	request, err := http.NewRequest(http.MethodGet, "https://example.test", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Authorization", "unexpected-synthetic-value")
+	credential := requestCredential{method: authn.MethodPAT, secret: syntheticToken}
+	if err := credential.authorize(request); err != nil {
+		t.Fatal(err)
+	}
+	if got := request.Header.Get("x-chatworktoken"); got != syntheticToken {
+		t.Fatalf("x-chatworktoken = %q", got)
+	}
+	if got := request.Header.Get("Authorization"); got != "" {
+		t.Fatalf("Authorization = %q, want empty", got)
 	}
 }
 
@@ -117,6 +111,20 @@ func TestNewFromEnvironmentFailsClosedWithoutSafeToken(t *testing.T) {
 				t.Fatal("authentication fault exposed token")
 			}
 		})
+	}
+}
+
+func TestNewFromEnvironmentPinsPATAndProductionDestination(t *testing.T) {
+	t.Setenv(TokenEnvironment, syntheticToken)
+	client, err := NewFromEnvironment()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.baseURL != ProductionBaseURL {
+		t.Fatalf("base URL = %q, want %q", client.baseURL, ProductionBaseURL)
+	}
+	if client.source.method != authn.MethodPAT || client.source.secret != syntheticToken {
+		t.Fatal("production client did not retain the PAT inside its private credential record")
 	}
 }
 

@@ -207,22 +207,15 @@ external API capability.
   before a provider task request.
 - Do not implement OAuth protocol machinery. Add a reviewed OAuth library only
   in a derived project whose accepted security model selects OAuth.
-- For this Chatwork implementation, follow
-  `docs/decisions/0002-chatwork-oauth-public-client.md`: import pinned
-  `golang.org/x/oauth2 v0.36.0` and
-  `github.com/zalando/go-keyring v0.2.8` only from `internal/infra`; use the
-  fixed public-client Authorization Code flow with state, PKCE S256, an exact
-  non-HTTP custom redirect read from stdin, and no client secret or
-  `offline_access`; persist credentials only in the OS store.
-- Require an exact selected method for Chatwork API tasks. An explicit
-  `CWK_AUTH_METHOD` may select PAT; otherwise a successful single-account OAuth
-  login supplies the persisted exact `oauth2` selection. Never probe, prefer,
-  or fall back to the other source. OAuth store, expiry, refresh,
-  identity, scope, and persistence failures make zero provider task requests.
-- Resolve the exact OAuth binding immediately before I/O. Serialize refresh,
-  revalidate required scopes and the exact Chatwork account, and persist the
-  complete rotated credential before authorizing a task request. Keep profile
-  references distinct from credential-store keys and bearer material.
+- For this Chatwork implementation, follow the PAT-only decision that
+  supersedes `docs/decisions/0002-chatwork-oauth-public-client.md`.
+  `CWK_API_TOKEN` is the sole command-process credential source. Do not accept
+  it through argv, persist it, add a credential-method selector, or retain an
+  OAuth fallback.
+- Resolve the PAT into one private infrastructure record, issue only a
+  secret-free process-local binding, and revalidate that exact record before
+  attaching `x-chatworktoken` to the fixed API destination. Missing or invalid
+  token input makes zero provider task requests.
 - Make one-page adapters return an opaque cursor envelope. Use bounded
   complete traversal, or declare a paged public result with the catalog-bound
   optional cursor input and next-cursor output.
@@ -249,22 +242,11 @@ Add the smallest set that proves the capability:
   missing, stale, wrong-account, and cross-session IDs, typed-nil task ports,
   expiry races, refresh identity mismatch/failure, and zero unintended provider
   task requests;
-- Chatwork method-selection tests with PAT and OAuth both available, proving
-  exact selected-source access and no fallback for missing, unknown,
-  unavailable, expired, refresh-failed, identity-mismatched, or store-failed
-  selections;
-- Chatwork public-client tests for state mismatch, exact custom-redirect
-  mismatch, PKCE S256 verifier/challenge agreement, exchange without a client
-  secret, absence of `offline_access`, and fixed redirect-disabled
-  authorization/token/API destinations;
-- Chatwork OAuth fake-store tests for unavailable, denied, missing, corrupt,
-  oversized, and canceled reads/writes/deletes; concurrent refresh tests proving
-  serialized rotation, account continuity, and persistence before task
-  authorization; never touch a developer OS credential store in automated
-  tests;
-- authentication secret-canary tests that include callback URLs, authorization
-  codes, PKCE verifiers, access/refresh tokens, credential-store values and
-  errors, provider bodies, stdout, stderr, structured faults, logs, snapshots,
+- Chatwork PAT tests proving that `CWK_API_TOKEN` is the sole source, that no
+  method selector or fallback exists, and that missing, malformed, canceled,
+  or mismatched bindings make zero provider task requests;
+- authentication secret-canary tests that include PAT values, authorization
+  headers, provider bodies, stdout, stderr, structured faults, logs, snapshots,
   fixtures, and test diagnostics;
 - pagination tests for empty, one, many, repeated-cursor, budget, and mid-page failure paths;
 - catalog tests rejecting missing, extra, required, non-string, non-opaque, and

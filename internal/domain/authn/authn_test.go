@@ -13,7 +13,7 @@ import (
 
 func validRequirement() Requirement {
 	return Requirement{
-		Methods:              []Method{MethodOAuth2, MethodPAT},
+		Methods:              []Method{MethodPAT},
 		Authority:            "example-authority",
 		Audience:             "example-api",
 		AccountID:            "account-1",
@@ -23,7 +23,7 @@ func validRequirement() Requirement {
 
 func validSession() Session {
 	return Session{
-		Method:              MethodOAuth2,
+		Method:              MethodPAT,
 		Authority:           "example-authority",
 		Audience:            "example-api",
 		SubjectID:           "subject-1",
@@ -93,10 +93,9 @@ func TestRequirementAndSessionValidate(t *testing.T) {
 		t.Fatalf("Session.Validate() error = %v", err)
 	}
 
-	pat := validSession()
-	pat.Method = MethodPAT
-	pat.ExpiresAt = time.Time{}
-	if err := pat.Validate(); err != nil {
+	patWithoutExpiry := validSession()
+	patWithoutExpiry.ExpiresAt = time.Time{}
+	if err := patWithoutExpiry.Validate(); err != nil {
 		t.Fatalf("PAT Session.Validate() error = %v", err)
 	}
 }
@@ -143,11 +142,6 @@ func TestRequirementSatisfiesSessionExactly(t *testing.T) {
 		kind MismatchKind
 		edit func(*Requirement, *Session)
 	}{
-		{name: "method", kind: MismatchMethod, edit: func(requirement *Requirement, session *Session) {
-			requirement.Methods = []Method{MethodOAuth2}
-			session.Method = MethodPAT
-			session.ExpiresAt = time.Time{}
-		}},
 		{name: "authority", kind: MismatchAuthority, edit: func(_ *Requirement, session *Session) { session.Authority = "other-authority" }},
 		{name: "audience", kind: MismatchAudience, edit: func(_ *Requirement, session *Session) { session.Audience = "other-api" }},
 		{name: "account", kind: MismatchAccount, edit: func(_ *Requirement, session *Session) { session.AccountID = "account-2" }},
@@ -202,9 +196,9 @@ func TestAuthenticationMetadataHasNoCredentialBearingFields(t *testing.T) {
 func TestCloneOwnsIndependentSlices(t *testing.T) {
 	requirement := validRequirement()
 	requirementClone := requirement.Clone()
-	requirementClone.Methods[0] = MethodPAT
+	requirementClone.Methods[0] = MethodUnknown
 	requirementClone.RequiredCapabilities[0] = "changed"
-	if requirement.Methods[0] != MethodOAuth2 || requirement.RequiredCapabilities[0] != "items:read" {
+	if requirement.Methods[0] != MethodPAT || requirement.RequiredCapabilities[0] != "items:read" {
 		t.Fatal("Requirement.Clone() retained shared slice storage")
 	}
 

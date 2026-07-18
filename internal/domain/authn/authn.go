@@ -17,14 +17,13 @@ type Method string
 
 const (
 	MethodUnknown Method = ""
-	MethodOAuth2  Method = "oauth2"
 	MethodPAT     Method = "pat"
 )
 
 // Validate rejects an omitted or unsupported authentication method.
 func (m Method) Validate() error {
 	switch m {
-	case MethodOAuth2, MethodPAT:
+	case MethodPAT:
 		return nil
 	default:
 		return fmt.Errorf("authentication method is missing or invalid")

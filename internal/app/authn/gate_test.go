@@ -59,7 +59,7 @@ func (a *authenticatorStub) Authenticate(_ context.Context, requirement domainau
 
 func appRequirement() domainauthn.Requirement {
 	return domainauthn.Requirement{
-		Methods:              []domainauthn.Method{domainauthn.MethodOAuth2, domainauthn.MethodPAT},
+		Methods:              []domainauthn.Method{domainauthn.MethodPAT},
 		Authority:            "example-authority",
 		Audience:             "example-api",
 		AccountID:            "account-1",
@@ -73,7 +73,7 @@ func appSession() domainauthn.Session {
 		panic(err)
 	}
 	return domainauthn.Session{
-		Method:              domainauthn.MethodOAuth2,
+		Method:              domainauthn.MethodPAT,
 		Authority:           "example-authority",
 		Audience:            "example-api",
 		SubjectID:           "subject-1",
@@ -96,7 +96,7 @@ func TestGateAuthenticatesRevalidatesAndCallsActionOnce(t *testing.T) {
 	actionCalls := 0
 	err := newTestGate(authenticator).Invoke(context.Background(), appRequirement(), func(_ context.Context, session domainauthn.Session) error {
 		actionCalls++
-		if session.SubjectID != "subject-1" || session.Method != domainauthn.MethodOAuth2 || session.BindingID != wantBinding {
+		if session.SubjectID != "subject-1" || session.Method != domainauthn.MethodPAT || session.BindingID != wantBinding {
 			t.Fatalf("session = %+v", session)
 		}
 		session.GrantedCapabilities[0] = "mutated"
@@ -115,14 +115,14 @@ func TestGateSnapshotsRequirementAcrossUntrustedAuthenticator(t *testing.T) {
 	authenticator := &authenticatorStub{
 		session: appSession(),
 		mutate: func(got *domainauthn.Requirement) {
-			got.Methods[0] = domainauthn.MethodPAT
+			got.Methods[0] = domainauthn.MethodUnknown
 			got.RequiredCapabilities[0] = "changed"
 		},
 	}
 	if err := newTestGate(authenticator).Invoke(context.Background(), requirement, func(context.Context, domainauthn.Session) error { return nil }); err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if requirement.Methods[0] != domainauthn.MethodOAuth2 || requirement.RequiredCapabilities[0] != "items:read" {
+	if requirement.Methods[0] != domainauthn.MethodPAT || requirement.RequiredCapabilities[0] != "items:read" {
 		t.Fatal("caller requirement was mutated")
 	}
 }
@@ -306,10 +306,6 @@ func TestGateMismatchClassesMakeZeroActionCalls(t *testing.T) {
 		wantKind fault.Kind
 		wantCode string
 	}{
-		{name: "method", edit: func(session *domainauthn.Session) {
-			session.Method = domainauthn.MethodPAT
-			session.ExpiresAt = time.Time{}
-		}, wantKind: fault.KindAuthentication, wantCode: "authentication_context_mismatch"},
 		{name: "authority", edit: func(session *domainauthn.Session) { session.Authority = "other-authority" }, wantKind: fault.KindAuthentication, wantCode: "authentication_context_mismatch"},
 		{name: "audience", edit: func(session *domainauthn.Session) { session.Audience = "other-api" }, wantKind: fault.KindAuthentication, wantCode: "authentication_context_mismatch"},
 		{name: "account", edit: func(session *domainauthn.Session) { session.AccountID = "account-2" }, wantKind: fault.KindAuthentication, wantCode: "authentication_context_mismatch"},
@@ -319,9 +315,6 @@ func TestGateMismatchClassesMakeZeroActionCalls(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			requirement := appRequirement()
-			if test.name == "method" {
-				requirement.Methods = []domainauthn.Method{domainauthn.MethodOAuth2}
-			}
 			session := appSession()
 			test.edit(&session)
 			actionCalls := 0
