@@ -1,0 +1,24 @@
+{
+  "schema": "cwk-selected-presentation-evidence/1",
+  "source_commit": "5be31069d4b9b5e3e5b57724f3d9312408e28a20",
+  "presentation_schema": "cwk-task-projection/1",
+  "candidate_seed_commit": "b804f8efdaeb318e94b1b5e9d6144c00149e4674",
+  "integration_commits": {
+    "projection": "258087d57049027be6cf4c4f20a6ed5cd76c1f7f",
+    "semantic_kind_validation": "3751fecbc3fcb003fb35010ac5ec56a88332b48f",
+    "optional_reference_refinement": "a832f69ee60dd3a1a0f30e7733de0a3941ec2e51",
+    "redundant_coverage_removal": "4669d41879001ea6cb4f36484aea3df917404066",
+    "subtractive_contract_tests": "07e6961babcd16331d33c82b9b8a832aeaab1d6f"
+  },
+  "measurement": {
+    "synthetic": true,
+    "network_allowed": false,
+    "credential_input": false,
+    "render_operations": 11,
+    "iterations_per_operation": 20,
+    "static_render_gates_pass": true,
+    "render_metrics_sha256": "9d3b144e07a5dc5154f7be74535e1478c4b184230c50cdff821e97b3dcdd571a",
+    "summary_sha256": "2a70d5a945079a053a3387edd1573300fee12f862e7542e920f12098ccdb9597"
+  },
+  "scope": "Post-decision deterministic render evidence only; it is not a retroactive Competition 1 model score."
+}

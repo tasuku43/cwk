@@ -1,0 +1,7 @@
+cwk-task-projection/1 task=rooms.list
+coverage kind="provider_collection" complete=true
+rooms count=4
+  room-ref=4101 name=untrusted:"Synthetic Lab" type="group" role="member" unread=0 mentions=0 tasks=1
+  room-ref=4102 name=untrusted:"Synthetic Incident" type="group" role="member" unread=5 mentions=2 tasks=0
+  room-ref=4103 name=untrusted:"Synthetic Archive" type="group" role="member" unread=0 mentions=0 tasks=0
+  room-ref=4104 name=untrusted:"Synthetic Follow-up" type="group" role="member" unread=1 mentions=0 tasks=0

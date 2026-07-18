@@ -51,6 +51,12 @@
     "selection_basis": "explicit_product_and_compatibility_decision_after_inconclusive_benchmark",
     "selected_schema": "cwk-task-projection/1"
   },
+  "selected_final": {
+    "manifest": "selected-final/manifest.json",
+    "render_metrics_sha256": "9d3b144e07a5dc5154f7be74535e1478c4b184230c50cdff821e97b3dcdd571a",
+    "static_render_gates_pass": true,
+    "note": "Post-decision deterministic evidence, not a retroactive benchmark score."
+  },
   "invalidated_runner_v1": {
     "submission_count": 5,
     "c0_sha256": "0f4ba2530c88b6e5d5ebbde9f73553ae0cca428287613ce3353ac02d73e1e857",
