@@ -76,8 +76,11 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	if authenticator.calls != 1 || port.calls != 1 {
 		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
 	}
-	if port.request.Room != room || !port.request.ForceRecent {
+	if port.request.Room != room || !port.request.ForceRecent || port.request.MessageFilter.Limit != 0 {
 		t.Fatalf("request = %+v, want exact room and recent window", port.request)
+	}
+	if !strings.Contains(stdout.String(), "source-limit=100") || strings.Contains(stdout.String(), "selection ") {
+		t.Fatalf("unlimited output changed its source-bound or selection contract:\n%s", stdout.String())
 	}
 	// The flat presentation must preserve both exact references and project the
 	// typed resolved relation through the provider-sequence edge.
@@ -122,7 +125,7 @@ func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) 
 	if authenticator.calls != 1 || port.calls != 1 {
 		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
 	}
-	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" {
+	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
 		t.Fatalf("local message filter crossed the provider port: %+v", port.request.MessageFilter)
 	}
 	for _, want := range []string{
@@ -137,6 +140,54 @@ func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) 
 		if strings.Contains(stdout.String(), forbidden) {
 			t.Errorf("filtered output contains omitted source data %q:\n%s", forbidden, stdout.String())
 		}
+	}
+}
+
+func TestRunChatworkLimitsNewestCandidatesAndKeepsProviderOrder(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	account := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1"), Name: "Aki"}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		message := func(ref string, sent int64) chatwork.Message {
+			return chatwork.Message{
+				Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, ref), Room: room,
+				Sender: account, Body: ref, SendTime: sent,
+			}
+		}
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: request.Room,
+			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+			// The newest candidates are provider positions one and three. Output
+			// must select by send time without reordering those source positions.
+			Messages: []chatwork.Message{message("10", 30), message("11", 10), message("12", 20)},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", "7", "--window", "recent", "--limit", "2",
+	})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
+	}
+	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
+		t.Fatalf("local limit crossed the provider port: %+v", port.request.MessageFilter)
+	}
+	for _, want := range []string{
+		"messages room-ref=7 count=2 window=recent source-limit=100",
+		"selection source-count=3 candidate-count=3 limit=2",
+		"#1 10 ",
+		"#3 12 ",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("limited output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "#2 11 ") || strings.Index(stdout.String(), "#1 10 ") > strings.Index(stdout.String(), "#3 12 ") {
+		t.Fatalf("limited output retained the wrong candidate or reordered provider positions:\n%s", stdout.String())
 	}
 }
 
@@ -157,6 +208,53 @@ func TestBuildChatworkMessageFilterDefaultsContextAndPreservesSenderOrder(t *tes
 	}
 }
 
+func TestBuildChatworkMessageLimitAcceptsInclusiveBoundsAndDefaultsContext(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	for _, value := range []string{"1", "100"} {
+		parsed, err := parseChatworkArguments(spec, []string{"--room", "7", "--limit", value})
+		if err != nil {
+			t.Fatalf("limit %s parse error = %v", value, err)
+		}
+		request, err := buildChatworkRequest(spec, parsed)
+		if err != nil {
+			t.Fatalf("limit %s build error = %v", value, err)
+		}
+		want, _ := strconv.Atoi(value)
+		if request.MessageFilter.Limit != want || request.MessageFilter.Context != chatwork.MessageContextNone || request.Limit != 0 {
+			t.Fatalf("limit %s request = %+v", value, request)
+		}
+	}
+	parsed, err := parseChatworkArguments(spec, []string{"--room", "7", "--limit", "10", "--context", "replies"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := buildChatworkRequest(spec, parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.MessageFilter.Limit != 10 || request.MessageFilter.Context != chatwork.MessageContextReplies {
+		t.Fatalf("limit-only reply context request = %+v", request.MessageFilter)
+	}
+}
+
+func TestBuildRoomTaskDeadlineRemainsIndependentFromMessageLimit(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "room-tasks create")
+	parsed, err := parseChatworkArguments(spec, []string{
+		"--room", "7", "--body", "task", "--assignee", "1", "--limit", "1700000000",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := buildChatworkRequest(spec, parsed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Limit != 1700000000 || len(request.MessageFilter.Senders) != 0 ||
+		request.MessageFilter.Context != "" || request.MessageFilter.Limit != 0 {
+		t.Fatalf("room task deadline/message filter = %d/%+v", request.Limit, request.MessageFilter)
+	}
+}
+
 func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	cases := [][]string{
@@ -165,6 +263,11 @@ func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T
 		{"--room", "7", "--sender", "1", "--sender", "1"},
 		{"--room", "7", "--sender", "07"},
 		{"--room", "7", "--sender", "1", "--context", "thread"},
+		{"--room", "7", "--limit", "0"},
+		{"--room", "7", "--limit", "-1"},
+		{"--room", "7", "--limit", "101"},
+		{"--room", "7", "--limit", "ten"},
+		{"--room", "7", "--limit", "10", "--limit", "20"},
 	}
 	excessive := []string{"--room", "7"}
 	for sender := 1; sender <= 101; sender++ {

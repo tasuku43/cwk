@@ -234,11 +234,22 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 		case "--status":
 			request.Status = value
 		case "--limit":
-			limit, err := strconv.ParseInt(value, 10, 64)
-			if err != nil || limit <= 0 {
-				return chatwork.Request{}, fmt.Errorf("--limit must be a positive Unix time")
+			switch request.Task {
+			case chatwork.TaskMessagesList:
+				limit, err := strconv.Atoi(value)
+				if err != nil || limit < 1 || limit > chatwork.MaxMessageSelectionLimit {
+					return chatwork.Request{}, fmt.Errorf("--limit must be an integer from 1 to %d", chatwork.MaxMessageSelectionLimit)
+				}
+				request.MessageFilter.Limit = limit
+			case chatwork.TaskRoomTasksCreate:
+				limit, err := strconv.ParseInt(value, 10, 64)
+				if err != nil || limit <= 0 {
+					return chatwork.Request{}, fmt.Errorf("--limit must be a positive Unix time")
+				}
+				request.Limit = limit
+			default:
+				return chatwork.Request{}, fmt.Errorf("--limit is unsupported for this Chatwork task")
 			}
-			request.Limit = limit
 		case "--limit-type":
 			request.LimitType = value
 		case "--window":
@@ -267,7 +278,9 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 	if request.Task == chatwork.TaskRoomsCreate && (arguments.first("--invite-code") != "" || arguments.first("--invite-approval") != "") {
 		request.InviteEnabled = true
 	}
-	if request.Task == chatwork.TaskMessagesList && len(request.MessageFilter.Senders) > 0 && request.MessageFilter.Context == "" {
+	if request.Task == chatwork.TaskMessagesList &&
+		(len(request.MessageFilter.Senders) > 0 || request.MessageFilter.Limit > 0) &&
+		request.MessageFilter.Context == "" {
 		request.MessageFilter.Context = chatwork.MessageContextNone
 	}
 	return request, nil

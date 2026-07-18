@@ -1,4 +1,4 @@
-messages room-ref=3501 count=9 window=recent limit=100 complete=false unresolved-relations=0
+messages room-ref=3501 count=9 window=recent source-limit=100 complete=false unresolved-relations=0
 selection source-count=14 senders=[2501,2502] context=replies anchors=[#2,#6,#9,#13]
 external-text=untrusted escaped
 schema: #sequence message-ref actor sent [reply] [to] [quote] "body"

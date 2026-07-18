@@ -2,19 +2,21 @@ package chatworkcmd
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
 // assembleMessageWindow resolves one complete bounded source window before
-// applying an optional sender selection. Reply context is exactly one hop from
-// the original sender matches; it is never expanded transitively.
+// selecting newest primary messages. Sender matching forms one OR candidate
+// set, Limit selects that set by typed send time without reordering output, and
+// reply context is exactly one hop from the selected anchors.
 func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageFilter) ([]chatwork.Message, *chatwork.MessageSelection, error) {
 	resolvedSource, err := ResolveMessageRelations(messages)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(filter.Senders) == 0 {
+	if len(filter.Senders) == 0 && filter.Limit == 0 {
 		return resolvedSource, nil, nil
 	}
 
@@ -22,15 +24,39 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 	for _, sender := range filter.Senders {
 		senders[sender.Value] = struct{}{}
 	}
-	anchors := make([]bool, len(resolvedSource))
+	candidates := make([]bool, len(resolvedSource))
 	included := make([]bool, len(resolvedSource))
 	messageIndex := make(map[string]int, len(resolvedSource))
+	candidateIndexes := make([]int, 0, len(resolvedSource))
 	for index, message := range resolvedSource {
 		messageIndex[message.Ref.Value] = index
-		_, matches := senders[message.Sender.Ref.Value]
-		anchors[index] = matches
-		included[index] = matches
+		matches := len(senders) == 0
+		if !matches {
+			_, matches = senders[message.Sender.Ref.Value]
+		}
+		if matches {
+			candidates[index] = true
+			candidateIndexes = append(candidateIndexes, index)
+		}
 	}
+
+	anchors := append([]bool(nil), candidates...)
+	if filter.Limit > 0 && len(candidateIndexes) > filter.Limit {
+		sort.Slice(candidateIndexes, func(left, right int) bool {
+			leftIndex, rightIndex := candidateIndexes[left], candidateIndexes[right]
+			if resolvedSource[leftIndex].SendTime == resolvedSource[rightIndex].SendTime {
+				// A later provider position wins an otherwise indistinguishable
+				// timestamp tie, while physical output remains in provider order.
+				return leftIndex > rightIndex
+			}
+			return resolvedSource[leftIndex].SendTime > resolvedSource[rightIndex].SendTime
+		})
+		anchors = make([]bool, len(resolvedSource))
+		for _, index := range candidateIndexes[:filter.Limit] {
+			anchors[index] = true
+		}
+	}
+	copy(included, anchors)
 
 	switch filter.Context {
 	case chatwork.MessageContextNone:
@@ -88,6 +114,7 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 	selection := &chatwork.MessageSelection{
 		Filter:          filterCopy,
 		SourceCount:     len(resolvedSource),
+		CandidateCount:  len(candidateIndexes),
 		SourceSequences: sourceSequences,
 		AnchorSequences: anchorSequences,
 	}

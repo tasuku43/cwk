@@ -130,13 +130,44 @@ func TestInviteMutationUsesInviteReferenceNotRoomFallback(t *testing.T) {
 }
 
 func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) {
-	input := completeRequest(chatwork.TaskMessagesList)
-	input.MessageFilter = chatwork.MessageFilter{
-		Senders: []chatwork.Reference{testRef(chatwork.ReferenceAccount, "1")},
-		Context: chatwork.MessageContextReplies,
+	for name, filter := range map[string]chatwork.MessageFilter{
+		"sender and context": {
+			Senders: []chatwork.Reference{testRef(chatwork.ReferenceAccount, "1")},
+			Context: chatwork.MessageContextReplies,
+		},
+		"limit": {Limit: 10},
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := completeRequest(chatwork.TaskMessagesList)
+			input.MessageFilter = filter
+			if _, err := (&Client{}).buildRequest(input); err == nil {
+				t.Fatal("application-owned message selection crossed the Chatwork request boundary")
+			}
+		})
 	}
+}
 
-	if _, err := (&Client{}).buildRequest(input); err == nil {
-		t.Fatal("application-owned message selection crossed the Chatwork request boundary")
+func TestBuildMessageListRequestEmitsOnlyDocumentedForceQuery(t *testing.T) {
+	for name, test := range map[string]struct {
+		force bool
+		path  string
+	}{
+		"changes default": {path: "/rooms/2/messages"},
+		"recent":          {force: true, path: "/rooms/2/messages?force=1"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			input := completeRequest(chatwork.TaskMessagesList)
+			input.ForceRecent = test.force
+			spec, err := (&Client{}).buildRequest(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if spec.method != http.MethodGet || spec.path != test.path {
+				t.Fatalf("request = %s %s, want GET %s", spec.method, spec.path, test.path)
+			}
+			if strings.Contains(spec.path, "limit=") {
+				t.Fatalf("application limit leaked into provider query %q", spec.path)
+			}
+		})
 	}
 }

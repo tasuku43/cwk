@@ -1,4 +1,4 @@
-messages room-ref=42 count=2 window=recent limit=100 complete=false unresolved-relations=1
+messages room-ref=42 count=2 window=recent source-limit=100 complete=false unresolved-relations=1
 external-text=untrusted escaped
 schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
 actors

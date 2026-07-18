@@ -47,7 +47,7 @@ func TestPresentationChangesKeepSuccessFormatsTextOnly(t *testing.T) {
 	}
 }
 
-func TestMessageListCatalogPublishesBoundedSenderFilter(t *testing.T) {
+func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	var messages CommandSpec
 	for _, command := range chatworkCommandSpecs() {
 		if command.Path == "messages list" {
@@ -58,7 +58,7 @@ func TestMessageListCatalogPublishesBoundedSenderFilter(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window changes|recent] [--sender <account-ref>] [--context none|replies]"
+	wantUsage := "cwk messages list --room <room-ref> [--window changes|recent] [--limit <count>] [--sender <account-ref>] [--context none|replies]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -66,6 +66,14 @@ func TestMessageListCatalogPublishesBoundedSenderFilter(t *testing.T) {
 	inputs := make(map[string]CommandInput, len(messages.Agent.Inputs))
 	for _, input := range messages.Agent.Inputs {
 		inputs[input.Name] = input
+	}
+	limit := inputs["--limit"]
+	if limit.Name == "" || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
+		len(limit.AllowedValues) != 0 || limit.ReferenceKind != "" ||
+		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
+		!strings.Contains(limit.Description, "newest") ||
+		!strings.Contains(limit.Description, "reply context") {
+		t.Fatalf("limit input contract = %+v", limit)
 	}
 	sender := inputs["--sender"]
 	if sender.Required || !sender.Repeatable || sender.ReferenceKind != "chatwork-account" ||
@@ -76,7 +84,13 @@ func TestMessageListCatalogPublishesBoundedSenderFilter(t *testing.T) {
 	context := inputs["--context"]
 	if context.Required || !reflect.DeepEqual(context.AllowedValues, []string{"none", "replies"}) ||
 		!strings.Contains(context.Description, "one-hop") || !strings.Contains(context.Description, "default") ||
-		!strings.Contains(context.Description, "parents and children") {
+		!strings.Contains(context.Description, "parents and children") || !strings.Contains(context.Description, "limit") {
 		t.Fatalf("context input contract = %+v", context)
+	}
+	window := inputs["--window"]
+	if !reflect.DeepEqual(window.AllowedValues, []string{"changes", "recent"}) ||
+		!strings.Contains(window.Description, "changes") || !strings.Contains(window.Description, "default") ||
+		!strings.Contains(window.Description, "latest") {
+		t.Fatalf("window input contract = %+v", window)
 	}
 }

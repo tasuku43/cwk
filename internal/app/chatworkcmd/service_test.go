@@ -76,6 +76,7 @@ func TestExecuteResolvesUnfilteredMessageWindowWithoutSelection(t *testing.T) {
 	parent := relationshipReference(t, chatwork.ReferenceMessage, "101")
 	port := &fakePort{result: chatwork.Result{
 		MessageRoom: room,
+		Coverage:    chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
 		Messages: []chatwork.Message{
 			{Ref: parent, Room: room, Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "7")}},
 			{

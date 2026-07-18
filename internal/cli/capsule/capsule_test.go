@@ -32,6 +32,7 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 			Context: chatwork.MessageContextReplies,
 		},
 		SourceCount:     6,
+		CandidateCount:  1,
 		SourceSequences: []int{2, 5},
 		AnchorSequences: []int{5},
 	}
@@ -48,7 +49,7 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 		t.Fatalf("filtered Render() mismatch\n--- got ---\n%s--- want ---\n%s", got, wantGolden)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=2 window=recent limit=100 complete=false unresolved-relations=1\n",
+		"messages room-ref=42 count=2 window=recent source-limit=100 complete=false unresolved-relations=1\n",
 		"selection source-count=6 senders=[8] context=replies anchors=[#5]\n",
 		`schema: #sequence message-ref actor sent [reply] [to] [quote] "body"`,
 		`#2 100 a1 1720000000`,
@@ -99,7 +100,7 @@ func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=0 window=recent limit=100 complete=false unresolved-relations=0\n",
+		"messages room-ref=42 count=0 window=recent source-limit=100 complete=false unresolved-relations=0\n",
 		"selection source-count=3 senders=[7,8] context=none anchors=[]\n",
 		"actors\n",
 	} {
@@ -119,6 +120,7 @@ func TestRenderFilteredMessagesKeepsOmittedReplyParentCanonical(t *testing.T) {
 			Context: chatwork.MessageContextNone,
 		},
 		SourceCount:     5,
+		CandidateCount:  1,
 		SourceSequences: []int{5},
 		AnchorSequences: []int{5},
 	}
@@ -149,7 +151,7 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskRoomsDelete, "deleted room-ref=42"},
 		{chatwork.TaskMembersList, "members count=1"},
 		{chatwork.TaskMembersReplace, "membership-counts administrators=0 members=0 readonly=0"},
-		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent limit=100 complete=false unresolved-relations=0"},
+		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false unresolved-relations=0"},
 		{chatwork.TaskMessagesSend, "created message-ref=100 room-ref=42"},
 		{chatwork.TaskMessagesMarkRead, "marked-read unread=0 mentions=0"},
 		{chatwork.TaskMessagesMarkUnread, "marked-unread unread=0 mentions=0"},
@@ -717,7 +719,7 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				}
 				return result
 			}(),
-			wantLine:  `messages room-ref=42 count=1 window=recent limit=100 complete=false unresolved-relations=0`,
+			wantLine:  `messages room-ref=42 count=1 window=recent source-limit=100 complete=false unresolved-relations=0`,
 			forbidden: []string{"coverage ", "kind=", "description=", "positive-limit-description-canary"},
 		},
 	}
@@ -957,7 +959,7 @@ func TestRenderNamesMessageWindowWithoutProviderCoverageKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(got, "messages room-ref=42 count=1 window=changes limit=100 complete=false") || strings.Contains(got, "differential_window") {
+	if !strings.HasPrefix(got, "messages room-ref=42 count=1 window=changes source-limit=100 complete=false") || strings.Contains(got, "differential_window") {
 		t.Fatalf("message window was not task-oriented:\n%s", got)
 	}
 

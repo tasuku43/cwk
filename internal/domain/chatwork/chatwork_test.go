@@ -241,8 +241,8 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 
 	results := []Result{
 		{Task: TaskAccountShow, Account: &Account{Ref: account}},
-		{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
-		{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
+		{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
+		{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{
 			Ref: message, Room: room, Sender: Account{Ref: account},
 			Reply: &Relation{Kind: "reply"}, Quotes: []Relation{{Kind: "quote"}},
 		}}},
@@ -265,7 +265,7 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 
 func TestMessageListRequiresExactRoomScopeEvenWhenEmpty(t *testing.T) {
 	room := Reference{Kind: ReferenceRoom, Value: "1"}
-	valid := Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{}}
+	valid := Result{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{}}
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("empty scoped message window failed: %v", err)
 	}
@@ -293,7 +293,7 @@ func TestMessageListBindsEveryMessageAndRequestToExactRoom(t *testing.T) {
 	otherRoom := Reference{Kind: ReferenceRoom, Value: "2"}
 	message := Reference{Kind: ReferenceMessage, Value: "3"}
 	account := Reference{Kind: ReferenceAccount, Value: "4"}
-	valid := Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
+	valid := Result{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{
 		Ref: message, Room: room, Sender: Account{Ref: account},
 	}}}
 	if err := valid.ValidateFor(Request{Task: TaskMessagesList, Room: room}); err != nil {
@@ -384,6 +384,7 @@ func TestResultValidatesFilteredMessageSelection(t *testing.T) {
 		{Kind: ReferenceAccount, Value: "7"},
 		{Kind: ReferenceAccount, Value: "8"},
 	}
+	withoutContext.MessageSelection.CandidateCount = 2
 	withoutContext.MessageSelection.AnchorSequences = []int{2, 4}
 	if err := withoutContext.Validate(); err != nil {
 		t.Fatalf("valid context-free selection failed: %v", err)
@@ -392,6 +393,7 @@ func TestResultValidatesFilteredMessageSelection(t *testing.T) {
 	empty := validFilteredMessageResult()
 	empty.Messages = []Message{}
 	empty.MessageSelection.SourceCount = 0
+	empty.MessageSelection.CandidateCount = 0
 	empty.MessageSelection.SourceSequences = []int{}
 	empty.MessageSelection.AnchorSequences = []int{}
 	if err := empty.Validate(); err != nil {
@@ -513,6 +515,7 @@ func TestFilteredMessageSelectionBindsExactlyToRequest(t *testing.T) {
 	ordered := validFilteredMessageResult()
 	second := Reference{Kind: ReferenceAccount, Value: "8"}
 	ordered.MessageSelection.Filter.Senders = append(ordered.MessageSelection.Filter.Senders, second)
+	ordered.MessageSelection.CandidateCount = 2
 	ordered.MessageSelection.AnchorSequences = []int{2, 4}
 	orderedRequest := request
 	orderedRequest.MessageFilter = ordered.MessageSelection.Filter
@@ -543,8 +546,9 @@ func validFilteredMessageResult() Result {
 			},
 		},
 		MessageSelection: &MessageSelection{
-			Filter:      MessageFilter{Senders: []Reference{sender}, Context: MessageContextReplies},
-			SourceCount: 4, SourceSequences: []int{2, 4}, AnchorSequences: []int{2},
+			Filter:         MessageFilter{Senders: []Reference{sender}, Context: MessageContextReplies},
+			SourceCount:    4,
+			CandidateCount: 1, SourceSequences: []int{2, 4}, AnchorSequences: []int{2},
 		},
 	}
 }

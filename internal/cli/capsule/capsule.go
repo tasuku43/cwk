@@ -201,12 +201,21 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 
 	fmt.Fprintf(output, "messages room-ref=%s count=%d window=%s", ref(room), len(messages), window)
 	if coverage.Limit > 0 {
-		fmt.Fprintf(output, " limit=%d", coverage.Limit)
+		fmt.Fprintf(output, " source-limit=%d", coverage.Limit)
 	}
 	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
 	if selection != nil {
-		line(output, "selection source-count=%d senders=%s context=%s anchors=%s",
-			selection.SourceCount, bracketedReferences(selection.Filter.Senders), string(selection.Filter.Context), bracketedSequences(selection.AnchorSequences))
+		fmt.Fprintf(output, "selection source-count=%d", selection.SourceCount)
+		if selection.Filter.Limit > 0 {
+			fmt.Fprintf(output, " candidate-count=%d limit=%d", selection.CandidateCount, selection.Filter.Limit)
+		}
+		if len(selection.Filter.Senders) > 0 {
+			fmt.Fprintf(output, " senders=%s", bracketedReferences(selection.Filter.Senders))
+		}
+		if len(selection.Filter.Senders) > 0 || selection.Filter.Context == chatwork.MessageContextReplies {
+			fmt.Fprintf(output, " context=%s", string(selection.Filter.Context))
+		}
+		fmt.Fprintf(output, " anchors=%s\n", bracketedSequences(selection.AnchorSequences))
 	}
 	line(output, "external-text=untrusted escaped")
 	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"")

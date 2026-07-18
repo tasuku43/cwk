@@ -108,13 +108,20 @@ type MessageContext string
 const (
 	MessageContextNone    MessageContext = "none"
 	MessageContextReplies MessageContext = "replies"
+
+	// MaxMessageSelectionLimit matches the largest provider message window. A
+	// smaller public limit narrows primary messages only; it does not increase
+	// or page beyond this fixed source bound.
+	MaxMessageSelectionLimit = 100
 )
 
-// MessageFilter selects messages authored by any of the exact canonical
-// accounts. Context is applied only after direct matches have been identified.
+// MessageFilter selects primary messages authored by any of the exact
+// canonical accounts, or every source message when Senders is empty. Limit
+// keeps the newest primary messages before Context adds direct reply neighbors.
 type MessageFilter struct {
 	Senders []Reference
 	Context MessageContext
+	Limit   int
 }
 
 // Request is the typed union consumed by the application task boundary.
@@ -212,9 +219,12 @@ func (r Request) Validate() error {
 }
 
 func validateMessageFilter(filter MessageFilter) error {
-	if len(filter.Senders) == 0 {
+	if filter.Limit < 0 || filter.Limit > MaxMessageSelectionLimit {
+		return fmt.Errorf("message selection limit must be between 1 and %d when present", MaxMessageSelectionLimit)
+	}
+	if len(filter.Senders) == 0 && filter.Limit == 0 {
 		if filter.Context != "" {
-			return fmt.Errorf("message context requires at least one sender filter")
+			return fmt.Errorf("message context requires a sender filter or message limit")
 		}
 		return nil
 	}
@@ -241,7 +251,7 @@ func validateMessageFilter(filter MessageFilter) error {
 }
 
 func messageFilterActive(filter MessageFilter) bool {
-	return len(filter.Senders) > 0 || filter.Context != ""
+	return len(filter.Senders) > 0 || filter.Context != "" || filter.Limit > 0
 }
 
 func (t Task) Valid() bool {
@@ -421,6 +431,7 @@ type Coverage struct {
 type MessageSelection struct {
 	Filter          MessageFilter
 	SourceCount     int
+	CandidateCount  int
 	SourceSequences []int
 	AnchorSequences []int
 }
@@ -655,6 +666,15 @@ func (r Result) validateVariantFacts() error {
 			if err := validateResultReference("message window room", r.MessageRoom, ReferenceRoom, false); err != nil {
 				return err
 			}
+			if r.Coverage.Limit <= 0 {
+				return fmt.Errorf("Chatwork message window requires a positive source limit")
+			}
+			if r.Coverage.Limit > MaxMessageSelectionLimit {
+				return fmt.Errorf("Chatwork message window exceeds the provider source-limit contract")
+			}
+			if len(r.Messages) > r.Coverage.Limit {
+				return fmt.Errorf("Chatwork message window exceeds its declared source limit")
+			}
 		}
 		for index, message := range r.Messages {
 			if err := validateResultMessage(fmt.Sprintf("message[%d]", index), message); err != nil {
@@ -748,6 +768,12 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 	if selection.SourceCount < len(messages) || selection.SourceCount > coverage.Limit {
 		return fmt.Errorf("Chatwork message selection source count is outside its declared bound")
 	}
+	if selection.CandidateCount < 0 || selection.CandidateCount > selection.SourceCount {
+		return fmt.Errorf("Chatwork message selection candidate count is outside its source window")
+	}
+	if len(selection.Filter.Senders) == 0 && selection.CandidateCount != selection.SourceCount {
+		return fmt.Errorf("Chatwork message selection without senders must consider every source message")
+	}
 	if selection.SourceSequences == nil || selection.AnchorSequences == nil {
 		return fmt.Errorf("Chatwork message selection provenance must be explicit")
 	}
@@ -775,6 +801,13 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 		previous = sequence
 		anchorSet[sequence] = struct{}{}
 	}
+	wantAnchors := selection.CandidateCount
+	if selection.Filter.Limit > 0 && wantAnchors > selection.Filter.Limit {
+		wantAnchors = selection.Filter.Limit
+	}
+	if len(selection.AnchorSequences) != wantAnchors {
+		return fmt.Errorf("Chatwork message selection anchor count does not match its candidate limit")
+	}
 	if selection.Filter.Context == MessageContextNone && !equalSequences(selection.AnchorSequences, selection.SourceSequences) {
 		return fmt.Errorf("Chatwork message selection without context must mark every displayed message as an anchor")
 	}
@@ -788,7 +821,7 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 	for index, message := range messages {
 		_, senderMatches := senderSet[message.Sender.Ref]
 		_, markedAnchor := anchorSet[selection.SourceSequences[index]]
-		if senderMatches != markedAnchor {
+		if markedAnchor && len(senderSet) > 0 && !senderMatches {
 			return fmt.Errorf("Chatwork message selection anchor does not match its sender filter")
 		}
 		if markedAnchor {
@@ -834,7 +867,7 @@ func equalSequences(left, right []int) bool {
 }
 
 func equalMessageFilters(left, right MessageFilter) bool {
-	if left.Context != right.Context || len(left.Senders) != len(right.Senders) {
+	if left.Context != right.Context || left.Limit != right.Limit || len(left.Senders) != len(right.Senders) {
 		return false
 	}
 	for index := range left.Senders {
