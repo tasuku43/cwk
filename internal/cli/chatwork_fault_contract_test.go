@@ -139,7 +139,7 @@ func TestChatworkOAuthLifecycleFaultsMatchReachablePhases(t *testing.T) {
 		if _, exists := byPath["auth login"][code]; !exists {
 			t.Errorf("auth login is missing phase fault %s", code)
 		}
-		for _, path := range []string{"auth profiles", "auth status", "auth logout"} {
+		for _, path := range []string{"auth status", "auth logout"} {
 			if _, exists := byPath[path][code]; exists {
 				t.Errorf("%s advertises login-only fault %s", path, code)
 			}

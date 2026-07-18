@@ -198,11 +198,13 @@ func chatworkBase(path, summary, args string, effect operation.Effect, role Comm
 func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mutation bool) []CommandError {
 	help := "help " + path
 	retry := path
+	authLogin := "auth login"
 	if mutation {
 		// Mutation recovery never suggests replaying a write. Even failures that
 		// are retryable at the fault level route through scoped help; uncertain
 		// outcomes use the exact read-only reconciliation task below.
 		retry = help
+		authLogin = "help auth login"
 	}
 	errors := []CommandError{
 		declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, help, "Correct the declared command inputs."),
@@ -213,22 +215,23 @@ func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mu
 		declaredCommandError(fault.KindContract, "chatwork_result_mismatch", false, help, "Repair the typed Chatwork adapter result contract."),
 		declaredCommandError(fault.KindAuthentication, "invalid_authentication_binding", false, help, "Re-establish the configured Chatwork authentication."),
 		declaredCommandError(fault.KindInternal, "unclassified_chatwork_error", false, help, "Inspect the Chatwork adapter classification."),
-		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_missing", false, "auth profiles", "Select exactly one documented Chatwork authentication method."),
-		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_invalid", false, "auth profiles", "Select exactly pat or oauth2 without fallback."),
+		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_missing", false, authLogin, "Establish the single-account OAuth selection or explicitly select PAT."),
+		declaredCommandError(fault.KindAuthentication, "chatwork_auth_method_invalid", false, "help auth login", "Select exactly pat or oauth2 without fallback."),
 		declaredCommandError(fault.KindInvalidInput, "chatwork_invalid_request", false, help, "Correct the task inputs accepted by Chatwork."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_token_missing", false, help, "Set CWK_API_TOKEN for this command process."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_token_invalid", false, help, "Replace CWK_API_TOKEN with a valid process-local token."),
-		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_missing", false, "help auth login", "Set the documented public-client ID and redirect URI configuration."),
-		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_invalid", false, "help auth login", "Correct the documented public-client ID and redirect URI configuration."),
+		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_missing", false, "help auth login", "Pass the public client ID on first login."),
+		declaredCommandError(fault.KindInvalidInput, "oauth_client_configuration_invalid", false, "help auth login", "Correct or remove the stored public-client configuration."),
+		declaredCommandError(fault.KindUnavailable, "oauth_public_configuration_unavailable", true, "auth status", "Restore access to the platform user configuration."),
 		declaredCommandError(fault.KindInvalidInput, "oauth_configuration_invalid", false, "help auth login", "Correct the fixed public-client OAuth configuration."),
-		declaredCommandError(fault.KindAuthentication, "oauth_credential_missing", false, "auth profiles", "Discover the OAuth profile and establish it before retrying the API task."),
-		declaredCommandError(fault.KindUnavailable, "oauth_credential_store_unavailable", true, "auth status", "Inspect the profile after operating-system credential access is restored."),
-		declaredCommandError(fault.KindAuthentication, "oauth_refresh_failed", false, "auth status", "Inspect and then re-establish the exact OAuth profile."),
+		declaredCommandError(fault.KindAuthentication, "oauth_credential_missing", false, authLogin, "Establish OAuth authentication before retrying the API task."),
+		declaredCommandError(fault.KindUnavailable, "oauth_credential_store_unavailable", true, "auth status", "Inspect authentication after operating-system credential access is restored."),
+		declaredCommandError(fault.KindAuthentication, "oauth_refresh_failed", false, "auth status", "Inspect and then re-establish OAuth authentication."),
 		declaredCommandError(fault.KindContract, "oauth_credential_too_large", false, "help auth status", "Review provider token growth against the fixed credential-store bound."),
 		declaredCommandError(fault.KindContract, "oauth_identity_request_invalid", false, "help auth status", "Repair the fixed OAuth identity-verification request contract."),
-		declaredCommandError(fault.KindUnavailable, "oauth_identity_verification_unavailable", true, "auth status", "Inspect the profile after Chatwork identity verification becomes available."),
+		declaredCommandError(fault.KindUnavailable, "oauth_identity_verification_unavailable", true, "auth status", "Inspect authentication after Chatwork identity verification becomes available."),
 		declaredCommandError(fault.KindContract, "oauth_identity_response_invalid", false, "help auth status", "Review Chatwork identity schema drift before using the credential."),
-		declaredCommandError(fault.KindAuthentication, "oauth_identity_verification_failed", false, "auth status", "Inspect and then re-establish the exact OAuth profile."),
+		declaredCommandError(fault.KindAuthentication, "oauth_identity_verification_failed", false, "auth status", "Inspect and then re-establish OAuth authentication."),
 		declaredCommandError(fault.KindAuthentication, "chatwork_authentication_failed", false, help, "Replace the configured Chatwork token."),
 		declaredCommandError(fault.KindPermission, "chatwork_permission_denied", false, help, "Use an account permitted to perform this task."),
 		declaredCommandError(fault.KindNotFound, "chatwork_not_found", false, help, "Rediscover a current canonical reference."),

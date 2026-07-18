@@ -10,10 +10,9 @@ import (
 	"time"
 
 	"github.com/tasuku43/cwk/internal/app/chatworkauthcmd"
-	"github.com/tasuku43/cwk/internal/infra/chatworkoauth"
 )
 
-var _ chatworkauthcmd.ManagerPort = (*chatworkoauth.Manager)(nil)
+var _ chatworkauthcmd.ManagerPort = (*chatworkOAuthManager)(nil)
 
 type authManagerStub struct {
 	loginStatus chatworkauthcmd.CredentialStatus
@@ -26,16 +25,30 @@ type authManagerStub struct {
 	logoutCalls int
 	callback    string
 	consentURL  string
+	clientID    string
 }
 
-func (m *authManagerStub) Login(ctx context.Context, receive chatworkauthcmd.RedirectReceiver) (chatworkauthcmd.CredentialStatus, error) {
+type authBrowserStub struct {
+	err   error
+	calls int
+	url   string
+}
+
+func (s *authBrowserStub) Open(_ context.Context, raw string) error {
+	s.calls++
+	s.url = raw
+	return s.err
+}
+
+func (m *authManagerStub) Login(ctx context.Context, clientID string, receive chatworkauthcmd.RedirectReceiver) (chatworkauthcmd.CredentialStatus, error) {
 	m.loginCalls++
+	m.clientID = clientID
 	if m.loginErr != nil {
 		return chatworkauthcmd.CredentialStatus{}, m.loginErr
 	}
 	consent := m.consentURL
 	if consent == "" {
-		consent = "https://www.chatwork.example/consent?opaque=transient"
+		consent = "https://www.chatwork.com/packages/oauth2/login.php?opaque=transient"
 	}
 	callback, err := receive(ctx, consent)
 	m.callback = callback
@@ -72,43 +85,43 @@ func TestAuthHandlersAreAttachedFromCatalogSpecs(t *testing.T) {
 	}
 }
 
-func TestAuthProfilesRendersDeterministicSecretFreeDiscovery(t *testing.T) {
-	command, stdout, stderr := newAuthCLI("", &authManagerStub{})
-	if code := command.RunContext(context.Background(), []string{"auth", "profiles"}); code != ExitOK {
-		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
-	}
-	want := "cwk-auth-profiles/1\n" +
-		"profile_ref: cwk_chatwork_oauth_public_v1\n" +
-		"method: oauth2\n" +
-		"api_selector: CWK_AUTH_METHOD\n" +
-		"allowed_api_methods: pat,oauth2\n" +
-		"callback_model: authorization_code_pkce_s256_manual_callback\n" +
-		"credential_storage: operating_system\n"
-	if stdout.String() != want || stderr.Len() != 0 {
-		t.Fatalf("stdout/stderr = %q / %q", stdout.String(), stderr.String())
-	}
-}
-
 func TestAuthLoginUsesTransientConsentAndNeverRendersCallback(t *testing.T) {
 	const callback = "cwk://oauth/callback?code=authorization-code-canary&state=state-canary"
 	expires := time.Unix(1_800_000_000, 0).UTC()
 	manager := &authManagerStub{loginStatus: chatworkauthcmd.CredentialStatus{Authenticated: true, ExpiresAt: expires}}
 	command, stdout, stderr := newAuthCLI(callback+"\n", manager)
-	args := []string{"auth", "login", "--profile", "cwk_chatwork_oauth_public_v1"}
+	args := []string{"auth", "login", "--client-id", "public-client"}
 	if code := command.RunContext(context.Background(), args); code != ExitOK {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
 	}
-	if manager.loginCalls != 1 || manager.callback != callback {
-		t.Fatalf("login calls/callback = %d/%q", manager.loginCalls, manager.callback)
+	if manager.loginCalls != 1 || manager.clientID != "public-client" || manager.callback != callback {
+		t.Fatalf("login calls/client/callback = %d/%q/%q", manager.loginCalls, manager.clientID, manager.callback)
 	}
-	want := "cwk-auth-profile/1\nprofile_ref: cwk_chatwork_oauth_public_v1\nmethod: oauth2\nstatus: ready\nexpires_at: 1800000000\n"
+	want := "cwk-auth/1\nmethod: oauth2\nstatus: ready\nexpires_at: 1800000000\n"
 	if stdout.String() != want {
 		t.Fatalf("stdout = %q", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "authorization-code-canary") || strings.Contains(stderr.String(), "authorization-code-canary") || strings.Contains(stdout.String(), "state-canary") || strings.Contains(stderr.String(), "state-canary") {
 		t.Fatal("callback code or state was rendered")
 	}
-	if !strings.Contains(stderr.String(), "authorization_url: https://www.chatwork.example/consent?opaque=transient\ncallback_url: ") {
+	if !strings.Contains(stderr.String(), "browser_opened: false\nauthorization_url: https://www.chatwork.com/packages/oauth2/login.php?opaque=transient\ncallback_url: ") {
+		t.Fatalf("stderr = %q", stderr.String())
+	}
+}
+
+func TestAuthLoginOpensBrowserAndDoesNotRequireAuthorizationURLCopy(t *testing.T) {
+	callback := "cwk://oauth/callback?code=synthetic&state=synthetic"
+	manager := &authManagerStub{loginStatus: chatworkauthcmd.CredentialStatus{Authenticated: true, ExpiresAt: time.Unix(1_800_000_000, 0)}}
+	command, _, stderr := newAuthCLI(callback+"\n", manager)
+	opener := &authBrowserStub{}
+	command.authBrowser = opener
+	if code := command.RunContext(context.Background(), []string{"auth", "login", "--client-id", "public-client"}); code != ExitOK {
+		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+	}
+	if opener.calls != 1 || opener.url != manager.consentURL && !strings.Contains(opener.url, "www.chatwork.com/packages/oauth2/login.php") {
+		t.Fatalf("opener calls/url = %d/%q", opener.calls, opener.url)
+	}
+	if strings.Contains(stderr.String(), "authorization_url:") || !strings.Contains(stderr.String(), "browser_opened: true\ncallback_url: ") {
 		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
@@ -117,8 +130,7 @@ func TestAuthStatusAndLogoutRenderBoundedFacts(t *testing.T) {
 	expires := time.Unix(1_800_000_000, 0).UTC()
 	manager := &authManagerStub{status: chatworkauthcmd.CredentialStatus{ExpiresAt: expires}}
 	command, stdout, stderr := newAuthCLI("", manager)
-	profile := "cwk_chatwork_oauth_public_v1"
-	if code := command.RunContext(context.Background(), []string{"auth", "status", "--profile=" + profile}); code != ExitOK {
+	if code := command.RunContext(context.Background(), []string{"auth", "status"}); code != ExitOK {
 		t.Fatalf("status exit = %d, stderr = %q", code, stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "status: expired\nexpires_at: 1800000000\n") || manager.statusCalls != 1 {
@@ -126,21 +138,21 @@ func TestAuthStatusAndLogoutRenderBoundedFacts(t *testing.T) {
 	}
 
 	command, stdout, stderr = newAuthCLI("", manager)
-	if code := command.RunContext(context.Background(), []string{"auth", "logout", "--profile", profile}); code != ExitOK {
+	if code := command.RunContext(context.Background(), []string{"auth", "logout"}); code != ExitOK {
 		t.Fatalf("logout exit = %d, stderr = %q", code, stderr.String())
 	}
-	want := "cwk-auth-logout/1\nprofile_ref: cwk_chatwork_oauth_public_v1\nacknowledged: true\nremote_revocation: false\n"
+	want := "cwk-auth-logout/1\nacknowledged: true\nremote_revocation: false\n"
 	if stdout.String() != want || manager.logoutCalls != 1 {
 		t.Fatalf("logout stdout/calls = %q/%d", stdout.String(), manager.logoutCalls)
 	}
 }
 
-func TestAuthInvalidReferenceMakesZeroManagerCalls(t *testing.T) {
+func TestAuthInvalidClientIDMakesZeroManagerCalls(t *testing.T) {
 	manager := &authManagerStub{}
 	command, stdout, stderr := newAuthCLI("", manager)
-	code := command.RunContext(context.Background(), []string{"auth", "logout", "--profile", "oauth2"})
-	if code != ExitUsage || stdout.Len() != 0 || manager.logoutCalls != 0 {
-		t.Fatalf("exit/stdout/calls = %d/%q/%d", code, stdout.String(), manager.logoutCalls)
+	code := command.RunContext(context.Background(), []string{"auth", "login", "--client-id", " invalid"})
+	if code != ExitUsage || stdout.Len() != 0 || manager.loginCalls != 0 {
+		t.Fatalf("exit/stdout/calls = %d/%q/%d", code, stdout.String(), manager.loginCalls)
 	}
 	if !strings.Contains(stderr.String(), "code: invalid_arguments") {
 		t.Fatalf("stderr = %q", stderr.String())
@@ -150,7 +162,7 @@ func TestAuthInvalidReferenceMakesZeroManagerCalls(t *testing.T) {
 func TestAuthLoginBoundsCallbackBeforeManagerCanUseIt(t *testing.T) {
 	manager := &authManagerStub{loginStatus: chatworkauthcmd.CredentialStatus{Authenticated: true, ExpiresAt: time.Unix(1_800_000_000, 0)}}
 	command, stdout, stderr := newAuthCLI(strings.Repeat("x", maxOAuthCallbackBytes+1)+"\n", manager)
-	code := command.RunContext(context.Background(), []string{"auth", "login", "--profile", "cwk_chatwork_oauth_public_v1"})
+	code := command.RunContext(context.Background(), []string{"auth", "login", "--client-id", "public-client"})
 	if code != ExitAuthentication || stdout.Len() != 0 || manager.loginCalls != 1 || manager.callback != "" {
 		t.Fatalf("exit/stdout/calls/callback = %d/%q/%d/%q", code, stdout.String(), manager.loginCalls, manager.callback)
 	}
@@ -162,7 +174,7 @@ func TestAuthLoginBoundsCallbackBeforeManagerCanUseIt(t *testing.T) {
 func TestAuthRawMutationFailureBecomesReadOnlyReconciliation(t *testing.T) {
 	manager := &authManagerStub{loginErr: errors.New("token-and-code-canary")}
 	command, stdout, stderr := newAuthCLI("", manager)
-	code := command.RunContext(context.Background(), []string{"auth", "login", "--profile", "cwk_chatwork_oauth_public_v1"})
+	code := command.RunContext(context.Background(), []string{"auth", "login", "--client-id", "public-client"})
 	if code != ExitContract || stdout.Len() != 0 || manager.loginCalls != 1 {
 		t.Fatalf("exit/stdout/calls = %d/%q/%d", code, stdout.String(), manager.loginCalls)
 	}

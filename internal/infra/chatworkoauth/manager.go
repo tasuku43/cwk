@@ -14,7 +14,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -33,8 +32,6 @@ import (
 const (
 	AuthorizationEndpoint = "https://www.chatwork.com/packages/oauth2/login.php"
 	TokenEndpoint         = "https://oauth.chatwork.com/token" // #nosec G101 -- fixed public provider endpoint, not token material.
-	ClientIDEnvironment   = "CWK_OAUTH_CLIENT_ID"
-	RedirectEnvironment   = "CWK_OAUTH_REDIRECT_URI"
 
 	AccountEndpoint        = "https://api.chatwork.com/v2/me"
 	identityRequestTimeout = 20 * time.Second
@@ -85,24 +82,14 @@ func New(config Config, store Store) (*Manager, error) {
 	return newManager(config, store, AuthorizationEndpoint, TokenEndpoint, productionTokenClient(), time.Now, rand.Reader)
 }
 
-// NewLifecycle constructs the store-only profile lifecycle. Status and Logout
-// remain available after client registration environment variables are
-// removed; Login and credential use still fail closed without New.
+// NewLifecycle constructs the store-only credential lifecycle. Status and
+// Logout do not require public client registration metadata; Login and
+// credential use still fail closed without New.
 func NewLifecycle(store Store) (*Manager, error) {
 	if isNilStore(store) {
 		return nil, oauthFault(fault.KindContract, "oauth_credential_store_missing", "Chatwork OAuth credential store is not configured", false)
 	}
 	return &Manager{store: store, http: productionTokenClient(), now: time.Now, random: rand.Reader}, nil
-}
-
-// NewFromEnvironment reads only non-secret public registration metadata. The
-// access and refresh tokens remain in the supplied credential store.
-func NewFromEnvironment(store Store) (*Manager, error) {
-	return New(Config{
-		ClientID:    os.Getenv(ClientIDEnvironment),
-		RedirectURI: os.Getenv(RedirectEnvironment),
-		Scopes:      RequiredScopes(),
-	}, store)
 }
 
 // RequiredScopes returns the fixed public-client scopes needed by the complete

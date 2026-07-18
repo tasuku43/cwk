@@ -9,85 +9,52 @@ import (
 )
 
 const (
-	// OAuthProfileReferenceKind joins profile discovery to every action without
-	// exposing a credential or accepting a reconstructed method name.
-	OAuthProfileReferenceKind = "chatwork-oauth-profile"
-
-	// PublicClientProfileReference is the one fixed profile supported by the
-	// first implementation. It is an opaque workflow value, not a store key.
-	PublicClientProfileReference = "cwk_chatwork_oauth_public_v1"
+	// TargetKind and TargetStableID identify the one tool-owned authentication
+	// target. They are policy identity, never a credential-store key or token.
+	TargetKind     = "chatwork-authentication"
+	TargetStableID = "single-account"
 )
 
 // Task names authentication outcomes rather than OAuth protocol endpoints.
 type Task string
 
 const (
-	TaskProfilesList Task = "auth.profiles.list"
-	TaskLogin        Task = "auth.login"
-	TaskStatus       Task = "auth.status"
-	TaskLogout       Task = "auth.logout"
+	TaskLogin  Task = "auth.login"
+	TaskStatus Task = "auth.status"
+	TaskLogout Task = "auth.logout"
 )
 
 func (t Task) Valid() bool {
 	switch t {
-	case TaskProfilesList, TaskLogin, TaskStatus, TaskLogout:
+	case TaskLogin, TaskStatus, TaskLogout:
 		return true
 	default:
 		return false
 	}
 }
 
-// ProfileReference preserves the exact discovery value accepted by login,
-// status, and logout. It does not identify an OS credential-store entry.
-type ProfileReference struct {
-	value string
-}
-
-func NewProfileReference(value string) (ProfileReference, error) {
-	if err := ValidateProfileReference(value); err != nil {
-		return ProfileReference{}, err
-	}
-	return ProfileReference{value: value}, nil
-}
-
-func ValidateProfileReference(value string) error {
-	if value != PublicClientProfileReference {
-		return fmt.Errorf("Chatwork OAuth profile reference is not a supported exact value")
-	}
-	return nil
-}
-
-func (r ProfileReference) Value() string {
-	return r.value
-}
-
-func (r ProfileReference) Valid() bool {
-	return ValidateProfileReference(r.value) == nil
-}
-
-// ProfileState is a deliberately reduced, secret-free credential projection.
-type ProfileState string
+// State is a deliberately reduced, secret-free credential projection.
+type State string
 
 const (
-	ProfileStateUnconfigured ProfileState = "unconfigured"
-	ProfileStateReady        ProfileState = "ready"
-	ProfileStateExpired      ProfileState = "expired"
+	StateUnconfigured State = "unconfigured"
+	StateReady        State = "ready"
+	StateExpired      State = "expired"
 )
 
-func (s ProfileState) Valid() bool {
+func (s State) Valid() bool {
 	switch s {
-	case ProfileStateUnconfigured, ProfileStateReady, ProfileStateExpired:
+	case StateUnconfigured, StateReady, StateExpired:
 		return true
 	default:
 		return false
 	}
 }
 
-// Profile is safe to render. Expiry is provider-advertised metadata only.
-type Profile struct {
-	Ref       ProfileReference
+// Summary is safe to render. Expiry is provider-advertised metadata only.
+type Summary struct {
 	Method    string
-	State     ProfileState
+	State     State
 	ExpiresAt int64
 }
 
@@ -98,21 +65,18 @@ type CredentialStatus struct {
 	ExpiresAt     time.Time
 }
 
-func (p Profile) Validate() error {
-	if !p.Ref.Valid() {
-		return fmt.Errorf("Chatwork OAuth profile reference is missing or invalid")
+func (s Summary) Validate() error {
+	if s.Method != "oauth2" {
+		return fmt.Errorf("Chatwork authentication method must be oauth2")
 	}
-	if p.Method != "oauth2" {
-		return fmt.Errorf("Chatwork OAuth profile method must be oauth2")
+	if !s.State.Valid() {
+		return fmt.Errorf("Chatwork authentication state is missing or invalid")
 	}
-	if !p.State.Valid() {
-		return fmt.Errorf("Chatwork OAuth profile state is missing or invalid")
+	if s.ExpiresAt < 0 {
+		return fmt.Errorf("Chatwork authentication expiry must not be negative")
 	}
-	if p.ExpiresAt < 0 {
-		return fmt.Errorf("Chatwork OAuth profile expiry must not be negative")
-	}
-	if p.State == ProfileStateUnconfigured && p.ExpiresAt != 0 {
-		return fmt.Errorf("an unconfigured Chatwork OAuth profile cannot declare expiry")
+	if s.State == StateUnconfigured && s.ExpiresAt != 0 {
+		return fmt.Errorf("unconfigured Chatwork authentication cannot declare expiry")
 	}
 	return nil
 }

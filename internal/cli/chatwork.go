@@ -46,8 +46,8 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 		return executeErr
 	}
 	authenticated := func(actionContext context.Context) error {
-		if c.chatworkInitErr != nil {
-			return c.chatworkInitErr
+		if err := c.ensureChatwork(actionContext); err != nil {
+			return err
 		}
 		requirement := domainauthn.Requirement{}
 		if command.Agent.Authentication != nil {

@@ -21,10 +21,12 @@ type managerStub struct {
 	logoutCalls  int
 	receivedURL  string
 	callbackSeen string
+	clientID     string
 }
 
-func (m *managerStub) Login(ctx context.Context, receive RedirectReceiver) (CredentialStatus, error) {
+func (m *managerStub) Login(ctx context.Context, clientID string, receive RedirectReceiver) (CredentialStatus, error) {
 	m.loginCalls++
+	m.clientID = clientID
 	if m.loginErr != nil {
 		return CredentialStatus{}, m.loginErr
 	}
@@ -48,22 +50,13 @@ func (m *managerStub) Logout(context.Context) error {
 
 type typedNilManager struct{}
 
-func (*typedNilManager) Login(context.Context, RedirectReceiver) (CredentialStatus, error) {
+func (*typedNilManager) Login(context.Context, string, RedirectReceiver) (CredentialStatus, error) {
 	panic("typed nil manager called")
 }
 func (*typedNilManager) Status(context.Context) (CredentialStatus, error) {
 	panic("typed nil manager called")
 }
 func (*typedNilManager) Logout(context.Context) error { panic("typed nil manager called") }
-
-func exactRef(t *testing.T) chatworkauth.ProfileReference {
-	t.Helper()
-	ref, err := chatworkauth.NewProfileReference(chatworkauth.PublicClientProfileReference)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return ref
-}
 
 func assertFault(t *testing.T, err error, kind fault.Kind, code string) {
 	t.Helper()
@@ -73,35 +66,21 @@ func assertFault(t *testing.T, err error, kind fault.Kind, code string) {
 	}
 }
 
-func TestProfilesIsDeterministicAndDoesNotTouchManager(t *testing.T) {
-	manager := &managerStub{}
-	profiles, err := New(manager).Profiles(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(profiles) != 1 || profiles[0].Ref.Value() != chatworkauth.PublicClientProfileReference || profiles[0].Method != "oauth2" {
-		t.Fatalf("profiles = %+v", profiles)
-	}
-	if manager.loginCalls+manager.statusCalls+manager.logoutCalls != 0 {
-		t.Fatal("profile discovery accessed the private manager")
-	}
-}
-
-func TestLoginPassesReceiverAndReturnsSecretFreeReadyProfile(t *testing.T) {
+func TestLoginPassesPublicClientIDAndReceiverAndReturnsSecretFreeReadySummary(t *testing.T) {
 	expires := time.Unix(1_800_000_000, 0).UTC()
 	manager := &managerStub{loginStatus: CredentialStatus{Authenticated: true, ExpiresAt: expires}}
-	profile, err := New(manager).Login(context.Background(), exactRef(t), func(_ context.Context, url string) (string, error) {
+	summary, err := New(manager).Login(context.Background(), "public-client", func(_ context.Context, url string) (string, error) {
 		manager.receivedURL = url
 		return "cwk://oauth/callback?opaque=private", nil
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if manager.loginCalls != 1 || manager.receivedURL == "" || manager.callbackSeen == "" {
-		t.Fatalf("manager calls/url/callback = %d/%q/%q", manager.loginCalls, manager.receivedURL, manager.callbackSeen)
+	if manager.loginCalls != 1 || manager.clientID != "public-client" || manager.receivedURL == "" || manager.callbackSeen == "" {
+		t.Fatalf("manager calls/client/url/callback = %d/%q/%q/%q", manager.loginCalls, manager.clientID, manager.receivedURL, manager.callbackSeen)
 	}
-	if profile.State != chatworkauth.ProfileStateReady || profile.ExpiresAt != expires.Unix() || profile.Method != "oauth2" {
-		t.Fatalf("profile = %+v", profile)
+	if summary.State != chatworkauth.StateReady || summary.ExpiresAt != expires.Unix() || summary.Method != "oauth2" {
+		t.Fatalf("summary = %+v", summary)
 	}
 }
 
@@ -110,21 +89,21 @@ func TestStatusDistinguishesUnconfiguredExpiredAndReady(t *testing.T) {
 	for _, test := range []struct {
 		name   string
 		status CredentialStatus
-		state  chatworkauth.ProfileState
+		state  chatworkauth.State
 		expiry int64
 	}{
-		{name: "unconfigured", state: chatworkauth.ProfileStateUnconfigured},
-		{name: "expired", status: CredentialStatus{ExpiresAt: expires}, state: chatworkauth.ProfileStateExpired, expiry: expires.Unix()},
-		{name: "ready", status: CredentialStatus{Authenticated: true, ExpiresAt: expires}, state: chatworkauth.ProfileStateReady, expiry: expires.Unix()},
+		{name: "unconfigured", state: chatworkauth.StateUnconfigured},
+		{name: "expired", status: CredentialStatus{ExpiresAt: expires}, state: chatworkauth.StateExpired, expiry: expires.Unix()},
+		{name: "ready", status: CredentialStatus{Authenticated: true, ExpiresAt: expires}, state: chatworkauth.StateReady, expiry: expires.Unix()},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			manager := &managerStub{status: test.status}
-			profile, err := New(manager).Status(context.Background(), exactRef(t))
+			summary, err := New(manager).Status(context.Background())
 			if err != nil {
 				t.Fatal(err)
 			}
-			if profile.State != test.state || profile.ExpiresAt != test.expiry {
-				t.Fatalf("profile = %+v", profile)
+			if summary.State != test.state || summary.ExpiresAt != test.expiry {
+				t.Fatalf("summary = %+v", summary)
 			}
 		})
 	}
@@ -132,7 +111,7 @@ func TestStatusDistinguishesUnconfiguredExpiredAndReady(t *testing.T) {
 
 func TestLogoutAcknowledgesOnlyLocalRemoval(t *testing.T) {
 	manager := &managerStub{}
-	result, err := New(manager).Logout(context.Background(), exactRef(t))
+	result, err := New(manager).Logout(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,26 +120,17 @@ func TestLogoutAcknowledgesOnlyLocalRemoval(t *testing.T) {
 	}
 }
 
-func TestInvalidInputsAndMissingPortsMakeZeroManagerCalls(t *testing.T) {
+func TestMissingPortsMakeZeroManagerCalls(t *testing.T) {
 	manager := &managerStub{}
 	service := New(manager)
-	if _, err := service.Status(context.Background(), chatworkauth.ProfileReference{}); err == nil {
-		t.Fatal("invalid reference succeeded")
-	} else {
-		assertFault(t, err, fault.KindInvalidInput, "oauth_profile_reference_invalid")
-	}
-	if manager.statusCalls != 0 {
-		t.Fatal("invalid reference reached manager")
-	}
-
 	var nilManager *typedNilManager
 	typedNilService := New(nilManager)
-	if _, err := typedNilService.Status(context.Background(), exactRef(t)); err == nil {
+	if _, err := typedNilService.Status(context.Background()); err == nil {
 		t.Fatal("typed nil manager succeeded")
 	} else {
 		assertFault(t, err, fault.KindUnavailable, "oauth_credential_store_unavailable")
 	}
-	if _, err := service.Login(context.Background(), exactRef(t), nil); err == nil {
+	if _, err := service.Login(context.Background(), "public-client", nil); err == nil {
 		t.Fatal("nil receiver succeeded")
 	} else {
 		assertFault(t, err, fault.KindContract, "oauth_login_receiver_missing")
@@ -170,7 +140,7 @@ func TestInvalidInputsAndMissingPortsMakeZeroManagerCalls(t *testing.T) {
 func TestManagerFaultIsPreservedWithoutItsPrivateCause(t *testing.T) {
 	private := errors.New("access-token-canary")
 	manager := &managerStub{statusErr: fault.Wrap(fault.KindUnavailable, "oauth_credential_store_unavailable", "The OAuth credential store is unavailable.", true, private)}
-	_, err := New(manager).Status(context.Background(), exactRef(t))
+	_, err := New(manager).Status(context.Background())
 	assertFault(t, err, fault.KindUnavailable, "oauth_credential_store_unavailable")
 }
 
@@ -178,7 +148,7 @@ func TestCanceledContextMakesZeroManagerCalls(t *testing.T) {
 	manager := &managerStub{}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := New(manager).Status(ctx, exactRef(t))
+	_, err := New(manager).Status(ctx)
 	assertFault(t, err, fault.KindCanceled, "authentication_canceled")
 	if manager.statusCalls != 0 {
 		t.Fatal("canceled status reached manager")

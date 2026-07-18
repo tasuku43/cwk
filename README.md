@@ -76,34 +76,45 @@ The `doctor` task is a minimal utility slice through the domain, application, in
 
 ### Authenticate
 
-Every API task requires `CWK_AUTH_METHOD` to be exactly `pat` or `oauth2`.
-There is no credential probing or fallback.
-
 For PAT, inject `CWK_API_TOKEN` into the command process through your shell or
 secret manager, without putting the token in argv, a command literal, or a
-project file:
+project file. Select PAT explicitly for the command process:
 
 ```sh
 export CWK_AUTH_METHOD=pat
 cwk rooms list
 ```
 
-For OAuth, register a public client with a non-HTTP custom redirect URI. The
-client ID and redirect URI are non-secret configuration; no client secret is
-accepted. Discover and establish the one supported profile:
+For OAuth, register a public client with `cwk://oauth/callback` as its redirect
+URI. The first login needs the public client ID once:
 
 ```sh
-cwk auth profiles
-export CWK_OAUTH_CLIENT_ID=<public-client-id>
-export CWK_OAUTH_REDIRECT_URI=<registered-custom-uri>
-cwk auth login --profile cwk_chatwork_oauth_public_v1
+cwk auth login --client-id <public-client-id>
 ```
 
-Open the transient authorization URL written to stderr, then paste the complete
-redirected callback URL into stdin once. Tokens are stored only in the operating
-system credential store. OAuth API tasks need the same public registration
-values plus `CWK_AUTH_METHOD=oauth2`; `auth status` and `auth logout` remain
-available after those environment values are cleared.
+The command opens the authorization page in the browser when possible. After
+granting access, paste the complete `cwk://oauth/callback?...` URL into the
+waiting terminal once. If the browser cannot be opened automatically, the
+command prints the authorization URL to open manually.
+
+Later logins and reauthorization need no client ID:
+
+```sh
+cwk auth login
+```
+
+`cwk` supports one OAuth account and selects its stored configuration without a
+profile argument or OAuth environment variables. It stores only the
+authentication method, public client ID, and redirect URI in:
+
+- macOS and Linux: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/config.json`
+- Windows: `%AppData%\cwk\config.json`
+
+OAuth access and refresh tokens are stored only in the operating-system
+credential store, never in that configuration file. `cwk auth status` and
+`cwk auth logout` inspect or clear the single stored credential. Authentication
+selection is fail-closed; `cwk` does not probe one credential method and fall
+back to another.
 
 Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
 

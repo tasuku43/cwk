@@ -5,20 +5,14 @@ import (
 	"testing"
 )
 
-func TestProfileReferenceAcceptsOnlyDiscoveredExactValue(t *testing.T) {
-	ref, err := NewProfileReference(PublicClientProfileReference)
-	if err != nil || ref.Value() != PublicClientProfileReference || !ref.Valid() {
-		t.Fatalf("NewProfileReference() = (%q, %v), want exact valid reference", ref.Value(), err)
-	}
-	for _, value := range []string{"", "oauth2", "CWK_CHATWORK_OAUTH_PUBLIC_V1", PublicClientProfileReference + " ", "cwk_chatwork_oauth_public_v2"} {
-		if _, err := NewProfileReference(value); err == nil {
-			t.Errorf("NewProfileReference(%q) succeeded", value)
-		}
+func TestFixedAuthenticationTargetIsNonCredentialPolicyIdentity(t *testing.T) {
+	if TargetKind != "chatwork-authentication" || TargetStableID != "single-account" {
+		t.Fatalf("target = %q/%q", TargetKind, TargetStableID)
 	}
 }
 
-func TestTasksAndProfileStatesFailClosed(t *testing.T) {
-	for _, task := range []Task{TaskProfilesList, TaskLogin, TaskStatus, TaskLogout} {
+func TestTasksAndStatesFailClosed(t *testing.T) {
+	for _, task := range []Task{TaskLogin, TaskStatus, TaskLogout} {
 		if !task.Valid() {
 			t.Errorf("task %q is invalid", task)
 		}
@@ -26,36 +20,32 @@ func TestTasksAndProfileStatesFailClosed(t *testing.T) {
 	if Task("").Valid() || Task("oauth.token.exchange").Valid() {
 		t.Fatal("unknown authentication task was accepted")
 	}
-	for _, state := range []ProfileState{ProfileStateUnconfigured, ProfileStateReady, ProfileStateExpired} {
+	for _, state := range []State{StateUnconfigured, StateReady, StateExpired} {
 		if !state.Valid() {
 			t.Errorf("state %q is invalid", state)
 		}
 	}
-	if ProfileState("").Valid() || ProfileState("refreshing").Valid() {
-		t.Fatal("unknown profile state was accepted")
+	if State("").Valid() || State("refreshing").Valid() {
+		t.Fatal("unknown authentication state was accepted")
 	}
 }
 
-func TestProfileValidationKeepsProjectionSecretFreeAndConsistent(t *testing.T) {
-	ref, err := NewProfileReference(PublicClientProfileReference)
-	if err != nil {
-		t.Fatal(err)
-	}
-	valid := Profile{Ref: ref, Method: "oauth2", State: ProfileStateReady, ExpiresAt: 1_800_000_000}
+func TestSummaryValidationKeepsProjectionSecretFreeAndConsistent(t *testing.T) {
+	valid := Summary{Method: "oauth2", State: StateReady, ExpiresAt: 1_800_000_000}
 	if err := valid.Validate(); err != nil {
-		t.Fatalf("valid profile rejected: %v", err)
+		t.Fatalf("valid summary rejected: %v", err)
 	}
 
-	tests := []Profile{
+	tests := []Summary{
 		{},
-		{Ref: ref, Method: "pat", State: ProfileStateReady},
-		{Ref: ref, Method: "oauth2", State: "unknown"},
-		{Ref: ref, Method: "oauth2", State: ProfileStateExpired, ExpiresAt: -1},
-		{Ref: ref, Method: "oauth2", State: ProfileStateUnconfigured, ExpiresAt: 1},
+		{Method: "pat", State: StateReady},
+		{Method: "oauth2", State: "unknown"},
+		{Method: "oauth2", State: StateExpired, ExpiresAt: -1},
+		{Method: "oauth2", State: StateUnconfigured, ExpiresAt: 1},
 	}
-	for _, profile := range tests {
-		if err := profile.Validate(); err == nil {
-			t.Errorf("invalid profile accepted: %+v", profile)
+	for _, summary := range tests {
+		if err := summary.Validate(); err == nil {
+			t.Errorf("invalid summary accepted: %+v", summary)
 		}
 	}
 }

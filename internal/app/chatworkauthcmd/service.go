@@ -21,19 +21,18 @@ type CredentialStatus = chatworkauth.CredentialStatus
 
 // ManagerPort owns the private OAuth lifecycle used by these public tasks.
 type ManagerPort interface {
-	Login(context.Context, RedirectReceiver) (chatworkauth.CredentialStatus, error)
+	Login(context.Context, string, RedirectReceiver) (chatworkauth.CredentialStatus, error)
 	Status(context.Context) (chatworkauth.CredentialStatus, error)
 	Logout(context.Context) error
 }
 
 // LogoutResult makes the local-only scope of logout explicit.
 type LogoutResult struct {
-	Ref              chatworkauth.ProfileReference
 	Acknowledged     bool
 	RemoteRevocation bool
 }
 
-// Service implements the four authentication outcomes without depending on
+// Service implements the three authentication outcomes without depending on
 // OAuth or credential-store implementation types.
 type Service struct {
 	manager ManagerPort
@@ -43,74 +42,49 @@ func New(manager ManagerPort) *Service {
 	return &Service{manager: manager}
 }
 
-// Profiles discovers the one fixed public-client profile without touching the
-// credential store.
-func (s *Service) Profiles(ctx context.Context) ([]chatworkauth.Profile, error) {
+func (s *Service) Login(ctx context.Context, clientID string, receive RedirectReceiver) (chatworkauth.Summary, error) {
 	if ctx == nil {
-		return nil, missingContextFault()
-	}
-	if err := ctx.Err(); err != nil {
-		return nil, canceledFault()
-	}
-	ref, err := chatworkauth.NewProfileReference(chatworkauth.PublicClientProfileReference)
-	if err != nil {
-		return nil, fault.New(fault.KindContract, "output_encoding_failed", "The fixed Chatwork OAuth profile is invalid.", false)
-	}
-	return []chatworkauth.Profile{{Ref: ref, Method: "oauth2", State: chatworkauth.ProfileStateUnconfigured}}, nil
-}
-
-func (s *Service) Login(ctx context.Context, ref chatworkauth.ProfileReference, receive RedirectReceiver) (chatworkauth.Profile, error) {
-	if ctx == nil {
-		return chatworkauth.Profile{}, missingContextFault()
-	}
-	if err := validateReference(ref); err != nil {
-		return chatworkauth.Profile{}, err
+		return chatworkauth.Summary{}, missingContextFault()
 	}
 	if receive == nil {
-		return chatworkauth.Profile{}, fault.New(fault.KindContract, "oauth_login_receiver_missing", "The OAuth callback receiver is not configured.", false)
+		return chatworkauth.Summary{}, fault.New(fault.KindContract, "oauth_login_receiver_missing", "The OAuth callback receiver is not configured.", false)
 	}
 	if s == nil || portcheck.IsNil(s.manager) {
-		return chatworkauth.Profile{}, storeUnavailableFault()
+		return chatworkauth.Summary{}, storeUnavailableFault()
 	}
 	if err := ctx.Err(); err != nil {
-		return chatworkauth.Profile{}, canceledFault()
+		return chatworkauth.Summary{}, canceledFault()
 	}
-	status, err := s.manager.Login(ctx, receive)
+	status, err := s.manager.Login(ctx, clientID, receive)
 	if err != nil {
-		return chatworkauth.Profile{}, err
+		return chatworkauth.Summary{}, err
 	}
 	if !status.Authenticated || status.ExpiresAt.IsZero() {
-		return chatworkauth.Profile{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "The OAuth login result is invalid.", false)
+		return chatworkauth.Summary{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "The OAuth login result is invalid.", false)
 	}
-	return profileFromStatus(ref, status)
+	return summaryFromStatus(status)
 }
 
-func (s *Service) Status(ctx context.Context, ref chatworkauth.ProfileReference) (chatworkauth.Profile, error) {
+func (s *Service) Status(ctx context.Context) (chatworkauth.Summary, error) {
 	if ctx == nil {
-		return chatworkauth.Profile{}, missingContextFault()
-	}
-	if err := validateReference(ref); err != nil {
-		return chatworkauth.Profile{}, err
+		return chatworkauth.Summary{}, missingContextFault()
 	}
 	if s == nil || portcheck.IsNil(s.manager) {
-		return chatworkauth.Profile{}, storeUnavailableFault()
+		return chatworkauth.Summary{}, storeUnavailableFault()
 	}
 	if err := ctx.Err(); err != nil {
-		return chatworkauth.Profile{}, canceledFault()
+		return chatworkauth.Summary{}, canceledFault()
 	}
 	status, err := s.manager.Status(ctx)
 	if err != nil {
-		return chatworkauth.Profile{}, err
+		return chatworkauth.Summary{}, err
 	}
-	return profileFromStatus(ref, status)
+	return summaryFromStatus(status)
 }
 
-func (s *Service) Logout(ctx context.Context, ref chatworkauth.ProfileReference) (LogoutResult, error) {
+func (s *Service) Logout(ctx context.Context) (LogoutResult, error) {
 	if ctx == nil {
 		return LogoutResult{}, missingContextFault()
-	}
-	if err := validateReference(ref); err != nil {
-		return LogoutResult{}, err
 	}
 	if s == nil || portcheck.IsNil(s.manager) {
 		return LogoutResult{}, storeUnavailableFault()
@@ -121,34 +95,27 @@ func (s *Service) Logout(ctx context.Context, ref chatworkauth.ProfileReference)
 	if err := s.manager.Logout(ctx); err != nil {
 		return LogoutResult{}, err
 	}
-	return LogoutResult{Ref: ref, Acknowledged: true, RemoteRevocation: false}, nil
+	return LogoutResult{Acknowledged: true, RemoteRevocation: false}, nil
 }
 
-func profileFromStatus(ref chatworkauth.ProfileReference, status chatworkauth.CredentialStatus) (chatworkauth.Profile, error) {
-	state := chatworkauth.ProfileStateUnconfigured
+func summaryFromStatus(status chatworkauth.CredentialStatus) (chatworkauth.Summary, error) {
+	state := chatworkauth.StateUnconfigured
 	expiresAt := int64(0)
 	if !status.ExpiresAt.IsZero() {
 		expiresAt = status.ExpiresAt.Unix()
-		state = chatworkauth.ProfileStateExpired
+		state = chatworkauth.StateExpired
 	}
 	if status.Authenticated {
 		if status.ExpiresAt.IsZero() {
-			return chatworkauth.Profile{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "The OAuth profile status is invalid.", false)
+			return chatworkauth.Summary{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "The OAuth status is invalid.", false)
 		}
-		state = chatworkauth.ProfileStateReady
+		state = chatworkauth.StateReady
 	}
-	profile := chatworkauth.Profile{Ref: ref, Method: "oauth2", State: state, ExpiresAt: expiresAt}
-	if err := profile.Validate(); err != nil {
-		return chatworkauth.Profile{}, fault.Wrap(fault.KindAuthentication, "invalid_authentication_session", "The OAuth profile status is invalid.", false, err)
+	summary := chatworkauth.Summary{Method: "oauth2", State: state, ExpiresAt: expiresAt}
+	if err := summary.Validate(); err != nil {
+		return chatworkauth.Summary{}, fault.Wrap(fault.KindAuthentication, "invalid_authentication_session", "The OAuth status is invalid.", false, err)
 	}
-	return profile, nil
-}
-
-func validateReference(ref chatworkauth.ProfileReference) error {
-	if !ref.Valid() {
-		return fault.New(fault.KindInvalidInput, "oauth_profile_reference_invalid", "The Chatwork OAuth profile reference is invalid.", false)
-	}
-	return nil
+	return summary, nil
 }
 
 func missingContextFault() error {
