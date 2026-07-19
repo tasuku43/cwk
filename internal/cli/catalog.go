@@ -1309,6 +1309,19 @@ func validateAgentIndexEntry(command CommandSpec) error {
 // inputs are themselves reachable. Optional inputs, including a first-page
 // cursor, do not prevent a command from seeding a workflow.
 func validateReferenceReachability(commands []CommandSpec) error {
+	reachable := reachableReferenceKinds(commands)
+
+	for _, command := range commands {
+		for _, produced := range command.ProducedRefs() {
+			if _, exists := reachable[produced.Kind]; !exists {
+				return fmt.Errorf("reference kind %q is trapped in a closed required-reference cycle", produced.Kind)
+			}
+		}
+	}
+	return nil
+}
+
+func reachableReferenceKinds(commands []CommandSpec) map[string]struct{} {
 	reachable := make(map[string]struct{})
 	for {
 		progress := false
@@ -1338,15 +1351,7 @@ func validateReferenceReachability(commands []CommandSpec) error {
 			break
 		}
 	}
-
-	for _, command := range commands {
-		for _, produced := range command.ProducedRefs() {
-			if _, exists := reachable[produced.Kind]; !exists {
-				return fmt.Errorf("reference kind %q is trapped in a closed required-reference cycle", produced.Kind)
-			}
-		}
-	}
-	return nil
+	return reachable
 }
 
 func validateReferenceName(value string) error {
@@ -1459,7 +1464,7 @@ func (c Catalog) ActiveView(enabled []string) (Catalog, []string, error) {
 	}
 
 	view := NewCatalog(visible...)
-	if err := view.validateActiveView(); err != nil {
+	if err := view.validateActiveView(c); err != nil {
 		return Catalog{}, stale, err
 	}
 	return view, stale, nil
@@ -1468,21 +1473,31 @@ func (c Catalog) ActiveView(enabled []string) (Catalog, []string, error) {
 // validateActiveView enforces only dependencies needed by visible commands.
 // Unlike full-catalog validation, a visible producer need not have a visible
 // consumer because reducing action surface is a valid command-view choice.
-func (c Catalog) validateActiveView() error {
-	producedKinds := make(map[string][]string)
-	consumedKinds := make(map[string][]string)
+func (c Catalog) validateActiveView(full Catalog) error {
+	producedKinds := make(map[string]struct{})
 	for _, command := range c.commands {
 		for _, produced := range command.ProducedRefs() {
-			producedKinds[produced.Kind] = append(producedKinds[produced.Kind], command.Path)
-		}
-		for _, consumed := range command.ConsumedRefs() {
-			consumedKinds[consumed.Kind] = append(consumedKinds[consumed.Kind], command.Path)
+			producedKinds[produced.Kind] = struct{}{}
 		}
 	}
+	reachable := reachableReferenceKinds(c.commands)
 	for _, command := range c.commands {
-		for _, consumed := range command.ConsumedRefs() {
-			if len(producedKinds[consumed.Kind]) == 0 {
-				return fmt.Errorf("active command view consumes reference kind %q in %s but has no visible producer", consumed.Kind, strings.Join(consumedKinds[consumed.Kind], ", "))
+		for _, input := range command.Agent.Inputs {
+			if !input.Required || input.ReferenceKind == "" {
+				continue
+			}
+			suggestion := producerSuggestion(full, input.ReferenceKind, reachable)
+			if _, visible := producedKinds[input.ReferenceKind]; !visible {
+				return fmt.Errorf(
+					"active command %q input %q requires reference kind %q but has no visible producer%s",
+					command.Path, input.Name, input.ReferenceKind, suggestion,
+				)
+			}
+			if _, ready := reachable[input.ReferenceKind]; !ready {
+				return fmt.Errorf(
+					"active command %q input %q requires reachable reference kind %q%s",
+					command.Path, input.Name, input.ReferenceKind, suggestion,
+				)
 			}
 		}
 	}
@@ -1503,6 +1518,54 @@ func (c Catalog) validateActiveView() error {
 		}
 	}
 	return nil
+}
+
+func producerSuggestion(full Catalog, kind string, reachable map[string]struct{}) string {
+	ready := make([]string, 0)
+	all := make([]string, 0)
+	for _, command := range full.commands {
+		produces := false
+		for _, produced := range command.ProducedRefs() {
+			if produced.Kind == kind {
+				produces = true
+				break
+			}
+		}
+		if !produces {
+			continue
+		}
+		all = append(all, command.Path)
+		if requiredReferencesReachable(command, reachable) {
+			ready = append(ready, command.Path)
+		}
+	}
+	candidates := ready
+	if len(candidates) == 0 {
+		candidates = all
+	}
+	if len(candidates) == 0 {
+		return ""
+	}
+	quoted := make([]string, len(candidates))
+	for index, path := range candidates {
+		quoted[index] = fmt.Sprintf("%q", path)
+	}
+	if len(quoted) == 1 {
+		return "; enable producer " + quoted[0]
+	}
+	return "; enable one producer: " + strings.Join(quoted, ", ")
+}
+
+func requiredReferencesReachable(command CommandSpec, reachable map[string]struct{}) bool {
+	for _, input := range command.Agent.Inputs {
+		if !input.Required || input.ReferenceKind == "" {
+			continue
+		}
+		if _, exists := reachable[input.ReferenceKind]; !exists {
+			return false
+		}
+	}
+	return true
 }
 
 // Lookup finds one exact command path.

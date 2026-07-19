@@ -94,7 +94,10 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	if len(output) > maxChatworkOutputBytes {
 		return c.fail(ctx, fault.New(fault.KindContract, "output_contract_exceeded", "The Chatwork result exceeds the declared output bound.", false))
 	}
-	return c.emit(ctx, []byte(output))
+	if command.Effect == operation.EffectRead {
+		return c.emit(ctx, []byte(output))
+	}
+	return c.emitMutationResult(ctx, []byte(output))
 }
 
 type chatworkArguments map[string][]string

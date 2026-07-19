@@ -2,8 +2,11 @@
 
 package commandconfig
 
-// Directory Sync is not supported by the portable Windows filesystem API. The
-// same-directory replacement itself is performed by os.Root.Rename.
-func syncDirectory(string) error {
+import "os"
+
+// os.Root.Rename requests replace-existing behavior on Windows. The portable
+// API does not expose directory Sync and makes no cross-platform atomicity or
+// durability guarantee, so there is no additional operation available here.
+func syncDirectory(*os.Root) error {
 	return nil
 }

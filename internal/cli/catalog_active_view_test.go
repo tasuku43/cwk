@@ -154,15 +154,27 @@ func TestActiveViewRejectsInvalidSelectionDocuments(t *testing.T) {
 
 func TestActiveViewRejectsVisibleConsumerWithoutProducer(t *testing.T) {
 	_, _, err := DefaultCatalog().ActiveView([]string{"messages mark-read"})
-	if err == nil || !strings.Contains(err.Error(), "has no visible producer") {
-		t.Fatalf("ActiveView error = %v, want missing visible producer", err)
+	want := `active command "messages mark-read" input "--room" requires reference kind "chatwork-room" but has no visible producer; enable one producer: "personal-tasks list", "contacts list", "rooms list"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("ActiveView error = %v, want %q", err, want)
 	}
 }
 
 func TestActiveViewRejectsClosedRequiredReferenceCycle(t *testing.T) {
-	_, _, err := DefaultCatalog().ActiveView([]string{"messages show"})
-	if err == nil || !strings.Contains(err.Error(), "closed required-reference cycle") {
-		t.Fatalf("ActiveView error = %v, want closed required-reference cycle", err)
+	_, _, err := DefaultCatalog().ActiveView([]string{"rooms list", "messages show"})
+	want := `active command "messages show" input "--message" requires reachable reference kind "chatwork-message"; enable one producer: "personal-tasks list", "messages list", "messages send", "room-tasks list", "files list"`
+	if err == nil || err.Error() != want {
+		t.Fatalf("ActiveView error = %v, want %q", err, want)
+	}
+}
+
+func TestActiveViewDoesNotRequireProducerForOptionalReferenceInput(t *testing.T) {
+	view, _, err := DefaultCatalog().ActiveView([]string{"rooms list", "files list"})
+	if err != nil {
+		t.Fatalf("optional --account producer was incorrectly required: %v", err)
+	}
+	if _, found := view.Lookup("files list"); !found {
+		t.Fatal("files list is missing from the accepted view")
 	}
 }
 

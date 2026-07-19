@@ -175,7 +175,7 @@ func runConfigEdit(ctx context.Context, c *CLI, command CommandSpec, base operat
 				"config saved enabled=%d disabled=%d changed=%d stale-removed=%d\n",
 				len(enabled), len(choices)-len(enabled), selectionChangeCount(choices, original, selected), len(state.stale),
 			)
-			return c.emit(ctx, []byte(output))
+			return c.emitMutationResult(ctx, []byte(output))
 		}
 
 		enabledCount := len(selectedPathsInCatalogOrder(choices, selected))

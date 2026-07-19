@@ -233,17 +233,31 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 }
 
 func commandViewControlInvocation(args []string) bool {
-	return len(args) > 0 && (args[0] == "help" || args[0] == "config")
+	if len(args) == 0 {
+		return false
+	}
+	if args[0] == "config" {
+		return true
+	}
+	if args[0] != "help" {
+		return false
+	}
+	_, selector, err := parseHelpArgs(args[1:])
+	return err == nil && (selector == "config" || strings.HasPrefix(selector, "config "))
 }
 
 func commandSelectionDispatchFault(err error) error {
 	if public, ok := fault.PublicCopy(err); ok {
+		next := fault.NextAction{Command: "config show", Reason: "Restore the local configuration path, then inspect the command selection."}
+		if public.Code == "command_selection_invalid" {
+			next = fault.NextAction{Command: "config edit", Reason: "Inspect and explicitly replace the invalid command selection."}
+		}
 		return fault.New(
 			public.Kind,
 			public.Code,
 			public.Message,
 			public.Retryable,
-			fault.NextAction{Command: "config edit", Reason: "Inspect and repair the tool-local command selection."},
+			next,
 		)
 	}
 	return err

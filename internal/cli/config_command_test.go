@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -354,13 +355,23 @@ func TestMalformedProfileFailsClosedAndConfigEditRepairsOnlyOnSave(t *testing.T)
 		t.Fatalf("malformed profile reached PAT or changed fault: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
 
-	// Always-on help still exposes the bounded repair control plane only.
+	// Root help must not silently masquerade as a deliberately empty view.
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
+	if code := runCLI(h.command, []string{"help"}); code != ExitUsage {
 		t.Fatalf("help with malformed profile exit = %d, stderr = %q", code, h.stderr.String())
 	}
-	if !strings.Contains(h.stdout.String(), "config") || strings.Contains(h.stdout.String(), "rooms") {
-		t.Fatalf("malformed-state help did not isolate the control plane:\n%s", h.stdout.String())
+	if !strings.Contains(h.stderr.String(), "code: command_selection_invalid") || !strings.Contains(h.stderr.String(), "cwk config edit") {
+		t.Fatalf("malformed-state root help did not expose the repair fault:\n%s", h.stderr.String())
+	}
+
+	// Config-scoped help remains available without presenting a false normal
+	// command view.
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"config", "--help"}); code != ExitOK {
+		t.Fatalf("config help with malformed profile exit = %d, stderr = %q", code, h.stderr.String())
+	}
+	if !strings.Contains(h.stdout.String(), "  show  Show") || !strings.Contains(h.stdout.String(), "  edit  Select") || strings.Contains(h.stdout.String(), "rooms") {
+		t.Fatalf("malformed-state config help did not isolate the repair commands:\n%s", h.stdout.String())
 	}
 
 	// Merely entering and canceling the repair path must retain the bad bytes.
@@ -379,6 +390,107 @@ func TestMalformedProfileFailsClosedAndConfigEditRepairsOnlyOnSave(t *testing.T)
 	}
 	if got, want := loadCommandSelection(t, h.store), configurableCommandPaths(DefaultCatalog()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("repaired profile = %v, want all-enabled baseline %v", got, want)
+	}
+}
+
+func TestUnsafeProfileCannotEnterAnUnrepairableEditLoop(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic-link creation requires platform-specific privileges on Windows")
+	}
+	h := newCommandSelectionHarness(t, strings.NewReader("save\n"))
+	app := filepath.Join(h.base, "cwk")
+	if err := os.Mkdir(app, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(h.base, "target.json")
+	if err := os.WriteFile(target, []byte("{}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(app, "command-selection.json")); err != nil {
+		t.Fatal(err)
+	}
+
+	if code := runCLI(h.command, []string{"help"}); code != ExitUnavailable {
+		t.Fatalf("unsafe root help exit = %d, stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") || !strings.Contains(h.stderr.String(), "cwk config show") {
+		t.Fatalf("unsafe root help presented a false command view: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	}
+	h.reset(strings.NewReader("save\n"))
+	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitUnavailable {
+		t.Fatalf("unsafe config edit exit = %d, stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") || !strings.Contains(h.stderr.String(), "cwk config show") {
+		t.Fatalf("unsafe storage entered repair selector or lacked external-repair guidance: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	}
+	contents, err := os.ReadFile(target)
+	if err != nil || string(contents) != "{}\n" {
+		t.Fatalf("unsafe target changed: contents=%q err=%v", contents, err)
+	}
+}
+
+type unavailableCommandSelectionStore struct{}
+
+func (unavailableCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
+	return commandselection.Profile{}, false, fault.New(
+		fault.KindUnavailable,
+		"command_selection_unavailable",
+		"command selection is unavailable",
+		true,
+	)
+}
+
+func (unavailableCommandSelectionStore) Save(context.Context, commandselection.Profile) error {
+	return errors.New("must not save unavailable configuration")
+}
+
+func TestUnavailableProfileRoutesToInspectionAfterExternalRepair(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader("save\n"), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
+	command.commandSelection = configcmd.New(unavailableCommandSelectionStore{})
+
+	for _, args := range [][]string{{"help"}, {"config", "edit"}} {
+		stdout.Reset()
+		stderr.Reset()
+		if code := command.RunContext(context.Background(), args); code != ExitUnavailable {
+			t.Fatalf("unavailable invocation %v exit=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
+		}
+		if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: command_selection_unavailable") ||
+			!strings.Contains(stderr.String(), "cwk config show") || strings.Contains(stderr.String(), "cwk config edit") {
+			t.Fatalf("unavailable invocation %v has unusable recovery: stdout=%q stderr=%q", args, stdout.String(), stderr.String())
+		}
+	}
+}
+
+type cancelAfterConfigSaveStore struct {
+	cancel context.CancelFunc
+	saved  []string
+	saves  int
+}
+
+func (s *cancelAfterConfigSaveStore) Load(context.Context) (commandselection.Profile, bool, error) {
+	return commandselection.Profile{}, false, nil
+}
+
+func (s *cancelAfterConfigSaveStore) Save(_ context.Context, profile commandselection.Profile) error {
+	s.saves++
+	s.saved = profile.EnabledCommands()
+	s.cancel()
+	return nil
+}
+
+func TestConfigEditDoesNotOverwriteConfirmedSaveWithLateCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store := &cancelAfterConfigSaveStore{cancel: cancel}
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader("none\nsave\n"), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
+	command.commandSelection = configcmd.New(store)
+
+	if code := command.RunContext(ctx, []string{"config", "edit"}); code != ExitOK {
+		t.Fatalf("late-canceled save exit = %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != 0 || !strings.Contains(stdout.String(), "config saved enabled=0") || stderr.Len() != 0 {
+		t.Fatalf("confirmed save was not reported exactly once: canceled=%v saves=%d saved=%v stdout=%q stderr=%q", ctx.Err(), store.saves, store.saved, stdout.String(), stderr.String())
 	}
 }
 
@@ -479,6 +591,16 @@ func TestDisabledRouteIsUnknownBeforePATResolutionAndSameCLIReenablesIt(t *testi
 	if factoryCalls != 1 || strings.Contains(h.stderr.String(), "code: unknown_command") {
 		t.Fatalf("same CLI did not re-enable route under its original auth boundary: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
+
+	// Re-enabling an access-changing mutation restores routing only; its
+	// invocation-local confirmation still rejects before authentication.
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"contact-requests", "accept", "--request", "123"}); code != ExitRejected {
+		t.Fatalf("re-enabled unconfirmed mutation exit = %d, stderr = %q", code, h.stderr.String())
+	}
+	if factoryCalls != 1 || !strings.Contains(h.stderr.String(), "code: mutation_rejected") {
+		t.Fatalf("re-enable bypassed confirmation or reached PAT: calls=%d stderr=%q", factoryCalls, h.stderr.String())
+	}
 }
 
 func TestConfigEditRejectsInvalidDependencyAndRecoveryViewsWithoutOverwriting(t *testing.T) {
@@ -487,7 +609,7 @@ func TestConfigEditRejectsInvalidDependencyAndRecoveryViewsWithoutOverwriting(t 
 		paths []string
 		want  string
 	}{
-		{name: "missing producer", paths: []string{"messages mark-read"}, want: "no visible producer"},
+		{name: "missing producer", paths: []string{"messages mark-read"}, want: `enable one producer:`},
 		{name: "hidden recovery", paths: []string{"rooms list", "messages send"}, want: "messages list"},
 	}
 	for _, test := range tests {

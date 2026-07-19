@@ -28,9 +28,14 @@ const (
 )
 
 var (
-	// ErrInvalid identifies content or filesystem objects that violate the
-	// command-configuration contract. Public errors contain only stable text.
+	// ErrInvalid identifies content that violates the serialized
+	// command-configuration contract and may be repaired by an
+	// explicit replacement. Public errors contain only stable text.
 	ErrInvalid = errors.New("command selection configuration is invalid")
+	// ErrUnsafe identifies a filesystem object or mode that this adapter will
+	// not read or replace. It requires external filesystem repair rather than
+	// an in-tool content replacement.
+	ErrUnsafe = errors.New("command selection configuration storage is unsafe")
 	// ErrUnavailable identifies a configuration directory or filesystem that
 	// could not be accessed.
 	ErrUnavailable = errors.New("command selection configuration is unavailable")
@@ -89,7 +94,7 @@ func (s *FileStore) Load(ctx context.Context) (commandselection.Profile, bool, e
 		return commandselection.Profile{}, false, unavailable("configuration metadata")
 	}
 	if !validConfigurationFile(storedInfo) {
-		return commandselection.Profile{}, false, invalid("configuration file contract")
+		return commandselection.Profile{}, false, unsafeStorage("configuration file contract")
 	}
 	if storedInfo.Size() < 1 || storedInfo.Size() > maxConfigBytes {
 		return commandselection.Profile{}, false, invalid("configuration size")
@@ -106,7 +111,7 @@ func (s *FileStore) Load(ctx context.Context) (commandselection.Profile, bool, e
 	}
 	if !validConfigurationFile(openedInfo) || !os.SameFile(storedInfo, openedInfo) {
 		_ = file.Close()
-		return commandselection.Profile{}, false, invalid("configuration file changed during read")
+		return commandselection.Profile{}, false, unsafeStorage("configuration file changed during read")
 	}
 	contents, readErr := io.ReadAll(io.LimitReader(file, maxConfigBytes+1))
 	closeErr := file.Close()
@@ -126,11 +131,14 @@ func (s *FileStore) Load(ctx context.Context) (commandselection.Profile, bool, e
 	return profile, true, nil
 }
 
-// Save validates and atomically replaces the explicit profile. All failures
-// before rename are structured and safe to present. A rename or durability
-// error is intentionally returned raw: once replacement is attempted, only
-// execution.Invoker may classify the outcome without incorrectly promising
-// that the previous profile remains active.
+// Save validates and replaces the explicit profile from a same-directory
+// temporary file. Unix uses rename plus directory sync; Windows requests
+// replace-existing but the portable API does not guarantee atomicity or
+// durability there. All failures before replacement are structured and safe
+// to present. A replacement or durability error is intentionally returned raw:
+// once replacement is attempted, only execution.Invoker may classify the
+// outcome without incorrectly promising that the previous profile remains
+// active.
 func (s *FileStore) Save(ctx context.Context, profile commandselection.Profile) error {
 	if err := contextFault(ctx); err != nil {
 		return err
@@ -182,7 +190,7 @@ func (s *FileStore) Save(ctx context.Context, profile commandselection.Profile) 
 	rootTemporaryInfo, rootStatErr := root.Lstat(temporaryName)
 	if statErr != nil || rootStatErr != nil || !validConfigurationFile(temporaryInfo) ||
 		!validConfigurationFile(rootTemporaryInfo) || !os.SameFile(temporaryInfo, rootTemporaryInfo) {
-		return invalid("temporary configuration contract")
+		return unsafeStorage("temporary configuration contract")
 	}
 	if written, err := temporary.Write(contents); err != nil || written != len(contents) {
 		return unavailable("temporary configuration write")
@@ -205,7 +213,7 @@ func (s *FileStore) Save(ctx context.Context, profile commandselection.Profile) 
 		return err
 	}
 	if !present || !os.SameFile(appInfo, currentAppInfo) {
-		return invalid("application configuration directory changed during save")
+		return unsafeStorage("application configuration directory changed during save")
 	}
 	if err := validateReplaceTarget(root); err != nil {
 		return err
@@ -214,7 +222,7 @@ func (s *FileStore) Save(ctx context.Context, profile commandselection.Profile) 
 		return err
 	}
 	committed = true
-	if err := syncDirectory(appDirectory); err != nil {
+	if err := syncDirectory(root); err != nil {
 		return err
 	}
 	return nil
@@ -334,10 +342,10 @@ func inspectDirectory(path string, restricted bool) (fs.FileInfo, bool, error) {
 		return nil, false, unavailable("configuration directory metadata")
 	}
 	if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-		return nil, false, invalid("configuration directory contract")
+		return nil, false, unsafeStorage("configuration directory contract")
 	}
 	if restricted && !validApplicationDirectory(info) {
-		return nil, false, invalid("application configuration directory permissions")
+		return nil, false, unsafeStorage("application configuration directory permissions")
 	}
 	return info, true, nil
 }
@@ -392,7 +400,7 @@ func openVerifiedRoot(path string, expected fs.FileInfo) (*os.Root, error) {
 	openedInfo, statErr := root.Stat(".")
 	if statErr != nil || !openedInfo.IsDir() || !os.SameFile(expected, openedInfo) {
 		_ = root.Close()
-		return nil, invalid("application configuration directory changed during open")
+		return nil, unsafeStorage("application configuration directory changed during open")
 	}
 	return root, nil
 }
@@ -406,7 +414,7 @@ func validateReplaceTarget(root *os.Root) error {
 		return unavailable("configuration target metadata")
 	}
 	if !validConfigurationFile(info) {
-		return invalid("configuration target contract")
+		return unsafeStorage("configuration target contract")
 	}
 	return nil
 }
@@ -448,7 +456,16 @@ func invalidWithCause(reason string, cause error) error {
 		"command selection is invalid",
 		false,
 		cause,
-		fault.NextAction{Command: "config edit", Reason: "review and explicitly replace the command selection configuration"},
+	)
+}
+
+func unsafeStorage(reason string) error {
+	return fault.Wrap(
+		fault.KindUnavailable,
+		"command_selection_unsafe",
+		"command selection storage is unsafe",
+		false,
+		fmt.Errorf("%w: %s", ErrUnsafe, reason),
 	)
 }
 

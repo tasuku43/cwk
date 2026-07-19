@@ -35,6 +35,7 @@ func configCommandSpecs() []CommandSpec {
 				Errors: []CommandError{
 					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help config show", "Run the read-only inspection without arguments."),
 					declaredCommandError(fault.KindInvalidInput, "command_selection_invalid", false, "config edit", "Repair the saved command selection explicitly."),
+					declaredCommandError(fault.KindUnavailable, "command_selection_unsafe", false, "config show", "Repair the local configuration file or directory, then inspect it again."),
 					declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "config show", "Restore access to the user configuration directory, then retry."),
 					declaredCommandError(fault.KindInternal, "output_write_failed", true, "config show", "Retry with a writable output stream."),
 					declaredCommandError(fault.KindCanceled, "operation_canceled", true, "config show", "Retry when the caller is ready."),
@@ -77,7 +78,8 @@ func configCommandSpecs() []CommandSpec {
 				Errors: []CommandError{
 					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help config edit", "Run the selector without command arguments."),
 					declaredCommandError(fault.KindInvalidInput, "command_selection_invalid", false, "config edit", "Repair the saved command selection explicitly."),
-					declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "config edit", "Restore access to the user configuration directory, then retry."),
+					declaredCommandError(fault.KindUnavailable, "command_selection_unsafe", false, "config show", "Repair the local configuration file or directory, then inspect it before editing."),
+					declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "config show", "Restore access to the user configuration directory, then inspect it before editing."),
 					declaredCommandError(fault.KindCanceled, "configuration_canceled", false, "config show", "Inspect the unchanged command selection."),
 					declaredCommandError(fault.KindInternal, "configuration_input_failed", false, "config edit", "Retry with a readable bounded stdin stream."),
 					declaredCommandError(fault.KindContract, "invalid_mutation_contract", false, "help config edit", "Repair the fixed command-selection target and impact declaration."),

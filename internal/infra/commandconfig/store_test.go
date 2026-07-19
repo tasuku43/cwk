@@ -139,9 +139,10 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, _, err := NewFileStoreAt(linkBase).Load(context.Background())
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
 			t.Fatalf("Load base symlink error = %v", err)
 		}
+		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 	})
 	t.Run("application symlink", func(t *testing.T) {
 		base := t.TempDir()
@@ -150,9 +151,10 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, _, err := NewFileStoreAt(base).Load(context.Background())
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
 			t.Fatalf("Load application symlink error = %v", err)
 		}
+		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 	})
 	t.Run("file symlink is not replaced", func(t *testing.T) {
 		base := t.TempDir()
@@ -168,9 +170,10 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 		err := NewFileStoreAt(base).Save(context.Background(), commandselection.Profile{})
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
 			t.Fatalf("Save file symlink error = %v", err)
 		}
+		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 		contents, readErr := os.ReadFile(target)
 		if readErr != nil || string(contents) != "do not replace" {
 			t.Fatalf("symlink target changed: contents=%q err=%v", contents, readErr)
@@ -186,9 +189,10 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 			t.Fatal(err)
 		}
 		_, _, err := NewFileStoreAt(base).Load(context.Background())
-		if !errors.Is(err, ErrInvalid) {
+		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
 			t.Fatalf("Load non-regular error = %v", err)
 		}
+		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 	})
 }
 
@@ -200,10 +204,10 @@ func TestFileStoreRejectsPermissiveApplicationObjects(t *testing.T) {
 		base := t.TempDir()
 		writeConfigFixture(t, base, []byte(`{"schema_version":1,"enabled_commands":[]}`), 0o600, 0o755)
 		store := NewFileStoreAt(base)
-		if _, _, err := store.Load(context.Background()); !errors.Is(err, ErrInvalid) {
+		if _, _, err := store.Load(context.Background()); !errors.Is(err, ErrUnsafe) {
 			t.Fatalf("Load permissive directory error = %v", err)
 		}
-		if err := store.Save(context.Background(), commandselection.Profile{}); !errors.Is(err, ErrInvalid) {
+		if err := store.Save(context.Background(), commandselection.Profile{}); !errors.Is(err, ErrUnsafe) {
 			t.Fatalf("Save permissive directory error = %v", err)
 		}
 	})
@@ -211,10 +215,10 @@ func TestFileStoreRejectsPermissiveApplicationObjects(t *testing.T) {
 		base := t.TempDir()
 		writeConfigFixture(t, base, []byte(`{"schema_version":1,"enabled_commands":[]}`), 0o644, 0o700)
 		store := NewFileStoreAt(base)
-		if _, _, err := store.Load(context.Background()); !errors.Is(err, ErrInvalid) {
+		if _, _, err := store.Load(context.Background()); !errors.Is(err, ErrUnsafe) {
 			t.Fatalf("Load permissive file error = %v", err)
 		}
-		if err := store.Save(context.Background(), commandselection.Profile{}); !errors.Is(err, ErrInvalid) {
+		if err := store.Save(context.Background(), commandselection.Profile{}); !errors.Is(err, ErrUnsafe) {
 			t.Fatalf("Save permissive file error = %v", err)
 		}
 	})
@@ -285,6 +289,9 @@ func assertSafeConfigFault(t *testing.T, err error, kind fault.Kind, code string
 	var structured *fault.Error
 	if !errors.As(err, &structured) || structured.Validate() != nil || structured.Kind != kind || structured.Code != code {
 		t.Fatalf("error=%#v, want valid %s/%s fault", err, kind, code)
+	}
+	if len(structured.NextActions) != 0 {
+		t.Fatalf("infrastructure fault owns CLI recovery actions: %#v", structured.NextActions)
 	}
 	if strings.Contains(err.Error(), string(filepath.Separator)) || strings.Contains(err.Error(), "private") {
 		t.Fatalf("public fault leaked path or private content: %q", err.Error())
