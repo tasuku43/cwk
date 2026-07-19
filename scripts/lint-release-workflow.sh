@@ -87,6 +87,20 @@ if [[ $workflow_root_lines != "$expected_workflow_root_lines" ]]; then
   exit 1
 fi
 
+workflow_triggers=$(awk '
+  $0 == "on:" { in_triggers=1 }
+  in_triggers && seen && /^[^[:space:]#]/ { exit }
+  in_triggers { print; seen=1 }
+' "$workflow")
+expected_workflow_triggers=$'on:\n  push:\n    tags:\n      - "v*"\n  workflow_dispatch:\n    inputs:\n      tag:\n        description: "既存のstable ReleaseからHomebrew Formula公開を再開するtag"\n        required: true\n        type: string'
+if [[ $workflow_triggers != "$expected_workflow_triggers" ]]; then
+  printf '%s\n' "release workflow triggers must match the reviewed tag-push and Formula-recovery allowlist" >&2
+  diff -u \
+    <(printf '%s\n' "$expected_workflow_triggers") \
+    <(printf '%s\n' "$workflow_triggers") >&2 || true
+  exit 1
+fi
+
 workflow_permissions=$(awk '
   $0 == "permissions:" { in_permissions=1 }
   in_permissions && seen && /^[^[:space:]#]/ { exit }
@@ -111,6 +125,8 @@ grep -qF -- '--notes-from-tag' "$workflow" ||
   fail "release workflow must publish the reviewed annotated-tag notes"
 grep -qF 'already exists; refusing to replace immutable release assets' "$workflow" ||
   fail "release workflow does not fail closed when the tag already has a release"
+grep -qF "github.event_name == 'workflow_dispatch'" "$workflow" ||
+  fail "release workflow is missing the reviewed Formula recovery trigger"
 
 for required in \
   './scripts/check.sh full' './scripts/package-release.sh' 'checksums.txt' \
@@ -122,15 +138,21 @@ done
 formula_job=$(extract_job formula)
 formula_publish_job=$(extract_job formula_publish)
 build_job=$(extract_job build)
+publish_job=$(extract_job publish)
+recovery_job=$(extract_job recover_formula_input)
+preflight_job=$(extract_job preflight)
 [[ -n $formula_job ]] || fail "release workflow is missing the Formula job"
 [[ -n $formula_publish_job ]] || fail "release workflow is missing the Formula publish job"
 [[ -n $build_job ]] || fail "release workflow is missing the build job"
+[[ -n $publish_job ]] || fail "release workflow is missing the GitHub Release publish job"
+[[ -n $recovery_job ]] || fail "release workflow is missing the existing-Release Formula recovery job"
+[[ -n $preflight_job ]] || fail "release workflow is missing the release preflight job"
 
 formula_header=$(printf '%s\n' "$formula_job" | awk '
   { print }
   /^    steps:$/ { exit }
 ')
-expected_formula_header=$'  formula:\n    name: checksum固定済みHomebrew Formulaを生成・audit\n    if: needs.preflight.outputs.stable == \'true\'\n    needs: [preflight, build, publish]\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:'
+expected_formula_header=$'  formula:\n    name: checksum固定済みHomebrew Formulaを生成・audit\n    if: >-\n      always() &&\n      needs.preflight.result == \'success\' &&\n      needs.preflight.outputs.stable == \'true\' &&\n      ((github.event_name == \'push\' && needs.publish.result == \'success\') ||\n      (github.event_name == \'workflow_dispatch\' && needs.recover_formula_input.result == \'success\'))\n    needs: [preflight, publish, recover_formula_input]\n    runs-on: macos-15\n    permissions:\n      contents: read\n    steps:'
 if [[ $formula_header != "$expected_formula_header" ]]; then
   printf '%s\n' "Formula job header must match the reviewed stable-only fail-closed contract" >&2
   diff -u \
@@ -139,7 +161,7 @@ if [[ $formula_header != "$expected_formula_header" ]]; then
   exit 1
 fi
 formula_job_fields=$(printf '%s\n' "$formula_job" | awk '/^    [^[:space:]#]/ { print }')
-expected_formula_job_fields=$'    name: checksum固定済みHomebrew Formulaを生成・audit\n    if: needs.preflight.outputs.stable == \'true\'\n    needs: [preflight, build, publish]\n    runs-on: macos-15\n    permissions:\n    steps:'
+expected_formula_job_fields=$'    name: checksum固定済みHomebrew Formulaを生成・audit\n    if: >-\n    needs: [preflight, publish, recover_formula_input]\n    runs-on: macos-15\n    permissions:\n    steps:'
 if [[ $formula_job_fields != "$expected_formula_job_fields" ]]; then
   printf '%s\n' "Formula job fields must match the reviewed allowlist" >&2
   diff -u \
@@ -152,7 +174,7 @@ formula_publish_header=$(printf '%s\n' "$formula_publish_job" | awk '
   { print }
   /^    steps:$/ { exit }
 ')
-expected_formula_publish_header=$'  formula_publish:\n    name: audit済みHomebrew Formulaを共有tapへ提案\n    if: needs.preflight.outputs.stable == \'true\'\n    needs: [preflight, publish, formula]\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:'
+expected_formula_publish_header=$'  formula_publish:\n    name: audit済みHomebrew Formulaを共有tapへ提案\n    if: >-\n      always() &&\n      needs.preflight.result == \'success\' &&\n      needs.preflight.outputs.stable == \'true\' &&\n      needs.formula.result == \'success\'\n    needs: [preflight, formula]\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:'
 if [[ $formula_publish_header != "$expected_formula_publish_header" ]]; then
   printf '%s\n' "Formula publish job must use a fresh runner after the audit job" >&2
   diff -u \
@@ -161,7 +183,7 @@ if [[ $formula_publish_header != "$expected_formula_publish_header" ]]; then
   exit 1
 fi
 formula_publish_job_fields=$(printf '%s\n' "$formula_publish_job" | awk '/^    [^[:space:]#]/ { print }')
-expected_formula_publish_job_fields=$'    name: audit済みHomebrew Formulaを共有tapへ提案\n    if: needs.preflight.outputs.stable == \'true\'\n    needs: [preflight, publish, formula]\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:'
+expected_formula_publish_job_fields=$'    name: audit済みHomebrew Formulaを共有tapへ提案\n    if: >-\n    needs: [preflight, formula]\n    runs-on: ubuntu-latest\n    permissions: {}\n    steps:'
 if [[ $formula_publish_job_fields != "$expected_formula_publish_job_fields" ]]; then
   printf '%s\n' "Formula publish job fields must match the reviewed allowlist" >&2
   diff -u \
@@ -183,6 +205,86 @@ require_exact_line "$build_checkout" \
 require_exact_line "$build_checkout" "$release_revision_ref" "matrix build checkout"
 require_exact_line "$build_checkout" '          persist-credentials: false' "matrix build checkout"
 require_with_keys "$build_checkout" $'ref\npersist-credentials' "matrix build checkout"
+
+for required in \
+  '      tag: ${{ steps.release.outputs.tag }}' \
+  '          ref: ${{ github.event_name == '\''workflow_dispatch'\'' && inputs.tag || github.ref }}' \
+  '          RECOVERY_TAG: ${{ inputs.tag }}' \
+  '            go run ./tools/releaseversion --stable "${tag}" >>"${GITHUB_OUTPUT}"' \
+  '          revision=$(git rev-list -n 1 -- "${tag}")' \
+  '          echo "tag=${tag}" >>"${GITHUB_OUTPUT}"'; do
+  require_exact_line "$preflight_job" "$required" "release preflight recovery binding"
+done
+
+publish_checkout=$(extract_named_step "$publish_job" "正確なrelease tagをcheckout")
+require_line_count "$publish_checkout" 6 "GitHub Release tag checkout"
+for required in \
+  '        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7' \
+  '        with:' \
+  '          ref: ${{ needs.preflight.outputs.tag }}' \
+  '          fetch-depth: 0' \
+  '          persist-credentials: false'; do
+  require_exact_line "$publish_checkout" "$required" "GitHub Release tag checkout"
+done
+require_with_keys "$publish_checkout" $'ref\nfetch-depth\npersist-credentials' "GitHub Release tag checkout"
+publish_checkout_line=$(printf '%s\n' "$publish_job" | grep -n -m1 -F 'name: 正確なrelease tagをcheckout' | cut -d: -f1)
+release_create_line=$(printf '%s\n' "$publish_job" | grep -n -m1 -F 'gh release create' | cut -d: -f1)
+if ((publish_checkout_line >= release_create_line)); then
+  fail "annotated release tag must be checked out before GitHub Release creation"
+fi
+for required in \
+  '          tag="${{ needs.preflight.outputs.tag }}"' \
+  '          args=(--verify-tag --title "${tag}" --notes-from-tag)' \
+  '          gh release create "${tag}" dist/* "${args[@]}"'; do
+  require_exact_line "$publish_job" "$required" "GitHub Release annotated-note publication"
+done
+
+recovery_header=$(printf '%s\n' "$recovery_job" | awk '
+  { print }
+  /^    steps:$/ { exit }
+')
+expected_recovery_header=$(printf '%s\n' \
+  '  recover_formula_input:' \
+  '    name: 既存ReleaseのFormula入力を検証' \
+  "    if: github.event_name == 'workflow_dispatch' && needs.preflight.outputs.stable == 'true'" \
+  '    needs: preflight' \
+  '    runs-on: ubuntu-latest' \
+  '    permissions:' \
+  '      contents: read' \
+  '    steps:')
+if [[ $recovery_header != "$expected_recovery_header" ]]; then
+  printf '%s\n' "Formula recovery job must be stable-only and Contents-read-only" >&2
+  diff -u \
+    <(printf '%s\n' "$expected_recovery_header") \
+    <(printf '%s\n' "$recovery_header") >&2 || true
+  exit 1
+fi
+recovery_steps=$(printf '%s\n' "$recovery_job" | grep -E '^      - ' || true)
+expected_recovery_steps=$'      - name: 公開済み資産をdownload\n      - name: 公開済み資産とchecksumを検証\n      - name: Formula job用checksumをupload'
+if [[ $recovery_steps != "$expected_recovery_steps" ]]; then
+  printf '%s\n' "Formula recovery steps must match the reviewed read/verify/upload order" >&2
+  diff -u \
+    <(printf '%s\n' "$expected_recovery_steps") \
+    <(printf '%s\n' "$recovery_steps") >&2 || true
+  exit 1
+fi
+for required in \
+  '          GH_TOKEN: ${{ github.token }}' \
+  '          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}' \
+  '          metadata=$(gh release view "${RELEASE_TAG}" --json tagName,isDraft,isPrerelease --jq '\''[.tagName, .isDraft, .isPrerelease] | @tsv'\'')' \
+  '          test "${metadata}" = "${expected_metadata}"' \
+  '          gh release download "${RELEASE_TAG}" --dir dist' \
+  '          test "${entries[*]}" = "${expected[*]}"' \
+  '          test "$(wc -l < dist/checksums.txt)" -eq 5' \
+  '          (cd dist && sha256sum --check checksums.txt)' \
+  '          name: release-checksums' \
+  '          path: dist/checksums.txt' \
+  '          if-no-files-found: error'; do
+  require_exact_line "$recovery_job" "$required" "existing-Release Formula recovery"
+done
+if printf '%s\n' "$recovery_job" | grep -Eq 'actions/checkout@|scripts/|secrets\.'; then
+  fail "Formula recovery job must treat published assets as data without source execution or secrets"
+fi
 
 formula_permissions=$(printf '%s\n' "$formula_job" | awk '
   /^    permissions:$/ { in_permissions=1 }
@@ -261,7 +363,7 @@ for required in \
   '          binary=$(go run ./tools/projectmeta --field binary_name)' \
   '          formula="${formula_dir}/${binary}.rb"' \
   '          ./scripts/render-formula.sh \' \
-  '            "${GITHUB_REF_NAME}" \' \
+  '            "${{ needs.preflight.outputs.tag }}" \' \
   '            "https://github.com/${GITHUB_REPOSITORY}" \' \
   '            dist/checksums.txt \' \
   '            "${formula}"' \
@@ -391,12 +493,12 @@ for required in \
   '          path: homebrew-tap' \
   '          add-paths: Formula/cwk.rb' \
   '          base: main' \
-  '          branch: chore/homebrew-formula-${{ github.ref_name }}-cwk' \
+  '          branch: chore/homebrew-formula-${{ needs.preflight.outputs.tag }}-cwk' \
   '          delete-branch: true' \
-  '          commit-message: "Update Homebrew formula for ${{ github.ref_name }}"' \
-  '          title: "Update Homebrew formula for ${{ github.ref_name }}"' \
+  '          commit-message: "Update Homebrew formula for ${{ needs.preflight.outputs.tag }}"' \
+  '          title: "Update Homebrew formula for ${{ needs.preflight.outputs.tag }}"' \
   '          body: |' \
-  '            Formula/cwk.rbを${{ github.ref_name }}の公開macOS release archiveへ更新します。' \
+  '            Formula/cwk.rbを${{ needs.preflight.outputs.tag }}の公開macOS release archiveへ更新します。' \
   '            Formulaは正確なtag sourceからrenderし、checksum固定とauditを完了しています。'; do
   require_exact_line "$pull_request_step" "$required" "Formula pull-request step"
 done

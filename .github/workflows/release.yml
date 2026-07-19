@@ -4,12 +4,18 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "既存のstable ReleaseからHomebrew Formula公開を再開するtag"
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -17,11 +23,13 @@ jobs:
     name: tagとsourceを検証
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.release.outputs.tag }}
       revision: ${{ steps.release.outputs.revision }}
       stable: ${{ steps.release.outputs.stable }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -32,10 +40,19 @@ jobs:
 
       - name: release tagを検証
         id: release
+        env:
+          RECOVERY_TAG: ${{ inputs.tag }}
         shell: bash
         run: |
-          go run ./tools/releaseversion "${GITHUB_REF_NAME}" >>"${GITHUB_OUTPUT}"
-          revision=$(git rev-list -n 1 "${GITHUB_REF_NAME}")
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+            tag="${RECOVERY_TAG}"
+            go run ./tools/releaseversion --stable "${tag}" >>"${GITHUB_OUTPUT}"
+          else
+            go run ./tools/releaseversion "${tag}" >>"${GITHUB_OUTPUT}"
+          fi
+          revision=$(git rev-list -n 1 -- "${tag}")
+          echo "tag=${tag}" >>"${GITHUB_OUTPUT}"
           echo "revision=${revision}" >>"${GITHUB_OUTPUT}"
 
       - name: canonical full gateを実行
@@ -43,6 +60,7 @@ jobs:
 
   build:
     name: ${{ matrix.goos }} ${{ matrix.goarch }}をbuild
+    if: github.event_name == 'push'
     needs: preflight
     runs-on: ubuntu-latest
     strategy:
@@ -73,7 +91,7 @@ jobs:
       - name: archiveをbuildして検証
         run: |
           ./scripts/package-release.sh \
-            "${GITHUB_REF_NAME}" \
+            "${{ needs.preflight.outputs.tag }}" \
             "${{ needs.preflight.outputs.revision }}" \
             "${{ matrix.goos }}" \
             "${{ matrix.goarch }}" \
@@ -88,11 +106,19 @@ jobs:
 
   publish:
     name: GitHub Releaseを公開
+    if: github.event_name == 'push'
     needs: [preflight, build]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: 正確なrelease tagをcheckout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ needs.preflight.outputs.tag }}
+          fetch-depth: 0
+          persist-credentials: false
+
       - name: archiveをdownload
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -113,15 +139,61 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          args=(--verify-tag --title "${GITHUB_REF_NAME}" --notes-from-tag)
+          tag="${{ needs.preflight.outputs.tag }}"
+          args=(--verify-tag --title "${tag}" --notes-from-tag)
           if [[ "${{ needs.preflight.outputs.stable }}" != true ]]; then
             args+=(--prerelease)
           fi
-          if gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1; then
-            echo "release ${GITHUB_REF_NAME} already exists; refusing to replace immutable release assets" >&2
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "release ${tag} already exists; refusing to replace immutable release assets" >&2
             exit 1
           fi
-          gh release create "${GITHUB_REF_NAME}" dist/* "${args[@]}"
+          gh release create "${tag}" dist/* "${args[@]}"
+
+      - name: Formula job用checksumをupload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-checksums
+          path: dist/checksums.txt
+          if-no-files-found: error
+
+  recover_formula_input:
+    name: 既存ReleaseのFormula入力を検証
+    if: github.event_name == 'workflow_dispatch' && needs.preflight.outputs.stable == 'true'
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: 公開済み資産をdownload
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.preflight.outputs.tag }}
+        shell: bash
+        run: |
+          metadata=$(gh release view "${RELEASE_TAG}" --json tagName,isDraft,isPrerelease --jq '[.tagName, .isDraft, .isPrerelease] | @tsv')
+          expected_metadata=$(printf '%s\tfalse\tfalse' "${RELEASE_TAG}")
+          test "${metadata}" = "${expected_metadata}"
+          mkdir dist
+          gh release download "${RELEASE_TAG}" --dir dist
+
+      - name: 公開済み資産とchecksumを検証
+        shell: bash
+        run: |
+          mapfile -t entries < <(find dist -mindepth 1 -maxdepth 1 -type f -printf '%f\n' | sort)
+          expected=(
+            checksums.txt
+            "cwk_${{ needs.preflight.outputs.tag }}_darwin_amd64.tar.gz"
+            "cwk_${{ needs.preflight.outputs.tag }}_darwin_arm64.tar.gz"
+            "cwk_${{ needs.preflight.outputs.tag }}_linux_amd64.tar.gz"
+            "cwk_${{ needs.preflight.outputs.tag }}_linux_arm64.tar.gz"
+            "cwk_${{ needs.preflight.outputs.tag }}_windows_amd64.zip"
+          )
+          mapfile -t expected < <(printf '%s\n' "${expected[@]}" | sort)
+          test "${entries[*]}" = "${expected[*]}"
+          test "$(wc -l < dist/checksums.txt)" -eq 5
+          (cd dist && sha256sum --check checksums.txt)
 
       - name: Formula job用checksumをupload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -132,8 +204,13 @@ jobs:
 
   formula:
     name: checksum固定済みHomebrew Formulaを生成・audit
-    if: needs.preflight.outputs.stable == 'true'
-    needs: [preflight, build, publish]
+    if: >-
+      always() &&
+      needs.preflight.result == 'success' &&
+      needs.preflight.outputs.stable == 'true' &&
+      ((github.event_name == 'push' && needs.publish.result == 'success') ||
+      (github.event_name == 'workflow_dispatch' && needs.recover_formula_input.result == 'success'))
+    needs: [preflight, publish, recover_formula_input]
     runs-on: macos-15
     permissions:
       contents: read
@@ -162,7 +239,7 @@ jobs:
           binary=$(go run ./tools/projectmeta --field binary_name)
           formula="${formula_dir}/${binary}.rb"
           ./scripts/render-formula.sh \
-            "${GITHUB_REF_NAME}" \
+            "${{ needs.preflight.outputs.tag }}" \
             "https://github.com/${GITHUB_REPOSITORY}" \
             dist/checksums.txt \
             "${formula}"
@@ -180,8 +257,12 @@ jobs:
 
   formula_publish:
     name: audit済みHomebrew Formulaを共有tapへ提案
-    if: needs.preflight.outputs.stable == 'true'
-    needs: [preflight, publish, formula]
+    if: >-
+      always() &&
+      needs.preflight.result == 'success' &&
+      needs.preflight.outputs.stable == 'true' &&
+      needs.formula.result == 'success'
+    needs: [preflight, formula]
     runs-on: ubuntu-latest
     permissions: {}
     steps:
@@ -243,10 +324,10 @@ jobs:
           path: homebrew-tap
           add-paths: Formula/cwk.rb
           base: main
-          branch: chore/homebrew-formula-${{ github.ref_name }}-cwk
+          branch: chore/homebrew-formula-${{ needs.preflight.outputs.tag }}-cwk
           delete-branch: true
-          commit-message: "Update Homebrew formula for ${{ github.ref_name }}"
-          title: "Update Homebrew formula for ${{ github.ref_name }}"
+          commit-message: "Update Homebrew formula for ${{ needs.preflight.outputs.tag }}"
+          title: "Update Homebrew formula for ${{ needs.preflight.outputs.tag }}"
           body: |
-            Formula/cwk.rbを${{ github.ref_name }}の公開macOS release archiveへ更新します。
+            Formula/cwk.rbを${{ needs.preflight.outputs.tag }}の公開macOS release archiveへ更新します。
             Formulaは正確なtag sourceからrenderし、checksum固定とauditを完了しています。

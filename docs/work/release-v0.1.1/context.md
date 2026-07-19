@@ -16,6 +16,27 @@
   full-changelog comparison link. Release preparation therefore changed the
   workflow to publish reviewed annotated-tag notes and added positive/negative
   lint enforcement before any `v0.1.1` tag was created.
+- The reviewed source commit is
+  `1362038fb860f4ddc2e6b50719811dd396a68df4`; GitHub `main` CI run
+  `29689471296` passed for that exact revision.
+- The release owner confirmed immediately before tagging that the App
+  installation is limited to `homebrew-tap` with Contents and Pull requests
+  read/write.
+- Annotated tag `v0.1.1` resolves to the reviewed commit. Release workflow run
+  `29690203706` passed preflight and all five matrix builds, then failed before
+  publication because `gh release create --notes-from-tag` could not see a
+  local tag in the publish job.
+- No GitHub Release existed after that failure. The five successful Actions
+  artifacts were downloaded, reproduced locally byte-for-byte with Go 1.26.5,
+  checksummed, and published once with the exact annotated-tag notes at
+  <https://github.com/tasuku43/cwk/releases/tag/v0.1.1>.
+- All six published assets were downloaded again; the exact filename set and
+  every checksum passed. The rendered Formula also passed `ruby -c` and a real
+  Homebrew strict audit.
+- The post-tag workflow correction checks out the exact tag before future
+  annotated-note publication and adds a stable-tag-only, read-only recovery
+  dispatch that verifies an existing six-file Release before resuming the same
+  Formula audit and App-scoped tap publisher.
 
 ## Relevant structure
 
@@ -71,16 +92,12 @@
 
 ## Unknowns
 
-- [ ] Confirm immediately before tagging that the GitHub App installation is
-  limited to `homebrew-tap` with Contents read/write and Pull requests
-  read/write.
-- [ ] Review the exact annotated-tag notes against the exact pushed commit.
-- [ ] Record the resulting Release URL, workflow run, Formula pull request,
-  merge, and clean installation.
+- [ ] Record the recovery workflow run and resulting Formula pull request.
+- [ ] Record the Formula merge and clean Homebrew installation.
 
 ## Reviewed release notes
 
-The exact `v0.1.1` annotated-tag message will be:
+The exact `v0.1.1` annotated-tag and GitHub Release message is:
 
 ```text
 cwk v0.1.1
@@ -115,7 +132,7 @@ task public:check
   short-lived tap branch, and Formula-only pull request.
 - Credentials: maintainer GitHub CLI authentication and two Actions secrets;
   no value enters repository content or evidence.
-- Public artifacts: five archives, `checksums.txt`, generated release notes,
+- Public artifacts: five archives, `checksums.txt`, reviewed annotated-tag notes,
   checksum-pinned Formula, and workflow logs.
 - Confidentiality review: changed examples contain only local generic paths and
   stable public repository identifiers; public/security guards remain required.

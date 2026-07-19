@@ -31,19 +31,19 @@ the current tap-trust workflow.
 
 ## Acceptance criteria
 
-- [ ] One reviewed commit on `main` contains the compatibility fix,
+- [x] One reviewed commit on `main` contains the compatibility fix,
   installation guidance, enforcement, and both active work packets.
-- [ ] All required local profiles and GitHub `main` CI pass for that exact
+- [x] All required local profiles and GitHub `main` CI pass for that exact
   source state.
-- [ ] Annotated tag `v0.1.1` points to that commit and produces one create-only
+- [x] Annotated tag `v0.1.1` points to that commit and produces one create-only
   GitHub Release with five archives and `checksums.txt`.
-- [ ] Published checksums match every archive and release metadata identifies
+- [x] Published checksums match every archive and release metadata identifies
   the reviewed commit.
 - [ ] The stable workflow proposes only `Formula/cwk.rb` to
   `tasuku43/homebrew-tap` through the reviewed App boundary.
 - [ ] After the Formula pull request merges, a clean
   `brew install tasuku43/tap/cwk` succeeds.
-- [ ] No credential value, private identifier, personal data, or mutable
+- [x] No credential value, private identifier, personal data, or mutable
   private asset URL is published.
 
 ## Governing documents

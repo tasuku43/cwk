@@ -11,7 +11,7 @@
   annotated-tag notes with a negative workflow mutation test.
 - [x] Confirm the complete working-tree scope includes the configuration-home
   compatibility fix and the existing Homebrew 6 README change.
-- [ ] Confirm the App installation is limited to `homebrew-tap` with Contents
+- [x] Confirm the App installation is limited to `homebrew-tap` with Contents
   read/write and Pull requests read/write.
 - [x] Obtain the release owner's instruction to publish the current source to
   `main` as `v0.1.1`.
@@ -33,21 +33,27 @@
   the reviewed scope is the store fix, two test files, README installation
   guidance, governing documents, release-note workflow enforcement, and the
   fix/release work packets.
-- [ ] The exact committed `main` revision passes GitHub CI. Evidence:
-- [ ] Annotated-tag release notes for the exact remote commit are reviewed.
+- [x] The exact committed `main` revision passes GitHub CI. Evidence: run
+  `29689471296` passed for
+  `1362038fb860f4ddc2e6b50719811dd396a68df4`.
+- [x] Annotated-tag release notes for the exact remote commit are reviewed.
 
 ## Publish
 
-- [ ] Commit the fix, tests, documentation, and work packets to `main`.
-- [ ] Push the reviewed commit to `origin/main`.
-- [ ] Create annotated tag `v0.1.1` at that exact commit.
-- [ ] Push only that tag and monitor the Release workflow.
+- [x] Commit the fix, tests, documentation, and work packets to `main`.
+- [x] Push the reviewed commit to `origin/main`.
+- [x] Create annotated tag `v0.1.1` at that exact commit.
+- [x] Push only that tag and monitor the Release workflow. Evidence: run
+  `29690203706` passed preflight and five builds; its publish checkout defect
+  was recovered without moving the tag or replacing any published asset.
 
 ## Verify publication and rollout
 
-- [ ] Download the five archives and `checksums.txt`, verify the exact filename
+- [x] Download the five archives and `checksums.txt`, verify the exact filename
   set, and recompute every checksum.
-- [ ] Release metadata identifies `v0.1.1` and the reviewed commit.
+- [x] Release metadata identifies `v0.1.1` and the reviewed commit.
+- [ ] Dispatch the stable-tag-only recovery workflow and confirm it revalidates
+  the immutable Release before crossing the App boundary.
 - [ ] The shared-tap pull request changes only `Formula/cwk.rb`.
 - [ ] The Formula pull request merges through reviewed automation.
 - [ ] A clean `brew install tasuku43/tap/cwk` succeeds after merge.

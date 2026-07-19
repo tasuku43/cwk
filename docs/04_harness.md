@@ -259,7 +259,10 @@ The test suite has complementary levels:
   privileged runner, reviewed workflow and Formula-job fields without ambient
   `env` or `defaults`, non-symbolic Formula destination paths, exact
   Formula-only PR path and conventions, and
-  render/audit-before-write ordering. Negative workflow mutations prove that
+  render/audit-before-write ordering. They also fix the stable-only manual
+  recovery trigger, quoted tag-to-revision binding, read-only recovery job,
+  exact non-draft six-file Release metadata, checksum verification, and
+  data-only handoff into the same Formula jobs. Negative workflow mutations prove that
   broader scope, another token/path/base, wildcard staging, an extra permission
   or token consumer, duplicate secret use, ambient runtime injection, symbolic
   destination acceptance, changed Formula-source binding, or ignored audit/PR
@@ -330,7 +333,7 @@ Every strong statement should identify its enforcement path.
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures |
 | Reproducible generation | Regenerate and require a clean diff |
 | Artifact integrity | Build, inspect, checksum, and install tests |
-| Shared Homebrew tap publication | Release lint validates reviewed annotated-tag notes, the workflow and Formula-job field allowlists, every Formula-job step start, and exact checksum/toolchain, render/audit/artifact upload, fresh-runner artifact validation, token, checkout, staging, and PR shapes; confines the App action and each secret to one reviewed workflow-wide occurrence; fixes the audit-to-publish job dependency, public tap repository, requested permissions, read-only audit-job source token, zero source-repository permissions in the token-bearing job, absence of ambient `env`/`defaults`, tagged-source checkout, or checked-out code execution there, exact audited Formula binding/path, non-symbolic destination paths, PR branch/title prefixes, pinned actions, and render/audit-before-write order; negative mutation fixtures prove generated-note substitution, alternate/extra fields or steps, external secret/action use, runtime injection, symbolic-path acceptance, same-runner code execution, representative drift, and ignored failures are rejected; the release owner manually confirms the external App installation maximum |
+| Shared Homebrew tap publication | Release lint validates reviewed annotated-tag notes, exact-tag publication checkout, the workflow and Formula-job field allowlists, every Formula-job step start, and exact checksum/toolchain, render/audit/artifact upload, fresh-runner artifact validation, token, checkout, staging, and PR shapes; confines the App action and each secret to one reviewed workflow-wide occurrence; fixes the stable-only manual recovery input, quoted tag binding, read-only existing-Release verification, exact six-file/checksum handoff, audit-to-publish dependency, public tap repository, requested permissions, read-only audit-job source token, zero source-repository permissions in the token-bearing job, absence of ambient `env`/`defaults`, tagged-source checkout, or checked-out code execution there, exact audited Formula binding/path, non-symbolic destination paths, PR branch/title prefixes, pinned actions, and render/audit-before-write order; negative mutation fixtures prove generated-note substitution, unpinned/reclassified recovery, skipped metadata/checksum validation, alternate/extra fields or steps, external secret/action use, runtime injection, symbolic-path acceptance, same-runner code execution, representative drift, and ignored failures are rejected; the release owner manually confirms the external App installation maximum |
 | Documentation command | Execute or parse the canonical snippet where practical |
 | Japanese default user experience | Whole-catalog natural-language validation, human help/TUI/error snapshots, stable-identifier regression tests, and repository checks for the active Japanese entry documents and GitHub templates |
 

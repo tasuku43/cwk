@@ -17,6 +17,14 @@ internal/infra does not depend on app or cli.
 
 `tools/archlint` enforces this direction for production code. Tests may use dedicated helpers, but they must not create a production bypass.
 
+Release automation is a separate supply-chain pipeline rather than a fifth
+runtime layer. A tag push owns create-only archive and GitHub Release
+publication. A manual dispatch accepts only an existing stable tag and owns
+read-only verification of that Release's exact asset/checksum set before it
+rejoins the same exact-revision Formula audit and fresh App-token tap publisher.
+Neither path imports release policy into `internal/` packages or allows Formula
+recovery to mutate published assets.
+
 ## Layer responsibilities
 
 ### Domain

@@ -61,7 +61,10 @@ reviewed clean main commit
 Stop before tagging if any local profile, remote CI, note review, or App
 precondition fails. Once the Release exists, do not overwrite assets or move
 the tag. A Formula-only rollout failure may be retried only when artifact and
-Formula identity are unchanged.
+Formula identity are unchanged. The observed publish-job annotation lookup
+failure occurred before any Release existed; recovery published the already
+verified byte-identical matrix once, then added a read-only existing-Release
+recovery dispatch so Formula rollout can retain the App boundary.
 
 ### Security and public boundary
 
@@ -77,6 +80,9 @@ pre-tag condition.
 3. Commit and push the exact source to `main`; wait for GitHub CI.
 4. Preview notes and confirm App scope; create and push the annotated tag.
 5. Verify Release assets, Formula PR, merge, and clean installation.
+6. If Formula rollout is interrupted after Release publication, dispatch the
+   stable-tag-only recovery path and verify the same immutable inputs before
+   the App-scoped pull request.
 
 ## Verification
 

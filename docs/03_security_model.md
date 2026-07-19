@@ -382,6 +382,16 @@ token-bearing Formula publish job has no source-repository `GITHUB_TOKEN`
 permissions; the separate GitHub Release publish job retains Contents write
 only for release creation.
 
+Post-publication Formula recovery is a separate, stable-tag-only entry to the
+same workflow. Its preflight resolves the quoted input through the release-tag
+validator, runs the canonical full gate at that immutable revision, and grants
+the recovery job only Contents read. Recovery accepts only an existing
+non-draft, non-prerelease Release whose six exact filenames and five checksums
+verify. It uploads only the verified checksum file to the credential-free
+Formula audit job; it has no Release write permission and does not execute
+checked-out source. The later tap write still occurs only in the existing
+fresh runner with the same App installation token restrictions.
+
 Both source and tap checkouts disable persisted credentials and occur on
 different runners. The installation token is supplied explicitly only to the
 tap checkout and pinned pull-request

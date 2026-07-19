@@ -119,6 +119,15 @@ The release workflow follows this order:
    execution, validate the Formula artifact as data and open a Formula update
    pull request in `tasuku43/homebrew-tap`.
 
+If GitHub Release publication succeeded but the Formula stages did not, a
+maintainer may dispatch the same `Release` workflow with the existing stable
+tag. That recovery path checks out the tag only in the read-only preflight,
+runs the canonical full gate, downloads the already-published six-file asset
+set, requires a non-draft/non-prerelease Release with the exact tag, verifies
+the exact filenames and all five checksums, and uploads only `checksums.txt` as
+Formula input. It never creates, uploads, replaces, or deletes Release assets.
+The normal exact-revision Formula audit and fresh App-token runner then resume.
+
 The workflow uses a public GitHub Release path. It must not embed private asset URLs, personal access tokens, authorization headers, or organization-specific package infrastructure in Formula content.
 
 Publication is create-only. If a GitHub Release already exists for the tag, the workflow fails without uploading or replacing any asset. It never uses `--clobber`. Correct a failed or incorrect release with a new version and an explicit incident or withdrawal decision; do not silently rewrite published evidence.
@@ -127,7 +136,8 @@ Release notes are likewise selected before publication. The workflow requires
 an annotated tag and passes `--notes-from-tag`; it rejects generated-note
 substitution because a direct reviewed commit may otherwise collapse to only a
 comparison link. The release owner reviews the exact annotation before tag
-push. A lightweight tag or an annotation that omits included changes,
+push. The publication job checks out that exact tag without persisted
+credentials before asking GitHub CLI to read its local annotation. A lightweight tag or an annotation that omits included changes,
 compatibility, security, or migration impact is not release-ready.
 
 Workflow checkouts disable persisted Git credentials. The Formula pull-request
@@ -149,6 +159,12 @@ current `main`, copies the Formula to `Formula/cwk.rb`, and opens the reviewable
 pull request. Changes to source identity, templates, or generation scripts
 after the tag therefore cannot race the artifacts and checksums used as
 generation input.
+
+The manual recovery input is accepted only as a stable SemVer tag, is passed to
+shell through a quoted environment value, and resolves to the same immutable
+revision in preflight. Recovery is deliberately limited to the Homebrew
+rollout: it cannot be used to republish GitHub Release assets or to update a
+prerelease Formula.
 
 The GitHub App must be installed only on `homebrew-tap` with Contents
 read/write plus Pull requests read/write there, and the release owner confirms
@@ -235,8 +251,11 @@ local run does not authorize tagging a different revision.
 - If a checksum or Formula reference is wrong, correct it through a reviewed replacement release or metadata change; do not silently mutate evidence.
 - If the shared-tap job fails after GitHub Release publication, do not replace
   the release assets. Correct the App/tap condition and rerun the failed job, or
-  propose the same audited Formula manually through a reviewed tap pull
-  request. Change the release version when artifact identity must change.
+  dispatch `gh workflow run release.yml -f tag=<stable-tag>` to revalidate the
+  immutable published inputs and resume the same App-scoped Formula path. A
+  manually proposed Formula is acceptable only when it is byte-identical to
+  the audited result and receives the same tap review. Change the release
+  version when artifact identity must change.
 - If the tag already has a GitHub Release, stop. Do not overwrite its assets or rerun publication as an update operation.
 - If sensitive content reaches a release, stop distribution, revoke affected credentials, preserve incident evidence, and follow the security response process.
 - Do not reuse a stable version for different source or artifacts.

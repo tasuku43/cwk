@@ -74,7 +74,7 @@ insert_token_consumer() {
     { print }
     $0 == "          persist-credentials: false" {
       seen++
-      if (!changed && seen == 4) {
+      if (!changed && seen == 5) {
         print "      - name: App tokenを直接利用"
         print "        env:"
         print "          GH_TOKEN: ${{ steps.homebrew-token.outputs.token }}"
@@ -101,8 +101,26 @@ replace_nth_line workflow-root-permission \
   '  contents: read' \
   '  contents: write'
 replace_nth_line generated-release-notes \
-  '          args=(--verify-tag --title "${GITHUB_REF_NAME}" --notes-from-tag)' \
-  '          args=(--verify-tag --title "${GITHUB_REF_NAME}" --generate-notes)'
+  '          args=(--verify-tag --title "${tag}" --notes-from-tag)' \
+  '          args=(--verify-tag --title "${tag}" --generate-notes)'
+replace_nth_line optional-recovery-tag \
+  '        required: true' \
+  '        required: false'
+replace_nth_line unpinned-publish-tag-checkout \
+  '          ref: ${{ needs.preflight.outputs.tag }}' \
+  '          ref: ${{ github.ref }}'
+replace_nth_line nonstable-recovery-tag \
+  '            go run ./tools/releaseversion --stable "${tag}" >>"${GITHUB_OUTPUT}"' \
+  '            go run ./tools/releaseversion "${tag}" >>"${GITHUB_OUTPUT}"'
+replace_nth_line prerelease-formula-recovery \
+  "    if: github.event_name == 'workflow_dispatch' && needs.preflight.outputs.stable == 'true'" \
+  "    if: github.event_name == 'workflow_dispatch'"
+replace_nth_line ignored-release-metadata \
+  '          test "${metadata}" = "${expected_metadata}"' \
+  '          true'
+replace_nth_line ignored-release-checksums \
+  '          (cd dist && sha256sum --check checksums.txt)' \
+  '          true'
 insert_after_line workflow-root-extra-permission \
   '  contents: read' \
   '  issues: write'
@@ -125,8 +143,8 @@ insert_after_line ignored-Formula-job \
   '    runs-on: macos-15' \
   '    continue-on-error: true'
 replace_nth_line missing-audit-dependency \
-  '    needs: [preflight, publish, formula]' \
-  '    needs: [preflight, publish]'
+  '    needs: [preflight, formula]' \
+  '    needs: [preflight]'
 replace_nth_line checksum-action \
   '        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8' \
   '        run: true' \
@@ -149,12 +167,12 @@ replace_nth_line pull-request-base \
   '          base: main' \
   '          base: develop'
 replace_nth_line pull-request-title \
-  '          title: "Update Homebrew formula for ${{ github.ref_name }}"' \
-  '          title: "Formula update for ${{ github.ref_name }}"'
+  '          title: "Update Homebrew formula for ${{ needs.preflight.outputs.tag }}"' \
+  '          title: "Formula update for ${{ needs.preflight.outputs.tag }}"'
 replace_nth_line persisted-tap-credential \
   '          persist-credentials: false' \
   '          persist-credentials: true' \
-  4
+  5
 replace_nth_line Formula-source-binding \
   '          source_formula="${RUNNER_TEMP}/audited-formula/cwk.rb"' \
   '          source_formula="Formula/cwk.rb"'
@@ -180,16 +198,19 @@ insert_token_consumer
 insert_after_line anonymous-token-consumer \
   '          persist-credentials: false' \
   "      - run: GH_TOKEN=\"\${{ steps['homebrew-token'].outputs.token }}\" git -C homebrew-tap push origin HEAD:main" \
-  4
+  5
 insert_after_line extra-token-action \
   '          persist-credentials: false' \
-  '      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3'
+  '      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3' \
+  5
 insert_after_line secret-outside-token-step \
   '          persist-credentials: false' \
-  '          leaked: ${{ secrets.HOMEBREW_APP_KEY }}'
+  '          leaked: ${{ secrets.HOMEBREW_APP_KEY }}' \
+  5
 insert_after_line whole-secrets-context \
   '          persist-credentials: false' \
-  '          leaked: ${{ toJSON(secrets) }}'
+  '          leaked: ${{ toJSON(secrets) }}' \
+  5
 insert_after_line duplicate-secret-reference \
   '            Formulaは正確なtag sourceからrenderし、checksum固定とauditを完了しています。' \
   '            ${{ secrets.HOMEBREW_APP_KEY }}'

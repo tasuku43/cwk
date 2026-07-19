@@ -142,6 +142,9 @@ Before each public release, verify:
 - the annotated tag carries those reviewed notes and the release workflow
   publishes them unchanged rather than deriving incomplete notes from pull
   request history;
+- any post-publication Formula recovery uses only an existing stable tag,
+  verifies the exact public asset set and checksums without replacing it, and
+  resumes the same audit plus App-scoped fresh-runner boundary;
 - for a stable release, the candidate Formula was rendered and syntax-checked
   from the exact release revision and the post-publication audit/PR contract
   was reviewed;
