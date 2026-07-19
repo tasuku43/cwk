@@ -129,6 +129,13 @@ the retired selector may contain `doctor` or `version`; only those two legacy
 entries are ignored while deriving the view and removed on the next successful
 Enter save. Other always-on entries remain invalid.
 
+A confirmed save is a human terminal result rather than a reconciliation
+record. It says in natural Japanese how many Chatwork commands are visible,
+hidden, and changed, and mentions old-setting cleanup only when it occurred.
+It does not repeat the fingerprint or expose internal key/value labels. The
+words visible and hidden describe only the local attention view; they do not
+grant or revoke Chatwork authority.
+
 The preference is stored separately from credentials and the retired OAuth
 configuration: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json`
 on macOS and Linux, and `%AppData%\\cwk\\command-selection.json` on Windows.
@@ -447,6 +454,15 @@ single-selector refinement deliberately removed public `config show` and
 terminal Up/Down/Space/Enter/`q` interaction, and moved read-only uncertain-save
 reconciliation to `doctor`. The profile schema and location did not change;
 legacy `doctor`/`version` entries are normalized on the next save.
+
+The final pre-`v0.1.0` selector presentation deliberately replaced the
+machine-shaped confirmed-save line with Concept A's natural-Japanese result
+suffix. Scoped agent output fields changed from
+`enabled`/`disabled`/`stale_removed`/`legacy_removed`/`fingerprint` to
+`visible`/`hidden`/`cleaned`, while retaining `status` and `changed`. Cleanup
+now combines stale and legacy entries and appears only when nonzero. The
+fingerprint remains exclusively on the uncertain-save and read-only `doctor`
+reconciliation paths; no released version used the superseded contract.
 
 ## Explicit non-goals
 

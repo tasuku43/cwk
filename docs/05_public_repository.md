@@ -62,7 +62,7 @@ Repository shape checks also reject Claude-specific policy paths, interrupted bo
 
 Every local Markdown link must use a canonical repository-relative path that stays inside the repository and resolves to a publishable regular file without crossing a symbolic link. External URLs, `mailto:` links, same-document fragments, and examples inside fenced code blocks are outside this local-file check. External link availability still requires review because network state is not reproducible inside the repository gate.
 
-The security scan recognizes common token formats, credential-bearing URLs, authorization headers, and secret assignments, including quoted JSON keys and values. Example values are exempt only when they use an explicit whole-value convention such as `dummy-value`, `example-token`, `${ACCESS_TOKEN}`, `env.ACCESS_TOKEN`, `null`, or `[redacted]`. A marker embedded in a plausible real value, such as `production-dummy` or `contest-token`, is not an exemption.
+The security scan recognizes common token formats, credential-bearing URLs, authorization headers, and secret assignments, including quoted JSON keys and values. Example values are exempt only when they use an explicit whole-value convention such as `dummy-value`, `example-token`, `${ACCESS_TOKEN}`, `env.ACCESS_TOKEN`, exact GitHub Actions `${{ secrets.ACCESS_TOKEN }}` syntax, `null`, or `[redacted]`. A marker embedded in a plausible real value, such as `production-dummy`, `contest-token`, or a secret expression with a suffix, is not an exemption.
 
 These checks are a repository-specific backstop, not a claim that regular expressions can prove the absence of secrets. Public history and artifacts still require the approved full-history secret scanner and human confidentiality review.
 
@@ -136,9 +136,25 @@ Before each public release, verify:
 - supported-platform artifacts are complete;
 - checksums and any provenance or signatures are present and verified;
 - archives contain only the intended executable, project `LICENSE`, and reviewed `THIRD_PARTY_NOTICES` artifact;
-- installation instructions work in a clean environment;
+- installation instructions that do not depend on post-publication
+  package-manager metadata work in a clean environment;
 - release notes disclose compatibility, security, and migration impact;
+- for a stable release, the candidate Formula was rendered and syntax-checked
+  from the exact release revision and the post-publication audit/PR contract
+  was reviewed;
+- the Homebrew GitHub App remains installed only on
+  `tasuku43/homebrew-tap` with the reviewed Contents and Pull requests
+  permissions, without copying either secret value into review evidence;
 - no artifact, Formula, URL, log, or metadata contains a forbidden identifier.
+
+For a stable release, Homebrew availability is a post-publication rollout
+check rather than a pre-tag claim. After GitHub Release publication, verify
+that the macOS job strictly audited the exact Formula and that its shared-tap
+pull request changes only `Formula/cwk.rb`. After that pull request merges,
+perform a clean `brew install tasuku43/tap/cwk`, record the result in that
+release's work packet, and only then announce the Homebrew path as available.
+The GitHub Release and its public checksums must exist before the new Formula
+can be installed from the shared tap.
 
 See [Release](06_release.md) for the artifact workflow.
 

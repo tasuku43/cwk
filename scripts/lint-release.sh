@@ -15,8 +15,10 @@ bash -n \
   scripts/package-release.sh \
   scripts/render-formula.sh \
   scripts/audit-formula.sh \
+  scripts/lint-release-workflow.sh \
   scripts/test-audit-formula.sh \
   scripts/test-check-environment.sh \
+  scripts/test-release-workflow.sh \
   scripts/testdata/fake-go-gate-environment.sh \
   scripts/testdata/fake-brew.sh
 if ! command -v shellcheck >/dev/null 2>&1; then
@@ -78,19 +80,6 @@ for required_install in \
   }
 done
 
-if grep -qF -- '--clobber' .github/workflows/release.yml; then
-  echo "release workflow must never overwrite existing release assets" >&2
-  exit 1
-fi
-grep -qF 'already exists; refusing to replace immutable release assets' .github/workflows/release.yml || {
-  echo "release workflow does not fail closed when the tag already has a release" >&2
-  exit 1
-}
-grep -A4 -F 'ref: main' .github/workflows/release.yml | grep -qF 'persist-credentials: false' || {
-  echo "Formula checkout persists workflow credentials" >&2
-  exit 1
-}
-
 for forbidden in 'git describe' '{{.VERSION}}' '{{.COMMIT}}'; do
   if grep -qF "$forbidden" Taskfile.yml; then
     echo "local build must not interpolate repository-controlled version metadata: $forbidden" >&2
@@ -112,6 +101,7 @@ for required in \
   done
 done
 scripts/test-check-environment.sh >/dev/null
+scripts/test-release-workflow.sh >/dev/null
 
 for forbidden in 'HOMEBREW_GITHUB_API_TOKEN' 'api.github.com/repos/' 'Authorization: Bearer'; do
   if grep -R -F "$forbidden" Formula scripts/render-formula.sh .github/workflows/release.yml >/dev/null 2>&1; then
@@ -119,58 +109,6 @@ for forbidden in 'HOMEBREW_GITHUB_API_TOKEN' 'api.github.com/repos/' 'Authorizat
     exit 1
   fi
 done
-
-for required in \
-  './scripts/check.sh full' './scripts/package-release.sh' 'checksums.txt' \
-  'gh release create' 'Formula/' 'scripts/render-formula.sh'; do
-  grep -qF "$required" .github/workflows/release.yml || {
-    echo "release workflow is missing: $required" >&2
-    exit 1
-  }
-done
-
-formula_job=$(awk '
-  /^  formula:/ { in_formula=1 }
-  in_formula && !/^  formula:/ && /^  [A-Za-z0-9_-]+:/ { exit }
-  in_formula { print }
-' .github/workflows/release.yml)
-build_job=$(awk '
-  /^  build:/ { in_build=1 }
-  in_build && !/^  build:/ && /^  [A-Za-z0-9_-]+:/ { exit }
-  in_build { print }
-' .github/workflows/release.yml)
-release_revision_ref="ref: \${{ needs.preflight.outputs.revision }}"
-formula_temp_ref="\${RUNNER_TEMP}/formula"
-printf '%s\n' "$build_job" | grep -A4 -F "$release_revision_ref" | grep -qF 'persist-credentials: false' || {
-  echo "matrix build checkout is not fixed to the credential-free preflight revision" >&2
-  exit 1
-}
-for required in \
-  "$release_revision_ref" \
-  './scripts/render-formula.sh' 'ruby -c' './scripts/audit-formula.sh' \
-  "$formula_temp_ref" 'ref: main' 'audit済みFormulaをmainへ配置'; do
-  if ! printf '%s\n' "$formula_job" | grep -qF "$required"; then
-    echo "Formula job is missing its host-specific check: $required" >&2
-    exit 1
-  fi
-done
-printf '%s\n' "$formula_job" | grep -A4 -F "$release_revision_ref" | grep -qF 'persist-credentials: false' || {
-  echo "exact release source checkout persists workflow credentials" >&2
-  exit 1
-}
-if printf '%s\n' "$formula_job" | grep -qF './scripts/check.sh release'; then
-  echo "Formula job must not repeat the Linux preflight release profile" >&2
-  exit 1
-fi
-release_checkout_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F "$release_revision_ref" | cut -d: -f1)
-render_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F './scripts/render-formula.sh' | cut -d: -f1)
-audit_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F './scripts/audit-formula.sh' | cut -d: -f1)
-main_checkout_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F 'ref: main' | cut -d: -f1)
-stage_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F 'audit済みFormulaをmainへ配置' | cut -d: -f1)
-if ((release_checkout_line >= render_line || render_line >= audit_line || audit_line >= main_checkout_line || main_checkout_line >= stage_line)); then
-  echo "Formula must be rendered and audited at the release revision before its output is staged on main" >&2
-  exit 1
-fi
 
 if scripts/package-release.sh bad-tag 0000000000000000000000000000000000000000 linux amd64 dist >/dev/null 2>&1; then
   echo "package-release accepted an invalid tag" >&2

@@ -299,11 +299,23 @@ func (c *CLI) saveConfigSelection(
 	for _, path := range enabled {
 		selected[path] = true
 	}
-	output := fmt.Sprintf(
-		"config を保存しました enabled=%d disabled=%d changed=%d stale-removed=%d legacy-removed=%d fingerprint=%s\n",
-		len(enabled), len(choices)-len(enabled), selectionChangeCount(choices, original, selected), len(state.stale), len(state.legacy), commandSelectionFingerprint(enabled),
+	output := configSaveSuccessOutput(
+		len(enabled),
+		len(choices)-len(enabled),
+		selectionChangeCount(choices, original, selected),
+		len(state.stale)+len(state.legacy),
 	)
-	return c.emitMutationResult(ctx, []byte(output)), true
+	return c.emitMutationResult(ctx, output), true
+}
+
+func configSaveSuccessOutput(visible, hidden, changed, cleaned int) []byte {
+	var output strings.Builder
+	output.WriteString("コマンド表示を保存しました。\n")
+	fmt.Fprintf(&output, "%d件を表示し、%d件を非表示にしました（%d件変更）。\n", visible, hidden, changed)
+	if cleaned > 0 {
+		fmt.Fprintf(&output, "古い設定を%d件整理しました。\n", cleaned)
+	}
+	return []byte(output.String())
 }
 
 func buildConfigExecutionRequest(command CommandSpec, base operation.Intent) (execution.Request, error) {

@@ -73,6 +73,7 @@ func TestCheckTextDetectsQuotedJSONSecretsAndMarkerSubstrings(t *testing.T) {
 		jsonSecretAssignment("client_"+"secret", "dummy-value"),
 		jsonSecretAssignment("access_"+"token", "${ACCESS_TOKEN}"),
 		jsonSecretAssignment("pass"+"word", "env.PASSWORD"),
+		jsonSecretAssignment("private_"+"key", "${{ secrets.HOMEBREW_APP_KEY }}"),
 		jsonSecretAssignment("pass"+"word", "[redacted]"),
 	} {
 		if issues := checkText("config.json", value, config, nil, "security"); len(issues) != 0 {
@@ -84,10 +85,40 @@ func TestCheckTextDetectsQuotedJSONSecretsAndMarkerSubstrings(t *testing.T) {
 		jsonSecretAssignment("client_"+"secret", "production-dummy"),
 		jsonSecretAssignment("client_"+"secret", "contest-token"),
 		jsonSecretAssignment("client_"+"secret", "env.PASSWORD-extra"),
+		jsonSecretAssignment("private_"+"key", "${{ secrets.HOMEBREW_APP_KEY }}-extra"),
+		jsonSecretAssignment("private_"+"key", "${{ vars.HOMEBREW_APP_KEY }}"),
 	} {
 		issues := checkText("config.json", value, config, nil, "security")
 		if len(issues) != 1 || issues[0].Message != "secret-like value assigned in source" {
 			t.Errorf("embedded marker %q issues = %#v", value, issues)
+		}
+	}
+}
+
+func TestCheckSecretsAllowsOnlyWholeGitHubActionsSecretReferences(t *testing.T) {
+	key := "private-" + "key: "
+	secretExpression := "${{ secrets.HOMEBREW_APP_KEY }}"
+	for _, safe := range []string{key + secretExpression} {
+		if issues := checkSecrets("release.yml", safe, 1); len(issues) != 0 {
+			t.Errorf("GitHub Actions secret reference %q issues = %#v", safe, issues)
+		}
+	}
+	if safe := `"` + key + `\` + secretExpression + `"`; len(checkSecrets("scripts/lint-release.sh", safe, 1)) != 0 {
+		t.Errorf("escaped shell GitHub Actions secret reference was rejected")
+	}
+	for _, unsafe := range []string{
+		key + secretExpression + " # runtime reference",
+		key + secretExpression + " # password=real-secret-value",
+		key + secretExpression + "-extra",
+		key + secretExpression + " live-value",
+		key + secretExpression + "#live-value",
+		key + "${{ vars.HOMEBREW_APP_KEY }}",
+		key + "prefix-" + secretExpression,
+		`"` + key + `\` + secretExpression + `"`,
+	} {
+		issues := checkSecrets("release.yml", unsafe, 1)
+		if len(issues) != 1 || issues[0].Message != "secret-like value assigned in source" {
+			t.Errorf("unsafe GitHub Actions reference %q issues = %#v", unsafe, issues)
 		}
 	}
 }

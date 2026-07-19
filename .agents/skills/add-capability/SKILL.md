@@ -193,6 +193,13 @@ action; after replacement is attempted, use the `doctor` fingerprint for
 uncertain-outcome reconciliation, and never overwrite confirmed success with
 late cancellation.
 
+Keep confirmed `config` success human-facing: report visible, hidden, and
+changed counts in natural Japanese, add cleanup only when nonzero, and do not
+repeat internal key/value labels or the reconciliation fingerprint. The
+candidate fingerprint belongs to an uncertain-save fault; the actual
+source/fingerprint belongs to read-only `doctor`. This split must remain exact
+in catalog fields, golden output, and readiness evidence.
+
 Keep the terminal boundary layered. `config` is a fixed-`tool_local` write, not
 a read command with a hidden save. CLI owns the pure selector model, key
 semantics, catalog-derived rows, viewport, and presentation. Infrastructure

@@ -24,6 +24,17 @@ func TestRenderMessageProjectionGolden(t *testing.T) {
 	}
 }
 
+func TestREADMEUsesCurrentMessageProjectionSchema(t *testing.T) {
+	readme, err := os.ReadFile("../../../README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const schema = `schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"`
+	if count := strings.Count(string(readme), schema); count != 1 {
+		t.Fatalf("README current message schema count = %d, want 1", count)
+	}
+}
+
 func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t *testing.T) {
 	result := messageFixture()
 	result.MessageSelection = &chatwork.MessageSelection{

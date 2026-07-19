@@ -131,13 +131,12 @@ jobs:
           if-no-files-found: error
 
   formula:
-    name: checksum固定済みHomebrew Formulaを提案
+    name: checksum固定済みHomebrew Formulaを生成・audit
     if: needs.preflight.outputs.stable == 'true'
     needs: [preflight, build, publish]
     runs-on: macos-15
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: 正確なrelease sourceをcheckout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -169,36 +168,85 @@ jobs:
             "${formula}"
           ruby -c "${formula}"
           ./scripts/audit-formula.sh "${formula}"
-          echo "binary=${binary}" >>"${GITHUB_OUTPUT}"
           echo "path=${formula}" >>"${GITHUB_OUTPUT}"
 
-      - name: Formula pull requestのbaseをcheckout
+      - name: audit済みFormulaをupload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: audited-homebrew-formula
+          path: ${{ steps.formula.outputs.path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  formula_publish:
+    name: audit済みHomebrew Formulaを共有tapへ提案
+    if: needs.preflight.outputs.stable == 'true'
+    needs: [preflight, publish, formula]
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: audit済みFormulaをdownload
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: audited-homebrew-formula
+          path: ${{ runner.temp }}/audited-formula
+
+      - name: Formula artifactをdataとして検証
+        shell: bash
+        run: |
+          formula_root="${RUNNER_TEMP}/audited-formula"
+          mapfile -d '' -t entries < <(find "${formula_root}" -mindepth 1 -maxdepth 1 -print0)
+          test "${#entries[@]}" -eq 1
+          test "${entries[0]}" = "${formula_root}/cwk.rb"
+          test -f "${entries[0]}"
+          test ! -L "${entries[0]}"
+
+      - name: Homebrew tap用GitHub App tokenを作成
+        id: homebrew-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
+        with:
+          app-id: ${{ secrets.HOMEBREW_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_APP_KEY }}
+          owner: tasuku43
+          repositories: homebrew-tap
+          permission-contents: write
+          permission-pull-requests: write
+
+      - name: 共有Homebrew tapをcheckout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
+          repository: tasuku43/homebrew-tap
           ref: main
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
           persist-credentials: false
 
-      - name: audit済みFormulaをmainへ配置
-        env:
-          FORMULA_BINARY: ${{ steps.formula.outputs.binary }}
-          FORMULA_SOURCE: ${{ steps.formula.outputs.path }}
+      - name: audit済みFormulaを共有tapへ配置
         run: |
-          source_formula="${FORMULA_SOURCE}"
-          target_formula="Formula/${FORMULA_BINARY}.rb"
+          source_formula="${RUNNER_TEMP}/audited-formula/cwk.rb"
+          formula_dir="homebrew-tap/Formula"
+          target_formula="${formula_dir}/cwk.rb"
           test -f "${source_formula}"
-          test -d Formula
+          test -d "${formula_dir}"
+          test ! -L "${formula_dir}"
+          test ! -L "${target_formula}"
+          if [[ -e "${target_formula}" ]]; then
+            test -f "${target_formula}"
+          fi
           cp "${source_formula}" "${target_formula}"
           cmp -s "${source_formula}" "${target_formula}"
 
       - name: Formula更新pull requestを作成
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
-          add-paths: Formula/*.rb
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
+          add-paths: Formula/cwk.rb
           base: main
-          branch: chore/homebrew-formula-${{ github.ref_name }}
+          branch: chore/homebrew-formula-${{ github.ref_name }}-cwk
           delete-branch: true
-          commit-message: "chore: update Homebrew Formula for ${{ github.ref_name }}"
-          title: "Update Homebrew Formula for ${{ github.ref_name }}"
+          commit-message: "Update Homebrew formula for ${{ github.ref_name }}"
+          title: "Update Homebrew formula for ${{ github.ref_name }}"
           body: |
-            Pins the public macOS arm64 and amd64 release archives by SHA-256.
-            The Formula was rendered and audited from the exact tagged source revision.
+            Formula/cwk.rbを${{ github.ref_name }}の公開macOS release archiveへ更新します。
+            Formulaは正確なtag sourceからrenderし、checksum固定とauditを完了しています。

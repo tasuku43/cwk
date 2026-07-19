@@ -208,6 +208,11 @@ The test suite has complementary levels:
   uncertain write is inspected without a second mutation or false success.
   Scoped agent help publishes the exact dynamic error-message grammar, and a
   JSON error fixture must match it byte-for-byte around the fingerprint.
+- Config success-output tests fix the two-line natural-Japanese
+  visible/hidden/change transcript, require cleanup prose only for a nonzero
+  stale-plus-legacy count, and reject internal key/value labels or a fingerprint
+  on confirmed success. Fingerprint tests remain on the uncertain fault and
+  `doctor` reconciliation path.
 - Terminal-adapter tests require both stdin and stdout to be terminals, cover
   setup rollback, short/control-write failure, idempotent restoration, sizing,
   ready input, and blocked-read cancellation followed by a successful later
@@ -237,6 +242,23 @@ The test suite has complementary levels:
 - Opaque-ID round-trip tests pass discovery output unchanged into action input.
 - Negative tests prove rejection before side effects.
 - Release tests inspect actual artifacts and metadata, not only workflow text.
+  Workflow checks additionally enumerate every Formula-job step start and
+  validate the exact checksum, toolchain, render/audit, shared-tap token,
+  checkout, staging, and pull-request steps. They confine the App action and
+  each secret to one reviewed workflow-wide occurrence; fix repository and
+  requested permissions, read-only audit-job source token, zero
+  source-repository permissions in the token-bearing job, non-persisted
+  checkouts, audit-job artifact upload, fresh publish-runner dependency, the
+  absence of tagged-source checkout or checked-out code execution in that
+  privileged runner, reviewed workflow and Formula-job fields without ambient
+  `env` or `defaults`, non-symbolic Formula destination paths, exact
+  Formula-only PR path and conventions, and
+  render/audit-before-write ordering. Negative workflow mutations prove that
+  broader scope, another token/path/base, wildcard staging, an extra permission
+  or token consumer, duplicate secret use, ambient runtime injection, symbolic
+  destination acceptance, changed Formula-source binding, or ignored audit/PR
+  failure fails. The App's external installation maximum remains a named
+  manual release-owner review.
 - Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
 - Bounded message-selection tests prove sender OR precedes newest-N selection,
@@ -281,7 +303,7 @@ Every strong statement should identify its enforcement path.
 | Chatwork rate-limit evidence | Strict header/body parsing tests, five-minute plausibility bounds, read/mutation catalog signatures, advisory-timing validation, and text/JSON unknown-timing snapshots |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
-| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, strict platform storage with Unix durability and explicit Windows limits, doctor count/fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, strict platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
 | Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
 | Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |
@@ -302,6 +324,7 @@ Every strong statement should identify its enforcement path.
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures |
 | Reproducible generation | Regenerate and require a clean diff |
 | Artifact integrity | Build, inspect, checksum, and install tests |
+| Shared Homebrew tap publication | Release lint validates the workflow and Formula-job field allowlists, every Formula-job step start, and exact checksum/toolchain, render/audit/artifact upload, fresh-runner artifact validation, token, checkout, staging, and PR shapes; confines the App action and each secret to one reviewed workflow-wide occurrence; fixes the audit-to-publish job dependency, public tap repository, requested permissions, read-only audit-job source token, zero source-repository permissions in the token-bearing job, absence of ambient `env`/`defaults`, tagged-source checkout, or checked-out code execution there, exact audited Formula binding/path, non-symbolic destination paths, PR branch/title prefixes, pinned actions, and render/audit-before-write order; negative mutation fixtures prove alternate/extra fields or steps, external secret/action use, runtime injection, symbolic-path acceptance, same-runner code execution, representative drift, and ignored failures are rejected; the release owner manually confirms the external App installation maximum |
 | Documentation command | Execute or parse the canonical snippet where practical |
 | Japanese default user experience | Whole-catalog natural-language validation, human help/TUI/error snapshots, stable-identifier regression tests, and repository checks for the active Japanese entry documents and GitHub templates |
 

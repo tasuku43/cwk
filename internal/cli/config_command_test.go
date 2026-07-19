@@ -292,15 +292,58 @@ func TestConfigTUITogglesInCatalogOrderShowsEffectsAndSavesAfterRestore(t *testi
 		t.Fatalf("terminal was not restored exactly once: %+v", h.terminal.last)
 	}
 	output := h.stdout.String()
-	for _, want := range []string{"[read]", "[create]", "[write]", "config を保存しました enabled=", "fingerprint=sha256:"} {
+	wantResult := string(configSaveSuccessOutput(
+		len(target),
+		len(initial)-len(target),
+		len(initial)-len(target),
+		0,
+	))
+	if !strings.HasSuffix(output, wantResult) {
+		t.Errorf("save result suffix = %q, want %q", output, wantResult)
+	}
+	for _, want := range []string{"[read]", "[create]", "[write]", "コマンド表示を保存しました。", "件を表示し、", "件を非表示にしました（"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output lacks %q:\n%s", want, output)
 		}
 	}
-	for _, forbidden := range []string{"purpose=", "security-boundary=", "source=", "Selectable commands:", "config>"} {
+	for _, forbidden := range []string{"purpose=", "security-boundary=", "source=", "Selectable commands:", "config>", "enabled=", "disabled=", "fingerprint=", "sha256:"} {
 		if strings.Contains(output, forbidden) {
 			t.Errorf("legacy presentation %q remains:\n%s", forbidden, output)
 		}
+	}
+}
+
+func TestConfigSaveSuccessOutputUsesNaturalJapaneseAndConditionalCleanup(t *testing.T) {
+	tests := []struct {
+		name    string
+		cleaned int
+		want    string
+	}{
+		{
+			name: "normal save",
+			want: "コマンド表示を保存しました。\n" +
+				"12件を表示し、21件を非表示にしました（22件変更）。\n",
+		},
+		{
+			name:    "old settings cleaned",
+			cleaned: 2,
+			want: "コマンド表示を保存しました。\n" +
+				"12件を表示し、21件を非表示にしました（22件変更）。\n" +
+				"古い設定を2件整理しました。\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := string(configSaveSuccessOutput(12, 21, 22, test.cleaned))
+			if got != test.want {
+				t.Fatalf("success output = %q, want %q", got, test.want)
+			}
+			for _, forbidden := range []string{"enabled=", "disabled=", "changed=", "stale-removed=", "legacy-removed=", "fingerprint=", "sha256:"} {
+				if strings.Contains(got, forbidden) {
+					t.Fatalf("success output contains machine-oriented detail %q: %q", forbidden, got)
+				}
+			}
+		})
 	}
 }
 
@@ -345,7 +388,7 @@ func TestBatchedMoveToggleAndSaveRepaintsEachActionableSelection(t *testing.T) {
 	output := h.stdout.String()
 	identity := choices[1].Path
 	identityIndex := strings.Index(output, identity)
-	savedIndex := strings.Index(output, "config を保存しました")
+	savedIndex := strings.Index(output, "コマンド表示を保存しました。")
 	if identityIndex < 0 || savedIndex < 0 || identityIndex >= savedIndex {
 		t.Fatalf("batched target %q was not displayed before save:\n%s", identity, output)
 	}
@@ -404,7 +447,7 @@ func TestConfigProcessesTerminalBytesReturnedWithEOF(t *testing.T) {
 	if _, configured, err := h.store.Load(context.Background()); err != nil || !configured {
 		t.Fatalf("Enter returned with EOF was not saved: configured=%v err=%v", configured, err)
 	}
-	if !strings.Contains(h.stdout.String(), "config を保存しました") {
+	if !strings.Contains(h.stdout.String(), "コマンド表示を保存しました。") {
 		t.Fatalf("result=%q", h.stdout.String())
 	}
 }
@@ -667,7 +710,7 @@ func TestConfigRestoresBeforeSaveAndDoesNotOverwriteSuccessWithLateCancellation(
 	if code := command.RunContext(ctx, []string{"config"}); code != ExitOK {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "config を保存しました enabled=") || stderr.Len() != 0 {
+	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "コマンド表示を保存しました。") || stderr.Len() != 0 {
 		t.Fatalf("save result: canceled=%v saves=%d saved=%d stdout=%q stderr=%q", ctx.Err(), store.saves, len(store.saved), stdout.String(), stderr.String())
 	}
 }
@@ -746,7 +789,7 @@ func TestHiddenSelectionCannotBeToggledOrSavedInAnUnusableTerminal(t *testing.T)
 			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
 				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 			}
-			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), "config は変更されませんでした") || strings.Contains(h.stdout.String(), "config を保存しました") {
+			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), "config は変更されませんでした") || strings.Contains(h.stdout.String(), "コマンド表示を保存しました。") {
 				t.Fatalf("unusable terminal result:\n%s", h.stdout.String())
 			}
 			if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
@@ -819,7 +862,7 @@ func TestInvalidViewNoticeMustFitCompletelyBeforeFurtherMutation(t *testing.T) {
 				t.Fatalf("incomplete notice permitted a save: got=%v want=%v", got, before)
 			}
 			output := h.stdout.String()
-			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "config を保存しました") {
+			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "コマンド表示を保存しました。") {
 				t.Fatalf("incomplete notice did not fail closed:\n%s", output)
 			}
 		})
@@ -835,8 +878,22 @@ func TestLegacyDoctorAndVersionSelectionsLoadAndNormalizeOnEnter(t *testing.T) {
 	if got, want := loadCommandSelection(t, h.store), []string{"rooms list"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("normalized paths=%v want=%v", got, want)
 	}
-	if !strings.Contains(h.stdout.String(), "legacy-removed=2") {
+	if !strings.Contains(h.stdout.String(), "古い設定を2件整理しました。") {
 		t.Fatalf("save lacks migration evidence:\n%s", h.stdout.String())
+	}
+}
+
+func TestStaleAndLegacySelectionsAreCombinedAndCleanedOnEnter(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+	saveCommandSelection(t, h.store, []string{"doctor", "rooms list", "retired command", "version"})
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if got, want := loadCommandSelection(t, h.store), []string{"rooms list"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("cleaned paths=%v want=%v", got, want)
+	}
+	if !strings.HasSuffix(h.stdout.String(), string(configSaveSuccessOutput(1, len(DefaultCatalog().ConfigurableCommands())-1, 0, 3))) {
+		t.Fatalf("save lacks combined cleanup evidence:\n%s", h.stdout.String())
 	}
 }
 

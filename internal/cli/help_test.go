@@ -285,6 +285,30 @@ func TestDoctorAgentHelpDeclaresCommandSelectionGrammarAndRuntimeRecovery(t *tes
 	}
 }
 
+func TestConfigAgentHelpDeclaresExactOutputFields(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := New(strings.NewReader(""), &stdout, &stderr)
+	if code := runCLI(command, []string{"help", "config", "--format=agent"}); code != ExitOK {
+		t.Fatalf("Run(help config --format=agent) code = %d, stderr = %q", code, stderr.String())
+	}
+	var document agentDocument
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+		t.Fatalf("config agent help is not JSON: %v\n%s", err, stdout.String())
+	}
+	if len(document.Commands) != 1 || document.Commands[0].Path != "config" {
+		t.Fatalf("config commands = %+v", document.Commands)
+	}
+	fields := document.Commands[0].Contract.Output.Fields
+	got := make([]string, len(fields))
+	for index, field := range fields {
+		got[index] = field.Name
+	}
+	want := []string{"status", "visible", "hidden", "changed", "cleaned"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("config output fields = %v, want %v", got, want)
+	}
+}
+
 func TestAgentHelpRootAndScopedShapeSnapshots(t *testing.T) {
 	root := runAgentHelpForTest(t, []string{"help", "--format=agent"})
 	assertJSONKeys(t, root, []string{"commands", "program", "schema_version", "scope_request", "view"})

@@ -34,9 +34,10 @@ var (
 	referenceMarkdownLink = regexp.MustCompile(`^\s*\[[^]\n]+\]:\s*(\S+)`)
 	uriScheme             = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
 	authorizationSecret   = regexp.MustCompile(`(?i)authorization\s*:\s*(?:bearer|basic)\s+([A-Za-z0-9+/=_-]{8,})`)
-	assignmentSecret      = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_])["']?(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*(?::=|[:=])\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|([^# ,}\]\t\r\n]+))`)
+	assignmentSecret      = regexp.MustCompile(`(?i)(?:^|[^A-Za-z0-9_])["']?(?:api[_-]?key|client[_-]?secret|password|passwd|access[_-]?token|refresh[_-]?token|private[_-]?key)["']?\s*(?::=|[:=])\s*(?:"([^"\r\n]*)"|'([^'\r\n]*)'|(\\?\$\{\{\s*secrets\.[A-Z][A-Z0-9_]*\s*\}\}[^\r\n]*)|([^# ,}\]\t\r\n]+))`)
 	exampleSecret         = regexp.MustCompile(`^(?:example|dummy|fake|test|redacted|placeholder)(?:[-_.][a-z0-9][a-z0-9._-]*)?$`)
 	environmentSecret     = regexp.MustCompile(`^(?:\$\{[A-Z][A-Z0-9_]*\}|env\.[A-Z][A-Z0-9_]*)$`)
+	githubActionsSecret   = regexp.MustCompile(`^\$\{\{\s*secrets\.[A-Z][A-Z0-9_]*\s*\}\}$`)
 	secretPatterns        = []struct {
 		name string
 		re   *regexp.Regexp
@@ -584,7 +585,7 @@ func checkSecrets(path, line string, lineNumber int) []issue {
 		// Go field copies, comparisons, and method calls are not embedded
 		// credentials. Quoted and raw string literals remain subject to the same
 		// hard-coded-secret policy as every other public file.
-		if strings.HasSuffix(path, ".go") && match[1] == "" && match[2] == "" && !strings.HasPrefix(match[3], "`") {
+		if strings.HasSuffix(path, ".go") && match[1] == "" && match[2] == "" && match[3] == "" && !strings.HasPrefix(match[4], "`") {
 			continue
 		}
 		value := ""
@@ -594,7 +595,7 @@ func checkSecrets(path, line string, lineNumber int) []issue {
 				break
 			}
 		}
-		if !safeExampleSecret(value) {
+		if !safeExampleSecret(value) && !safeGitHubActionsSecretAssignment(path, value) {
 			issues = append(issues, issue{Path: path, Line: lineNumber, Message: "secret-like value assigned in source"})
 		}
 	}
@@ -607,7 +608,15 @@ func safeExampleSecret(value string) bool {
 	if lower == "" || lower == "none" || lower == "null" || lower == "[redacted]" {
 		return true
 	}
-	return exampleSecret.MatchString(lower) || environmentSecret.MatchString(trimmed)
+	return exampleSecret.MatchString(lower) || environmentSecret.MatchString(trimmed) || githubActionsSecret.MatchString(trimmed)
+}
+
+func safeGitHubActionsSecretAssignment(path, value string) bool {
+	trimmed := strings.TrimSpace(strings.Trim(value, `"'`))
+	if strings.HasSuffix(path, ".sh") && strings.HasPrefix(trimmed, `\`) {
+		return githubActionsSecret.MatchString(strings.TrimPrefix(trimmed, `\`))
+	}
+	return false
 }
 
 func remainingTemplateIdentity(line string, target projectconfig.Project) string {

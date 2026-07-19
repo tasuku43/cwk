@@ -74,12 +74,31 @@ Archive creation uses the Go standard library rather than host-specific `tar`, `
 5. extracts every primary archive and checks the executable's Go module, `GOOS`, and `GOARCH` build metadata;
 6. creates `checksums.txt`, proves it has a one-to-one correspondence with all five primary archives, and recomputes every digest;
 7. positively renders a stable Homebrew Formula from the real macOS archive checksums and verifies its URLs, digests, version, class, and placeholder removal;
-8. runs `ruby -c` against the rendered Formula; and
-9. exercises the isolated-tap ownership test for Formula audit cleanup.
+8. runs `ruby -c` against the rendered Formula;
+9. exercises the isolated-tap ownership test for Formula audit cleanup; and
+10. validates the stable workflow's exact `tasuku43/homebrew-tap` destination,
+    scoped GitHub App secret inputs and requested permissions, read-only audit
+    job source token, zero source-repository permissions in the token-bearing
+    job, non-persisted checkouts, audited artifact handoff
+    to a fresh publish runner with no tagged-source checkout or checked-out
+    code execution, reviewed workflow and Formula-job fields without ambient
+    `env` or `defaults`, non-symbolic Formula destination paths, Formula-only
+    staging, accepted pull-request conventions, workflow-wide single
+    action/secret occurrences, the complete Formula-job step lists, and
+    render/audit-before-cross-repository-write
+    ordering; and
+11. runs negative workflow mutations that must reject broader repositories or
+    permissions, another PR token/path/base, wildcard staging, persisted tap
+    credentials, an alternate/extra step, missing audit-job dependency,
+    tagged-source checkout or checked-out code execution in the token-bearing
+    runner, workflow- or job-level runtime injection, symbolic Formula
+    destinations, an App action or secret outside its reviewed step, an extra
+    token consumer, changed audited Formula binding, ignored audit/PR failure,
+    or an incompatible title.
 
 The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation and canonical header verification themselves have no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
 
-The workflow runs this canonical release profile once inside the Ubuntu preflight's full gate. The later macOS Formula job is deliberately narrower: it renders the checksum-pinned Formula, runs `ruby -c`, and performs the real Homebrew strict audit. It does not repeat `check.sh release`, because that would rebuild the complete five-target verification matrix on a different host and would incorrectly make Formula publication depend on Linux preflight tools such as ShellCheck being installed on the macOS runner. The Formula job consumes only artifacts produced after the preflight and build jobs succeed.
+The workflow runs this canonical release profile once inside the Ubuntu preflight's full gate. The later macOS Formula job is deliberately narrower: it renders the checksum-pinned Formula, runs `ruby -c`, performs the real Homebrew strict audit, and uploads only that Formula. It does not repeat `check.sh release`, because that would rebuild the complete five-target verification matrix on a different host and would incorrectly make Formula publication depend on Linux preflight tools such as ShellCheck being installed on the macOS runner. The audit job consumes only artifacts produced after the preflight and build jobs succeed and receives no App credential. A dependent fresh Ubuntu runner downloads and validates the Formula as data before minting the App token; it checks out no tagged source and executes no checked-out source or Formula content. Static release lint fixes both job boundaries and proves that failures cannot be ignored.
 
 ## Release workflow
 
@@ -91,15 +110,47 @@ The release workflow follows this order:
 4. Verify archive names, canonical order and header modes, reviewed contents, executable behavior, version, and commit.
 5. Generate and verify `checksums.txt`.
 6. Publish one GitHub Release from the reviewed tag.
-7. For a stable tag, render the checksum-pinned Homebrew Formula and open a Formula update pull request.
+7. For a stable tag, render and strictly audit the checksum-pinned Homebrew
+   Formula without an App credential, then upload that one-file workflow
+   artifact.
+8. On a fresh runner with no tagged-source checkout or checked-out code
+   execution, validate the Formula artifact as data and open a Formula update
+   pull request in `tasuku43/homebrew-tap`.
 
 The workflow uses a public GitHub Release path. It must not embed private asset URLs, personal access tokens, authorization headers, or organization-specific package infrastructure in Formula content.
 
 Publication is create-only. If a GitHub Release already exists for the tag, the workflow fails without uploading or replacing any asset. It never uses `--clobber`. Correct a failed or incorrect release with a new version and an explicit incident or withdrawal decision; do not silently rewrite published evidence.
 
-Workflow checkouts disable persisted Git credentials. The Formula pull-request action receives only its explicitly scoped workflow token, while source checkout does not leave that token in Git configuration.
+Workflow checkouts disable persisted Git credentials. The Formula pull-request
+action receives only a short-lived GitHub App installation token restricted to
+`tasuku43/homebrew-tap`. The audit job's source-repository `GITHUB_TOKEN`
+remains Contents-read-only, while the token-bearing publish job has no
+source-repository `GITHUB_TOKEN` permissions. The App token comes from
+GitHub Actions secrets `HOMEBREW_APP_ID` and `HOMEBREW_APP_KEY`; their values
+never enter source, artifacts, Formula content, or release notes.
 
-Every matrix build checkout and Formula generation step is bound to `needs.preflight.outputs.revision`, not an implicit event checkout or the moving `main` branch. The workflow renders and strictly audits the Formula from that exact release revision and its project metadata into runner-owned temporary storage. Only after audit succeeds does it check out current `main`, copy the already-audited Formula into `Formula/`, and open the reviewable pull request. Changes to identity, templates, or generation scripts on `main` therefore cannot race the tagged artifacts and checksums used as generation input.
+Every matrix build checkout and Formula generation step is bound to
+`needs.preflight.outputs.revision`, not an implicit event checkout or a moving
+branch. The workflow renders and strictly audits the Formula from that exact
+release revision and its project metadata into runner-owned temporary storage.
+After audit succeeds, the macOS job uploads only the audited Formula. Its
+dependent fresh runner validates that artifact's exact identity without
+executing it, then mints the tap-scoped token, checks out the shared tap's
+current `main`, copies the Formula to `Formula/cwk.rb`, and opens the reviewable
+pull request. Changes to source identity, templates, or generation scripts
+after the tag therefore cannot race the artifacts and checksums used as
+generation input.
+
+The GitHub App must be installed only on `homebrew-tap` with Contents
+read/write plus Pull requests read/write there, and the release owner confirms
+that external state before a stable tag. Token creation fixes owner
+`tasuku43` and repository `homebrew-tap`, then requests exactly Contents write
+and Pull requests write as its write-capable permissions; the audit job grants
+the source-repository workflow token only Contents read and the token-bearing
+job grants it no permissions. Secret
+provisioning and external App permission review are release-owner prerequisites
+rather than repository content. [ADR 0004](decisions/0004-shared-homebrew-tap.md)
+records this boundary.
 
 ## Homebrew contract
 
@@ -112,11 +163,27 @@ Stable releases support macOS `arm64` and `amd64` through a generated Formula. T
 - installs the project license and third-party notices under the package documentation prefix;
 - contains no unreplaced template value or private authentication behavior.
 
-`scripts/render-formula.sh` renders the project Formula from the reviewed template. Formula changes are proposed through a pull request so the generated diff and release references are visible before merge.
+`scripts/render-formula.sh` renders the project Formula from the reviewed
+template. Formula changes are proposed to the shared public
+`tasuku43/homebrew-tap` repository through a pull request so the generated diff
+and release references are visible before merge. The branch begins
+`chore/homebrew-formula-v`, includes the `cwk` binary suffix to avoid
+same-version collisions with another tool, and the title begins
+`Update Homebrew formula for v` as required by the tap automation. The staged
+path is exactly `Formula/cwk.rb`; tap README changes use a separate reviewed
+change because automated Formula pull requests remain Formula-only.
 
 `scripts/audit-formula.sh` creates a collision-resistant temporary tap name from `mktemp`, verifies that name is not already installed, and records ownership only after `brew tap-new` succeeds. Its exit trap removes only that owned tap. It never pre-emptively untaps a fixed name, so an existing user tap is outside its cleanup authority. The release profile tests this property with a fake Homebrew boundary on both audit success and audit failure.
 
 Prereleases do not update stable Formula metadata.
+
+The workflow ends after proposing the Formula. For a stable release, the
+release owner separately waits for the tap pull request to merge, performs a
+clean `brew install tasuku43/tap/cwk`, and records that post-merge rollout
+evidence before announcing Homebrew availability. Pre-tag clean-install
+evidence covers installation paths available before publication; it cannot
+prove a Formula that does not exist in the tap until after GitHub Release
+publication and PR merge.
 
 ## Release preparation
 
@@ -127,7 +194,10 @@ Create a work packet for a release and record:
 - security fixes and disclosure coordination;
 - migration or deprecation notes;
 - required profiles and their results;
-- clean-environment installation evidence;
+- pre-publication clean-environment evidence for installation instructions
+  that do not depend on the post-publication Formula;
+- for a stable release, post-merge clean Homebrew installation evidence before
+  declaring the shared-tap rollout complete;
 - artifact and checksum verification;
 - public-boundary review.
 
@@ -140,13 +210,23 @@ task release:check
 task public:check
 ```
 
-Then review the exact commit that will receive the tag. A clean local run does not authorize tagging a different revision.
+Before a stable tag, also confirm in GitHub settings that
+`HOMEBREW_APP_ID`/`HOMEBREW_APP_KEY` are configured and that the App
+installation is restricted to `homebrew-tap` with Contents read/write and Pull
+requests read/write. Confirm that token creation requests only Contents write
+and Pull requests write. Record only that the review occurred, never either
+secret value. Then review the exact commit that will receive the tag. A clean
+local run does not authorize tagging a different revision.
 
 ## Failure and recovery
 
 - If preflight or any matrix build fails, publish nothing.
 - If the artifact set is incomplete, do not create a partial stable release.
 - If a checksum or Formula reference is wrong, correct it through a reviewed replacement release or metadata change; do not silently mutate evidence.
+- If the shared-tap job fails after GitHub Release publication, do not replace
+  the release assets. Correct the App/tap condition and rerun the failed job, or
+  propose the same audited Formula manually through a reviewed tap pull
+  request. Change the release version when artifact identity must change.
 - If the tag already has a GitHub Release, stop. Do not overwrite its assets or rerun publication as an update operation.
 - If sensitive content reaches a release, stop distribution, revoke affected credentials, preserve incident evidence, and follow the security response process.
 - Do not reuse a stable version for different source or artifacts.
@@ -179,3 +259,8 @@ Before the first project-specific tag, decide:
 8. Who performs the manual public-boundary review?
 
 Record durable trade-offs in an ADR and update `task release:check` so the chosen contract is executable.
+
+For this project, ADR 0004 selects stable macOS Formula publication through
+the shared `tasuku43/homebrew-tap` pull-request path and a repository-scoped
+GitHub App. Prerelease Formula updates, Linux Homebrew support, signing,
+notarization, SBOMs, and attestations remain outside that decision.

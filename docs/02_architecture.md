@@ -236,13 +236,15 @@ success is not overwritten by later cancellation.
 `doctor` supplies the required read-only reconciliation. Its normal diagnostic
 result is augmented with command-selection state, source, enabled/disabled and
 stale/legacy counts, plus a versioned SHA-256 fingerprint over the ordered
-canonical enabled paths. Successful `config` output returns the same
-fingerprint. An uncertain fault names the expected `source=saved` as well as
-its candidate fingerprint; reconciliation succeeds only when `doctor` reports
-both, so an absent profile whose all-enabled default happens to hash identically
-is not mistaken for a persisted replacement. Scoped agent help declares the
-exact runtime message grammar, and the JSON error contract is tested against
-it rather than leaving these dynamic values in undeclared prose. Malformed
+canonical enabled paths. Confirmed `config` success is projected separately as
+a short human-readable visible/hidden/change summary with conditional cleanup;
+it does not duplicate the fingerprint. An uncertain fault names the expected
+`source=saved` as well as its candidate fingerprint; reconciliation succeeds
+only when `doctor` reports both, so an absent profile whose all-enabled default
+happens to hash identically is not mistaken for a persisted replacement.
+Scoped agent help declares the exact runtime message grammar, and the JSON
+error contract is tested against it rather than leaving these dynamic values in
+undeclared prose. Malformed
 serialized content is
 the only load failure that
 `config` treats as in-tool repairable, and it still writes only after Enter.

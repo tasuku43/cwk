@@ -231,12 +231,14 @@ editing JSON directly:
    paths; the empty contact-request namespace is not advertised;
 2. invoking a disabled path returns the ordinary `unknown_command` result with
    zero PAT-resolution and zero provider calls;
-3. the save result reports enabled/disabled/change counts and one deterministic
-   fingerprint; always-on `doctor` reports the same fingerprint plus valid
-   state, source, and enabled/disabled/stale/legacy counts without performing a
-   second mutation; an uncertain-save JSON fixture follows the exact message
-   grammar published by scoped agent help and distinguishes `source=saved`
-   from an identical `source=default` fingerprint;
+3. the confirmed save result reports visible/hidden/change counts in the
+   reviewed natural-Japanese transcript and conditionally reports only nonzero
+   cleanup, without internal key/value labels or a fingerprint; always-on
+   `doctor` reports valid state, source, enabled/disabled/stale/legacy counts,
+   and the actual fingerprint without performing a second mutation; an
+   uncertain-save JSON fixture carries the candidate fingerprint, follows the
+   exact message grammar published by scoped agent help, and distinguishes
+   `source=saved` from an identical `source=default` fingerprint;
 4. a second `config` run marks the three paths off and can re-enable them from
    its complete catalog-derived selector, after which normal and agent help
    expose them again;
@@ -256,7 +258,9 @@ state requires local repair followed by always-on `doctor`. A legacy profile
 containing formerly selectable `doctor` or `version` paths loads the remaining
 Chatwork selection without offering either local command as a toggle, reports
 the legacy count through doctor, and removes those entries only after Enter
-saves the normalized replacement.
+saves the normalized replacement. That confirmed save must emit one combined
+`古い設定を2件整理しました。` cleanup line rather than separate legacy or
+stale key/value fields.
 
 The invalid-view selector stays open after Enter, renders the exact actionable
 dependency/recovery diagnostic, and writes nothing until the draft is repaired

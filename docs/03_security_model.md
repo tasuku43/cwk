@@ -273,14 +273,16 @@ cancellation. Process termination that cannot run cleanup is not claimed to
 restore terminal modes, but it still cannot persist a draft whose Enter save
 boundary was never crossed.
 
-The successful write and `doctor` expose the same versioned SHA-256 fingerprint
-of the ordered canonical enabled paths. This bounded fingerprint and its
-counts contain command metadata only, never PAT or provider data, and let the
-read-only diagnostic distinguish the state present after an uncertain write.
-Profiles from the preceding selector may contain `doctor` or `version`; those
-two exact legacy entries are ignored for active-view construction and removed
-on the next Enter save. No other always-on or unknown path receives that
-migration exception.
+The uncertain write fault exposes the candidate versioned SHA-256 fingerprint,
+and `doctor` exposes the actual fingerprint of the ordered canonical enabled
+paths together with its source. These bounded values and counts contain command
+metadata only, never PAT or provider data, and let the read-only diagnostic
+distinguish the state present after an uncertain write. Confirmed success does
+not repeat this recovery identifier; it reports only the human-readable display
+summary and any nonzero cleanup. Profiles from the preceding selector may
+contain `doctor` or `version`; those two exact legacy entries are ignored for
+active-view construction and removed on the next Enter save. No other always-on
+or unknown path receives that migration exception.
 
 ### Processes
 
@@ -351,6 +353,46 @@ The current projection is also subtractive at the trust boundary: only catalog-d
 - Review generated changes and prove generation is reproducible.
 - Build releases from reviewed source through the documented workflow.
 - Decide signing and provenance explicitly; absence of signing is also a release-model decision.
+
+### Shared Homebrew tap publication
+
+Stable releases propose the already rendered, checksum-pinned, and strictly
+audited `Formula/cwk.rb` to the public `tasuku43/homebrew-tap` repository. The
+workflow never pushes directly to the tap's default branch and never stages a
+Formula wildcard. Prereleases do not cross this write boundary.
+
+The macOS Formula audit job has no App credential and uploads the strictly
+audited Formula as a workflow artifact. A fresh Ubuntu publish job checks out
+no source repository and executes no checked-out tagged source or Formula
+content. It downloads that one-file artifact, validates its exact regular-file
+identity as data, and only then exchanges GitHub-hosted repository secrets
+`HOMEBREW_APP_ID` and `HOMEBREW_APP_KEY` for a short-lived installation token.
+Token creation names owner `tasuku43` and only repository
+`homebrew-tap`, and explicitly requests only Contents write and Pull requests
+write as write-capable token permissions. Before a stable tag, the App
+installation must be manually confirmed as restricted to that repository with
+matching maximum permissions and absent from `cwk` and unrelated repositories.
+The audit job's source-repository `GITHUB_TOKEN` stays Contents-read-only. The
+token-bearing Formula publish job has no source-repository `GITHUB_TOKEN`
+permissions; the separate GitHub Release publish job retains Contents write
+only for release creation.
+
+Both source and tap checkouts disable persisted credentials and occur on
+different runners. The installation token is supplied explicitly only to the
+tap checkout and pinned pull-request
+action, and it must not appear in Formula content, archives, logs, source, or
+Git configuration left by checkout. The workflow and both Formula jobs admit
+only their reviewed fields, so workflow- or job-level `env` and `defaults`
+cannot inject runtime options into the token action. Before copying, the
+publish job rejects a symbolic-link `Formula` directory, a symbolic-link
+`Formula/cwk.rb`, and any existing non-regular target. The pull request targets
+`main`, uses the tap automation's reviewed branch/title prefix, and changes
+only `Formula/cwk.rb`. Tap merge remains a separate review/automation boundary;
+a successful release job does not claim that the Formula has already merged.
+
+Secret provisioning and App-installation review occur in GitHub settings
+before the first stable tag. Secret values are never copied into a work packet
+or release note. See [ADR 0004](decisions/0004-shared-homebrew-tap.md).
 
 ## Required negative tests
 
