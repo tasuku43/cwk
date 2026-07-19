@@ -218,8 +218,8 @@
 The managed sandbox could not complete the combined gate because its test suite
 opens loopback listeners through `httptest.NewServer` and its vulnerability
 step reads the official Go vulnerability database. After explicit approval, an
-isolated clean clone of commit `069cf20` completed `task check`: fast contracts,
-all package tests, race tests, module verification, repository security checks,
-`govulncheck`, release lint, public guard, and contract lint all passed. The
-shared workspace's unrelated concurrent message-window changes were excluded
-from that clone and remain untouched.
+isolated clean clone of the final selector implementation completed
+`task check`: fast contracts, all package tests, race tests, module verification,
+repository security checks, `govulncheck`, release lint, public guard, and
+contract lint all passed. The shared workspace's unrelated concurrent
+message-window changes were excluded from that clone and remain untouched.
