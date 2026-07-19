@@ -1,6 +1,6 @@
 # Work Goal: Single terminal command selector
 
-- Status: Accepted
+- Status: Complete
 - Owner: Codex
 - Target: Current implementation cycle
 - Related ADRs: [ADR 0003](../../decisions/0003-chatwork-pat-only.md)
@@ -95,9 +95,10 @@ selected direct cursor navigation and one exact command as the intended UX.
   output, narrow terminal widths, badge/path preservation, resize-redraw
   consumption, complete-notice gating, blocked unseen mutations, and bounded
   viewport behavior.
-- [ ] Focused tests, Unix race tests, Unix and Windows cross-compilation, and
+- [x] Focused tests, Unix race tests, Unix and Windows cross-compilation, and
   `task check` pass; independent reviewers report no unresolved P1/P2 findings.
-- [ ] The change is committed in intentional slices and the worktree is clean.
+- [x] The change is committed in intentional slices, no selector-owned change
+  remains uncommitted, and unrelated concurrent worktree changes are preserved.
 
 ## Governing documents
 

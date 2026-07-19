@@ -1,6 +1,6 @@
 # Work Plan: Single terminal command selector
 
-- Status: Accepted
+- Status: Completed
 - Goal: [goal.md](goal.md)
 - Context: [context.md](context.md)
 

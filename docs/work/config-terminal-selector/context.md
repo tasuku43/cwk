@@ -210,12 +210,13 @@
   P1/P2 sets are empty after the reviewed fixes.
 - `git diff --check` passes.
 
-## Remaining gate constraint
+## Final gate evidence
 
-The final combined `task check` has not completed in the managed sandbox. Its
-test suite opens a loopback listener through `httptest.NewServer`, which the
-sandbox denies, and its vulnerability step reads the official Go vulnerability
-database, whose network access is also denied. A sandbox-exempt run requires
-the owner's explicit approval. No check has been weakened or bypassed; the
-work packet remains open until that exact gate succeeds and the final evidence
-commit leaves a clean worktree.
+The managed sandbox could not complete the combined gate because its test suite
+opens loopback listeners through `httptest.NewServer` and its vulnerability
+step reads the official Go vulnerability database. After explicit approval, an
+isolated clean clone of commit `069cf20` completed `task check`: fast contracts,
+all package tests, race tests, module verification, repository security checks,
+`govulncheck`, release lint, public guard, and contract lint all passed. The
+shared workspace's unrelated concurrent message-window changes were excluded
+from that clone and remain untouched.

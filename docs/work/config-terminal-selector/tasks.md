@@ -67,5 +67,6 @@
   platform-scoped uses in the work packet.
 - [x] Run focused tests, race, Unix/Windows cross-builds, and PTY manual checks.
 - [x] Obtain independent architecture/security/UX review and resolve P1/P2.
-- [ ] Run `task check` on the final clean-tree candidate.
-- [ ] Mark this packet complete and commit reviewed slices.
+- [x] Run `task check` on the isolated committed candidate.
+- [x] Mark this packet complete and commit reviewed slices without absorbing
+  unrelated concurrent worktree changes.
