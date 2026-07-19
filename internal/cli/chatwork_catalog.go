@@ -188,7 +188,7 @@ func chatworkMutation(path, summary, args string, role CommandRole, capability, 
 
 func chatworkBase(path, summary, args string, effect operation.Effect, role CommandRole, capability, outcome string, inputs []CommandInput, output []OutputField, task chatwork.Task, confirmation, reconcile string, mutation *MutationContract) CommandSpec {
 	return CommandSpec{
-		Path: path, Summary: summary, Args: args, Effect: effect, Role: role,
+		Path: path, Summary: summary, Args: args, Effect: effect, Role: role, Configurable: true,
 		Agent: AgentContract{
 			CapabilityID: capability, Outcome: outcome, Inputs: inputs,
 			Output:         CommandOutput{Formats: []OutputFormat{OutputFormatText}, DefaultFormat: OutputFormatText, Fields: output, Completeness: OutputCompletenessComplete},

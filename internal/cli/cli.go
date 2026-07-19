@@ -9,11 +9,13 @@ import (
 
 	appauthn "github.com/tasuku43/cwk/internal/app/authn"
 	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
+	"github.com/tasuku43/cwk/internal/app/configcmd"
 	"github.com/tasuku43/cwk/internal/app/doctorcmd"
 	"github.com/tasuku43/cwk/internal/app/samplecmd"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
+	"github.com/tasuku43/cwk/internal/infra/commandconfig"
 	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
 )
@@ -26,13 +28,15 @@ type CLI struct {
 	Version string
 	Commit  string
 
-	catalog         Catalog
-	doctor          *doctorcmd.Service
-	samples         *samplecmd.Service
-	chatwork        *chatworkcmd.Service
-	chatworkAuth    *appauthn.Gate
-	chatworkInitErr error
-	chatworkFactory func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error)
+	baseCatalog      Catalog
+	catalog          Catalog
+	commandSelection *configcmd.Service
+	doctor           *doctorcmd.Service
+	samples          *samplecmd.Service
+	chatwork         *chatworkcmd.Service
+	chatworkAuth     *appauthn.Gate
+	chatworkInitErr  error
+	chatworkFactory  func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error)
 }
 
 // New builds the production CLI with a lazy PAT adapter. Help and local
@@ -40,6 +44,7 @@ type CLI struct {
 // resolved only when a Chatwork API task actually executes.
 func New(in io.Reader, out, errOut io.Writer) *CLI {
 	cli := newCLI(in, out, errOut, DefaultCatalog(), systemdoctor.New())
+	cli.commandSelection = configcmd.New(commandconfig.NewFileStore())
 	cli.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
 		client, clientErr := chatworkapi.NewFromEnvironment()
 		if clientErr != nil {
@@ -95,10 +100,11 @@ func newCLIWithSamples(
 	}
 	return &CLI{
 		In: in, Out: out, Err: errOut,
-		Version: "dev",
-		catalog: catalog,
-		doctor:  doctorcmd.New(inspector),
-		samples: samplecmd.New(repository),
+		Version:     "dev",
+		baseCatalog: catalog,
+		catalog:     catalog,
+		doctor:      doctorcmd.New(inspector),
+		samples:     samplecmd.New(repository),
 	}
 }
 
@@ -125,7 +131,11 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	if err := ctx.Err(); err != nil {
 		return c.fail(ctx, err)
 	}
-	if err := c.catalog.Validate(); err != nil {
+	baseCatalog := c.baseCatalog
+	if len(baseCatalog.commands) == 0 {
+		baseCatalog = c.catalog
+	}
+	if err := baseCatalog.Validate(); err != nil {
 		return c.fail(ctx, fault.Wrap(
 			fault.KindContract,
 			"invalid_catalog",
@@ -140,6 +150,24 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	}
 
 	commandArgs = normalizeRootAlias(commandArgs)
+	activeCatalog, activeErr := c.resolveActiveCatalog(ctx, baseCatalog)
+	if activeErr != nil {
+		if !commandViewControlInvocation(commandArgs) {
+			return c.fail(ctx, commandSelectionDispatchFault(activeErr))
+		}
+		activeCatalog, _, err = baseCatalog.ActiveView([]string{})
+		if err != nil {
+			return c.fail(ctx, fault.Wrap(
+				fault.KindContract,
+				"invalid_catalog",
+				"The command catalog control plane is invalid.",
+				false,
+				err,
+				fault.NextAction{Command: "help", Reason: "Repair the catalog before dispatch."},
+			))
+		}
+	}
+	c.catalog = activeCatalog
 	commandArgs = normalizeTrailingHelpAlias(c.catalog, commandArgs)
 	command, rest, found := c.catalog.Match(commandArgs)
 	if !found {
@@ -173,6 +201,52 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 		}
 	}
 	return command.handler(ctx, c, command, intent, rest)
+}
+
+func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, error) {
+	if c == nil || c.commandSelection == nil {
+		return base, nil
+	}
+	profile, configured, err := c.commandSelection.Load(ctx)
+	if err != nil {
+		return Catalog{}, err
+	}
+	enabled := make([]string, 0)
+	if configured {
+		enabled = profile.EnabledCommands()
+	} else {
+		for _, command := range base.ConfigurableCommands() {
+			enabled = append(enabled, command.Path)
+		}
+	}
+	view, _, err := base.ActiveView(enabled)
+	if err != nil {
+		return Catalog{}, fault.Wrap(
+			fault.KindInvalidInput,
+			"command_selection_invalid",
+			"The saved command selection is invalid.",
+			false,
+			err,
+		)
+	}
+	return view, nil
+}
+
+func commandViewControlInvocation(args []string) bool {
+	return len(args) > 0 && (args[0] == "help" || args[0] == "config")
+}
+
+func commandSelectionDispatchFault(err error) error {
+	if public, ok := fault.PublicCopy(err); ok {
+		return fault.New(
+			public.Kind,
+			public.Code,
+			public.Message,
+			public.Retryable,
+			fault.NextAction{Command: "config edit", Reason: "Inspect and repair the tool-local command selection."},
+		)
+	}
+	return err
 }
 
 func normalizeRootAlias(args []string) []string {

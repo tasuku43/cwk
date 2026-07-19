@@ -34,6 +34,7 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		"  help     Show human help or the agent command specification\n" +
 		"  version  Print version information\n\n" +
 		"Namespaces:\n" +
+		"  config            2 commands\n" +
 		"  account           2 commands\n" +
 		"  personal-tasks    1 command\n" +
 		"  contacts          1 command\n" +

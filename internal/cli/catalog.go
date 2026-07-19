@@ -285,14 +285,17 @@ type AgentContract struct {
 // CommandSpec is the single source of truth for dispatch, human help, and the
 // machine-readable agent specification.
 type CommandSpec struct {
-	Path     string
-	Summary  string
-	Args     string
-	Effect   operation.Effect
-	Role     CommandRole
-	Agent    AgentContract
-	handler  commandHandler
-	chatwork *chatworkCommandDefinition
+	Path    string
+	Summary string
+	Args    string
+	Effect  operation.Effect
+	Role    CommandRole
+	// Configurable allows this leaf to be omitted from one tool-local command
+	// view. False is deliberately the always-visible control-plane default.
+	Configurable bool
+	Agent        AgentContract
+	handler      commandHandler
+	chatwork     *chatworkCommandDefinition
 }
 
 // Usage returns the complete command invocation without optional prose.
@@ -331,11 +334,12 @@ func declaredCommandError(kind fault.Kind, code string, retryable bool, command,
 func DefaultCatalog() Catalog {
 	commands := []CommandSpec{
 		CommandSpec{
-			Path:    "doctor",
-			Summary: "Run local, read-only diagnostics",
-			Args:    "[--format tsv|json]",
-			Effect:  operation.EffectRead,
-			Role:    RoleUtility,
+			Path:         "doctor",
+			Summary:      "Run local, read-only diagnostics",
+			Args:         "[--format tsv|json]",
+			Effect:       operation.EffectRead,
+			Role:         RoleUtility,
+			Configurable: true,
 			Agent: AgentContract{
 				CapabilityID: "system.diagnostics",
 				Outcome:      "Inspect the local runtime and receive a validated diagnostic report",
@@ -407,10 +411,11 @@ func DefaultCatalog() Catalog {
 			handler: runHelp,
 		},
 		CommandSpec{
-			Path:    "version",
-			Summary: "Print version information",
-			Effect:  operation.EffectRead,
-			Role:    RoleUtility,
+			Path:         "version",
+			Summary:      "Print version information",
+			Effect:       operation.EffectRead,
+			Role:         RoleUtility,
+			Configurable: true,
 			Agent: AgentContract{
 				CapabilityID: "cli.version",
 				Outcome:      "Read the executable version and optional source commit identity",
@@ -434,6 +439,7 @@ func DefaultCatalog() Catalog {
 			handler: runVersion,
 		},
 	}
+	commands = append(commands, configCommandSpecs()...)
 	commands = append(commands, chatworkCommandSpecs()...)
 	return NewCatalog(commands...)
 }
@@ -1382,6 +1388,121 @@ func (c Catalog) Commands() []CommandSpec {
 		commands[index] = cloneCommandSpec(command)
 	}
 	return commands
+}
+
+// ConfigurableCommands returns commands whose visibility may be selected by
+// the tool-local command view, in curated catalog order.
+func (c Catalog) ConfigurableCommands() []CommandSpec {
+	commands := make([]CommandSpec, 0, len(c.commands))
+	for _, command := range c.commands {
+		if command.Configurable {
+			commands = append(commands, cloneCommandSpec(command))
+		}
+	}
+	return commands
+}
+
+// AlwaysCommands returns the command-view control plane in curated catalog
+// order. These commands remain visible so a configured view can be inspected
+// and repaired; they are not an authorization boundary.
+func (c Catalog) AlwaysCommands() []CommandSpec {
+	commands := make([]CommandSpec, 0, len(c.commands))
+	for _, command := range c.commands {
+		if !command.Configurable {
+			commands = append(commands, cloneCommandSpec(command))
+		}
+	}
+	return commands
+}
+
+// ActiveView derives the executable/help catalog from an explicit allowlist
+// of configurable exact command paths. Unknown canonical paths are stale
+// persisted selections: they are reported but do not enter the view. The
+// returned catalog always follows the full catalog's curated order.
+func (c Catalog) ActiveView(enabled []string) (Catalog, []string, error) {
+	if err := c.Validate(); err != nil {
+		return Catalog{}, nil, fmt.Errorf("full catalog: %w", err)
+	}
+
+	selected := make(map[string]struct{}, len(enabled))
+	seen := make(map[string]struct{}, len(enabled))
+	stale := make([]string, 0)
+	for index, path := range enabled {
+		if err := operation.ValidateCommandPath(path); err != nil {
+			return Catalog{}, nil, fmt.Errorf("enabled command %d: %w", index, err)
+		}
+		if _, duplicate := seen[path]; duplicate {
+			return Catalog{}, nil, fmt.Errorf("enabled command %q is duplicated", path)
+		}
+		seen[path] = struct{}{}
+
+		command, known := c.Lookup(path)
+		if !known {
+			stale = append(stale, path)
+			continue
+		}
+		if !command.Configurable {
+			return Catalog{}, nil, fmt.Errorf("command %q is always enabled and cannot be selected", path)
+		}
+		selected[path] = struct{}{}
+	}
+
+	visible := make([]CommandSpec, 0, len(c.commands))
+	for _, command := range c.commands {
+		if !command.Configurable {
+			visible = append(visible, command)
+			continue
+		}
+		if _, enabled := selected[command.Path]; enabled {
+			visible = append(visible, command)
+		}
+	}
+
+	view := NewCatalog(visible...)
+	if err := view.validateActiveView(); err != nil {
+		return Catalog{}, stale, err
+	}
+	return view, stale, nil
+}
+
+// validateActiveView enforces only dependencies needed by visible commands.
+// Unlike full-catalog validation, a visible producer need not have a visible
+// consumer because reducing action surface is a valid command-view choice.
+func (c Catalog) validateActiveView() error {
+	producedKinds := make(map[string][]string)
+	consumedKinds := make(map[string][]string)
+	for _, command := range c.commands {
+		for _, produced := range command.ProducedRefs() {
+			producedKinds[produced.Kind] = append(producedKinds[produced.Kind], command.Path)
+		}
+		for _, consumed := range command.ConsumedRefs() {
+			consumedKinds[consumed.Kind] = append(consumedKinds[consumed.Kind], command.Path)
+		}
+	}
+	for _, command := range c.commands {
+		for _, consumed := range command.ConsumedRefs() {
+			if len(producedKinds[consumed.Kind]) == 0 {
+				return fmt.Errorf("active command view consumes reference kind %q in %s but has no visible producer", consumed.Kind, strings.Join(consumedKinds[consumed.Kind], ", "))
+			}
+		}
+	}
+	if err := validateReferenceReachability(c.commands); err != nil {
+		return fmt.Errorf("active command view: %w", err)
+	}
+	for _, command := range c.commands {
+		for _, declaredError := range command.Agent.Errors {
+			for _, action := range declaredError.NextActions {
+				nextCommand, err := c.resolveRecoveryCommand(action.Command)
+				if err != nil {
+					return fmt.Errorf("active command view command %q error %q: %w", command.Path, declaredError.Code, err)
+				}
+				if declaredError.Code == "unclassified_mutation_outcome" && nextCommand.Effect != operation.EffectRead {
+					return fmt.Errorf("active command view command %q error %q must point to a read-only reconciliation command", command.Path, declaredError.Code)
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // Lookup finds one exact command path.
