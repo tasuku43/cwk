@@ -2,11 +2,37 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestCommandOutputKeepsDiagnosticsOutOfMachineReadableStdout(t *testing.T) {
+	command := exec.Command(os.Args[0], "-test.run=TestArchlintCommandOutputHelper")
+	command.Env = append(os.Environ(), "ARCHLINT_COMMAND_OUTPUT_HELPER=1")
+
+	stdout, stderr, err := commandOutput(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := string(stdout), `{"ImportPath":"example.test/tool"}`; got != want {
+		t.Fatalf("stdout = %q, want %q", got, want)
+	}
+	if got, want := string(stderr), "go: downloading example.test/dependency\n"; got != want {
+		t.Fatalf("stderr = %q, want %q", got, want)
+	}
+}
+
+func TestArchlintCommandOutputHelper(t *testing.T) {
+	if os.Getenv("ARCHLINT_COMMAND_OUTPUT_HELPER") != "1" {
+		return
+	}
+	_, _ = os.Stdout.WriteString(`{"ImportPath":"example.test/tool"}`)
+	_, _ = os.Stderr.WriteString("go: downloading example.test/dependency\n")
+	os.Exit(0)
+}
 
 func TestFindViolationsEnforcesFourLayers(t *testing.T) {
 	const module = "example.test/tool"

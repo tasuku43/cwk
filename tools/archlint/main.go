@@ -141,11 +141,20 @@ func runGoWithEnv(root string, overrides []string, args ...string) ([]byte, erro
 		}
 		command.Env = append(environment, overrides...)
 	}
-	output, err := command.CombinedOutput()
+	output, diagnostics, err := commandOutput(command)
 	if err != nil {
-		return nil, fmt.Errorf("go %s: %w\n%s", strings.Join(args, " "), err, output)
+		return nil, fmt.Errorf("go %s: %w\n%s", strings.Join(args, " "), err, diagnostics)
 	}
 	return output, nil
+}
+
+func commandOutput(command *exec.Cmd) ([]byte, []byte, error) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err := command.Run()
+	return stdout.Bytes(), stderr.Bytes(), err
 }
 
 func mergeListedPackage(existing, incoming listedPackage) listedPackage {
