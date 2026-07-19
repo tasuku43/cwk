@@ -340,6 +340,24 @@ func TestRunChatworkConfirmationFailsBeforeAuthentication(t *testing.T) {
 	}
 }
 
+func TestContactRequestAcceptanceRequiresAccessChangeConfirmationBeforeAuthentication(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "contact-requests accept")
+	for _, args := range [][]string{
+		{"--request", "7"},
+		{"--request", "7", "--confirm=destructive"},
+	} {
+		port := &chatworkRuntimePort{}
+		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
+		code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), args)
+		if code != ExitRejected || !strings.Contains(stderr.String(), "code: mutation_rejected") {
+			t.Errorf("args %v: code = %d, stderr = %s", args, code, stderr.String())
+		}
+		if authenticator.calls != 0 || port.calls != 0 {
+			t.Errorf("args %v: calls = auth %d, port %d; want zero", args, authenticator.calls, port.calls)
+		}
+	}
+}
+
 func TestRunChatworkMapsRepeatedReferencesAndExecutesConfirmedMutationOnce(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "rooms create")
 	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
