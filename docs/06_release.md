@@ -173,7 +173,7 @@ same-version collisions with another tool, and the title begins
 path is exactly `Formula/cwk.rb`; tap README changes use a separate reviewed
 change because automated Formula pull requests remain Formula-only.
 
-`scripts/audit-formula.sh` creates a collision-resistant temporary tap name from `mktemp`, verifies that name is not already installed, and records ownership only after `brew tap-new` succeeds. Its exit trap removes only that owned tap. It never pre-emptively untaps a fixed name, so an existing user tap is outside its cleanup authority. The release profile tests this property with a fake Homebrew boundary on both audit success and audit failure.
+`scripts/audit-formula.sh` creates a collision-resistant temporary tap name from `mktemp`, verifies that name is not already installed, and records ownership only after `brew tap-new` succeeds. Its exit trap removes only that owned tap. It never pre-emptively untaps a fixed name, so an existing user tap is outside its cleanup authority. After copying the rendered Formula into the owned tap, it fixes that copy to non-executable mode `0644` before strict audit; the source Formula remains unchanged. The release profile tests ownership cleanup on audit success and failure and starts from a `0600` fixture to prove runner umask cannot violate Homebrew's readability contract.
 
 Prereleases do not update stable Formula metadata.
 

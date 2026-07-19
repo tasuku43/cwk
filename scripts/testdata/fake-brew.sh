@@ -17,6 +17,14 @@ tap_path() {
   printf '%s/%s' "$FAKE_BREW_ROOT" "${1//\//__}"
 }
 
+file_mode() {
+  if mode=$(stat -f '%Lp' "$1" 2>/dev/null); then
+    printf '%s' "$mode"
+    return
+  fi
+  stat -c '%a' "$1"
+}
+
 case "$command_name" in
   tap)
     printf '%s\n' "$FAKE_BREW_EXISTING_TAP"
@@ -35,6 +43,18 @@ case "$command_name" in
     tap_path "$tap"
     ;;
   audit)
+    if [[ -n ${FAKE_BREW_EXPECT_FORMULA_MODE:-} ]]; then
+      [[ ${1:-} == --strict ]]
+      formula_ref=${2:?}
+      tap=${formula_ref%/*}
+      binary=${formula_ref##*/}
+      formula_path=$(tap_path "$tap")/Formula/${binary}.rb
+      actual_mode=$(file_mode "$formula_path")
+      if [[ $actual_mode != "$FAKE_BREW_EXPECT_FORMULA_MODE" ]]; then
+        echo "Formula mode $actual_mode, want $FAKE_BREW_EXPECT_FORMULA_MODE" >&2
+        exit 8
+      fi
+    fi
     if [[ ${FAKE_BREW_AUDIT_FAIL:-false} == true ]]; then
       exit 9
     fi

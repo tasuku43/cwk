@@ -15,6 +15,7 @@ printf '%s\n' \
   '    doc.install "LICENSE", "THIRD_PARTY_NOTICES"' \
   '  end' \
   'end' >"$formula"
+chmod 0600 "$formula"
 legacy_tap=cwk-ci/audit
 
 missing_notices_formula=$test_root/cwk-missing-notices.rb
@@ -38,6 +39,7 @@ run_case() {
     FAKE_BREW_ROOT=$case_root \
     FAKE_BREW_EXISTING_TAP=$legacy_tap \
     FAKE_BREW_AUDIT_FAIL=$audit_failure \
+    FAKE_BREW_EXPECT_FORMULA_MODE=644 \
     BREW_COMMAND=$fake_brew \
     AUDIT_FORMULA_BINARY=cwk \
     scripts/audit-formula.sh "$formula" >/dev/null 2>&1

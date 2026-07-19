@@ -68,5 +68,7 @@ if [[ ! -d $tap_dir/Formula ]]; then
   echo "temporary tap has no Formula directory: $tap_dir" >&2
   exit 1
 fi
-cp "$formula" "$tap_dir/Formula/${binary}.rb"
+staged_formula=$tap_dir/Formula/${binary}.rb
+cp "$formula" "$staged_formula"
+chmod 0644 "$staged_formula"
 "$brew_command" audit --strict "$tap/$binary"

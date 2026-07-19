@@ -222,6 +222,10 @@ The test suite has complementary levels:
   handle cancellation through `CancelSynchronousIo`, join-before-return,
   VT-output enablement, and restoration of the prior console mode. Cancellation
   must leave no reader that can consume a later invocation's terminal input.
+- Formula audit tests begin with a deliberately owner-only `0600` rendered
+  Formula and require the isolated tap copy to be exact non-executable `0644`
+  before strict Homebrew audit. This preserves source bytes while preventing
+  runner umask from making a valid Formula unreadable to Homebrew.
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
   multi-sender message selection contract and the inclusive 1..100 primary
