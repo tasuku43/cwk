@@ -168,6 +168,46 @@ and permission rejection. It also verifies that an ambient obsolete
 `CWK_AUTH_METHOD` value cannot select a different adapter. Live credentials are
 never evaluation inputs or retained evidence.
 
+## Command-attention probe
+
+The active command-selection scenario uses a temporary synthetic config home
+and fake PAT/provider counters; it never reads or changes a developer's real
+preference. Starting with no preference file, the agent observes the complete
+current help view. It then runs the line-oriented `config edit`, disables
+`contact-requests list`, `contact-requests accept`, and `contact-requests
+reject`, and explicitly saves.
+
+The scenario must prove all of the following without inspecting source or
+editing JSON directly:
+
+1. root and namespace human help, exact and trailing help, root and scoped agent
+   help, recovery actions, and reference workflows expose none of the disabled
+   paths; the empty contact-request namespace is not advertised;
+2. invoking a disabled path returns the ordinary `unknown_command` result with
+   zero PAT-resolution and zero provider calls;
+3. `config show` identifies all three exact paths as disabled and states
+   `security-boundary=false` while `help`, `config show`, and `config edit`
+   remain visible;
+4. a second `config edit` can re-enable the three paths from its complete
+   catalog-derived selector, after which normal and agent help expose them
+   again;
+5. re-enabled contact-request commands still enforce their original PAT,
+   canonical-reference, provider-permission, and `--confirm=access-change` or
+   `--confirm=destructive` contracts; selection grants no authority; and
+6. removing the saved preference restores the documented all-current-commands
+   view, demonstrating why this feature is attention curation rather than a
+   security control.
+
+The saved-profile variant injects one synthetic catalog addition and verifies
+that it remains off until selected. The invalid-state variant proves ordinary
+commands and root help do not silently fall back to all enabled or a false
+empty view. Config-scoped help remains available; malformed content can enter
+`config edit`, while unsafe or inaccessible filesystem state requires local
+repair and `config show`. The selector writes nothing before an explicit
+`save`; cancellation, EOF, and a blocked-input context interruption before that
+action preserve the prior bytes. A separate fixture cancels after a confirmed
+save and proves that success is not reclassified as retryable cancellation.
+
 ## No-post-processing audit
 
 The transcript fails when a supported task contains an external parser, manual identifier join, raw notation parsing, guessed command/endpoint/cursor, or undeclared provider call. When this happens, decide whether the capability is incomplete, the outcome is too broad, or the presentation candidate failed. Do not patch the agent prompt with the workaround.
@@ -184,6 +224,8 @@ go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk help files list --format agent
+go run ./cmd/cwk config show
+go run ./cmd/cwk config edit --help
 go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailingHelp|TestProductionHelp'
 go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageLimit)'
 ```

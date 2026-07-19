@@ -80,6 +80,12 @@ Contract lint validates the executable catalog before checking two repository le
 
 Both ledgers are strict JSON and must themselves be regular files reached without symbolic links. Unknown or duplicate object keys, duplicate IDs, malformed lowercase dot IDs, trailing values, and implicit `null` lists fail. Capability command paths remain owned only by the catalog; adding them to the ledger creates forbidden duplication rather than useful documentation.
 
+The optional runtime command-selection allowlist does not change this check.
+`contractlint` always validates the complete `DefaultCatalog` against the
+capability and Chatwork-operation ledgers. The active attention view is a
+catalog-derived local projection, not a reason to mark a supported capability
+internal, deferred, excluded, or uncovered.
+
 The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-operation snapshot rather than a public-command registry. Its exact 32 operation IDs and method/path pairs are pinned to the official 2026-07-18 documentation index and map only to capability IDs. Contract validation rejects a same-sized substituted operation set, missing or duplicate operation IDs, method/path drift, unknown capabilities, or a Chatwork-backed capability with no upstream owner. The manifest is now `coverage_status: complete`, so any operation without at least one public capability owner fails the gate. Returning it to `planned` would reopen, not complete, this work. Future provider additions require a new reviewed snapshot decision; they do not silently extend the active goal.
 
 The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm=access-change` or `--confirm=destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
@@ -132,6 +138,21 @@ The test suite has complementary levels:
   namespace sections, exact namespace membership/counts, no leaf duplication at
   root, relative namespace listings, natural trailing-help equivalence, and
   unchanged unknown-command faults.
+- Command-selection tests keep `help`, `config show`, and `config edit`
+  always-on; prove missing state enables the complete current catalog while a
+  saved allowlist keeps later additions off; and make root, namespace, exact,
+  trailing, agent, recovery, workflow, and routing views agree. They reject a
+  visible consumer without a reachable producer and a visible recovery action
+  whose command is hidden, without auto-enabling either dependency.
+- Command-selection storage tests cover XDG behavior on macOS/Linux, AppData on
+  Windows, strict bounded JSON, stale paths, modes, symbolic links, special
+  files, Unix rename/directory durability, Windows replace-existing behavior,
+  pre-save cancellation/EOF, and unchanged prior bytes after invalid input.
+  Repair tests distinguish malformed content from unsafe or inaccessible
+  storage, reject false empty root help, and preserve confirmed success under
+  late cancellation. Disabled invocation must be `unknown_command` with zero
+  PAT resolution and zero provider calls; re-enabling must not bypass the
+  original authentication or mutation confirmation contract.
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
   multi-sender message selection contract and the inclusive 1..100 primary
@@ -187,6 +208,7 @@ Every strong statement should identify its enforcement path.
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, always-on `help`/`config show`/`config edit`, actionable required-reference/recovery closure validation, strict platform storage with Unix durability and explicit Windows limits, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
 | Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
 | Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |

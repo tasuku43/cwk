@@ -187,6 +187,43 @@ the production destination.
 - Define atomicity, symbolic-link, and partial-write behavior where relevant.
 - Keep caches, state, configuration, and audit data separate.
 
+#### Command-selection preference
+
+The persisted command allowlist reduces the agent's attention surface; it is
+not an authorization, access-control, sandbox, or security boundary. The same
+local principal that runs `cwk` may edit or remove the file, invoke `config
+edit`, or install another binary. Removing the file intentionally restores the
+documented missing-state behavior in which all current configurable commands
+are visible. Hidden commands must therefore never be used as evidence that an
+operation is forbidden or inaccessible.
+
+`help`, `config show`, and `config edit` remain catalog-declared always-on so
+valid state is inspectable and reversible. Disabled paths fail as
+`unknown_command` before PAT resolution or provider I/O, but re-enabling a path
+grants no Chatwork authority:
+PAT authentication, provider permissions, canonical-reference validation,
+typed intent and impact, and access-change/destructive confirmation still run
+unchanged. The UI and contract identify this limit as
+`security-boundary=false`; no TTY or selector input is treated as proof of human
+approval.
+
+The non-secret preference is stored at
+`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
+Linux and `%AppData%\\cwk\\command-selection.json` on Windows. It is separate
+from PAT state and from ADR 0003's retired OAuth `cwk/config.json`, and its
+schema accepts only bounded exact command paths. It must not contain a token,
+provider response, personal data, or copied command metadata. Infrastructure
+rejects symbolic-link and special-file targets and replaces from a restricted
+same-directory temporary file. Unix uses rename plus opened-directory sync;
+Windows replace-existing has no portable atomicity or durability guarantee.
+Malformed, unsafe, or unavailable state never silently enables everything or
+presents a false empty root view. Only malformed serialized content enters the
+explicit `config edit` repair flow. Unsafe modes/objects and inaccessible paths
+must be repaired outside `cwk` and then inspected with `config show`.
+Cancellation before the save action leaves prior state unchanged. After
+replacement is attempted, raw failure is uncertain and reconciles through
+`config show`; confirmed success is not replaced by late cancellation.
+
 ### Processes
 
 - Prefer in-process APIs.
@@ -261,6 +298,14 @@ Every new side-effect class should include tests for:
 - raw ESC/newline/bidi/zero-width/U+2028/U+2029 characters, existing backslashes, JSON-looking text, and prompt-like printable data across TSV, JSON, and stderr;
 - actual control characters remaining distinguishable from pre-existing visible escape-looking text;
 - repeated invocation when authorization must not be reused.
+- disabled-command invocation producing the ordinary unknown-command result
+  before credential resolution or provider I/O;
+- malformed, oversized, duplicate-key, trailing-value, symbolic-link, or
+  special-file command-selection state without a silent all-enabled fallback;
+- canceled, EOF, invalid, or dependency-incomplete selection leaving the prior
+  preference unchanged;
+- a re-enabled Chatwork mutation still requiring its original PAT, exact target,
+  and typed confirmation policy.
 
 ## Derived-project threat-model pass
 

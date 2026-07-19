@@ -31,7 +31,12 @@ Direct extraction of a declared field or canonical reference is allowed. Reconst
 
 ## Public runnable surface
 
-The public catalog exposes local `help`, `doctor`, and `version` utilities plus the task-oriented Chatwork workflows defined below. The former `sample list` and `sample read` scaffold is retained only as an offline test fixture; it is absent from root help and cannot be invoked through the default catalog. Public opaque-reference and output contracts are proven by the Chatwork workflows themselves.
+The complete public catalog exposes local `help`, `doctor`, and `version`
+utilities, `config show` and `config edit`, and the task-oriented Chatwork
+workflows defined below. The former `sample list` and `sample read` scaffold is
+retained only as an offline test fixture; it is absent from root help and cannot
+be invoked through the default catalog. Public opaque-reference and output
+contracts are proven by the Chatwork workflows themselves.
 
 Human text discovery is hierarchical. Root help shows the directly runnable
 single-word utilities and each canonical top-level task namespace once; it does
@@ -44,6 +49,49 @@ each declared input's required/repeatable state, source, allowed values,
 reference kind, and description from the same command contract. Schema-v3 agent
 help deliberately retains its exact command-level outcome index and bounded
 scoped-contract path.
+
+### User-selected command view
+
+The complete `DefaultCatalog` remains the supported-product, capability-ledger,
+API-coverage, and release contract. At runtime, `cwk` may derive a smaller
+ordered attention view from an exact-path allowlist of configurable catalog
+leaves. Human root, namespace, exact, and trailing help; agent root and scoped
+help; recovery actions; reference workflows; and command routing all consume
+that same active view. A disabled path therefore appears as the ordinary
+`unknown_command` and is rejected before PAT resolution or provider I/O.
+
+`help`, `config show`, and `config edit` are always-on catalog commands.
+`config show` reports the active, disabled, and stale saved paths. `config edit`
+is a line-oriented selector that persists only exact configurable command paths
+after an explicit `save`; its numbered choices are document-local aliases, not
+command identities. Saving rejects a view that strands a visible required
+reference consumer or points a visible recovery action at a hidden command.
+
+A missing preference means all current configurable commands are enabled, which
+preserves behavior for an existing installation. Once a preference has been
+saved, its allowlist is authoritative: commands added by a later release remain
+off until selected, and removed paths remain visible only as stale configuration
+evidence. Invalid state never silently restores the full view or presents a
+control-only root help page as a normal empty selection. Normal commands and
+`config show` fail closed. Config-scoped help remains available; `config edit`
+may deliberately replace malformed serialized content and does not write until
+`save`. Unsafe filesystem objects, modes, or inaccessible paths require local
+filesystem repair followed by `config show` rather than an edit loop.
+
+The preference is stored separately from credentials and the retired OAuth
+configuration: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json`
+on macOS and Linux, and `%AppData%\\cwk\\command-selection.json` on Windows.
+The adapter uses a restricted same-directory temporary file, rename and
+directory sync on Unix, and portable replace-existing behavior on Windows;
+the Windows API does not supply a cross-platform atomicity or durability
+promise.
+
+It is a cognitive-surface preference, not authorization, access control,
+sandboxing, or a promise that hidden commands are unavailable to the same local
+principal. Editing or deleting the file can restore commands. PAT validation,
+provider permissions, canonical-reference binding, mutation effects, and the
+existing access-change/destructive confirmations apply unchanged after any
+command is enabled.
 
 ## Required first complete surface
 
@@ -240,6 +288,12 @@ renames the provider-bound output field from catalog `limit`/text `limit=...`
 to catalog `source_limit`/text `source-limit=...` so the fixed 100-message
 retrieval ceiling cannot be confused with optional `--limit`; message record
 positions and canonical references do not change.
+
+Persistent command selection is an additive pre-1.0 local workflow. It does
+not remove capabilities from `DefaultCatalog`; it derives the help and routing
+view for one installation from a saved exact-path allowlist. Missing state
+retains the former all-enabled behavior, while a saved profile keeps commands
+introduced by later releases off until explicitly selected.
 
 ## Explicit non-goals
 

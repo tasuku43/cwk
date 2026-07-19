@@ -160,6 +160,33 @@ requirement, stable faults with exact next commands, and mutation contract when
 applicable. Nil collections mean unknown and are invalid; use explicit empty
 collections for known none.
 
+This product also derives a user-selected attention view from the complete
+catalog. For each new leaf, deliberately declare whether it is configurable;
+do not infer that choice from namespace, effect, or provider ownership. The
+complete `DefaultCatalog` remains the capability/API/release contract, while a
+saved exact-path allowlist controls only the active help and routing view. A
+saved profile keeps a newly added configurable command off until selected;
+missing profile state enables all current configurable commands. Keep `help`,
+`config show`, and `config edit` always-on. Validate the active view so visible
+required-reference consumers retain a reachable visible producer and visible
+recovery actions resolve inside the view; do not silently auto-enable a
+dependency. Human and agent help, trailing-help normalization, workflows,
+recoveries, and routing must all consume the same active view.
+If persisted selection state is invalid, do not render the always-on control
+plane as though it were a deliberate empty root view. Keep config-scoped help
+reachable, distinguish repairable serialized content from unsafe or
+inaccessible storage, and route the latter to external repair followed by
+`config show`. Cancellation can promise an unchanged profile only before the
+save action; after replacement is attempted, use uncertain-outcome
+reconciliation, and never overwrite confirmed success with late cancellation.
+
+Treat this selection as cognitive-surface curation only. It is not
+authorization, sandboxing, provider scope, or mutation approval, because a
+local actor can edit or delete the preference and restore commands. Enabling a
+command must retain its PAT, exact-reference, effect/intent, permission, and
+confirmation contracts. Keep command-selection state free of credentials and
+provider data and separate from authentication configuration.
+
 For `complete` output, do not declare a pagination binding. For deliberately
 `paged` output, declare `AgentContract.Pagination` with the exact optional
 cursor argument/flag and exact top-level string cursor output field. The cursor
@@ -331,7 +358,13 @@ Add the smallest set that proves the capability:
 - retained baseline fixtures for the candidate-C first contract and active
   golden fixtures for the current task projection; future replacements receive
   active compatibility fixtures only after reviewed evidence and an explicit
-  compatibility decision.
+  compatibility decision;
+- command-attention tests proving a new configurable leaf stays off in a saved
+  profile, appears in missing-state defaults, participates in active
+  reference/recovery closure, and cannot leak through any human/agent help or
+  routing projection while disabled. Prove disabled execution performs zero
+  PAT/provider calls and re-enabling retains the leaf's original security
+  policy.
 
 Tests must use temporary directories, fixed clocks, fake credentials, and local
 test servers. They must not require a developer account or live network.

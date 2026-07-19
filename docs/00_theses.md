@@ -42,6 +42,17 @@ An agent that knows the user's desired outcome should reach the exact command co
 - Human and agent help are complementary projections: the human hierarchy
   reduces visual duplication, while the machine root retains exact outcomes so
   scoped invocation detail remains at most one further request away.
+- The complete catalog remains the product and release contract, while a user
+  may derive a smaller active attention view by enabling exact command paths.
+  Routing and every help projection consume that same view so an irrelevant
+  task is neither advertised nor invocable through the configured CLI.
+- `help`, `config show`, and `config edit` remain visible in every attention
+  view so the selection is inspectable and reversible. This curation is not an
+  authorization, sandbox, or security boundary: a local actor able to edit or
+  remove the preference can restore commands.
+- Invalid persisted state never masquerades as a deliberately empty attention
+  view. Config-scoped repair help remains reachable while normal discovery
+  fails with the typed configuration fault.
 - Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
 - Commands do not silently search again, choose a display-name match, or rely on hidden defaults.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
@@ -49,6 +60,9 @@ An agent that knows the user's desired outcome should reach the exact command co
 ### Enforcement
 
 - Catalog, routing, and help derive from `cli.Catalog`.
+- Full-catalog validation and capability coverage remain independent of the
+  catalog-derived active view. View validation rejects a visible recovery edge
+  or required-reference consumer whose prerequisite command is hidden.
 - Root agent entries retain the 512-byte per-command budget.
 - Human-help tests prove that every catalog command belongs to exactly one root
   entry and round-trips through its canonical namespace.

@@ -5,6 +5,11 @@
     "reason": ""
   },
   {
+    "id": "cli.command-selection",
+    "status": "public",
+    "reason": ""
+  },
+  {
     "id": "cli.version",
     "status": "public",
     "reason": ""

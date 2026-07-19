@@ -75,6 +75,17 @@ pins this reduced boundary.
 production provider boundary. `internal/infra/sampledata` is a deterministic
 offline repository retained only for generic contract tests.
 
+The command-selection adapter owns one bounded, strict JSON preference file:
+`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
+Linux, and `%AppData%\\cwk\\command-selection.json` on Windows. It keeps that
+non-secret preference separate from the retired OAuth `cwk/config.json`,
+rejects symbolic-link or special-file targets, and replaces from a validated
+same-directory temporary file. Unix uses rename and directory sync through the
+already-open directory root. Windows requests replace-existing through the
+portable API, which does not guarantee atomicity or directory durability. The
+adapter implements an application-owned load/save port; it does not decide
+which catalog paths may be selected or attach CLI recovery commands.
+
 ### CLI
 
 `internal/cli/` owns:
@@ -86,6 +97,8 @@ offline repository retained only for generic contract tests.
 - output and error presentation;
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
+- derivation of the active command-attention view from the complete catalog and
+  the persisted exact-path selection.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
@@ -132,6 +145,40 @@ expose login, status, logout, callback, or profile commands.
 ## Catalog as the public source of truth
 
 `cli.Catalog` contains every public `cli.CommandSpec`. Routing, root help, command help, uniqueness checks, and catalog-wide effect tests derive from it.
+
+`DefaultCatalog` remains the complete public, capability, API-coverage, and
+release ledger. Each leaf declares whether it is configurable. Production
+loads an exact-path enabled allowlist and derives one catalog-order active view;
+it does not construct a second command registry or mutate the complete catalog.
+`help`, `config show`, and `config edit` are always-on, while every other leaf
+is independently configurable. Missing selection state enables every current
+configurable leaf. A present allowlist is authoritative, so a command added in
+a later release remains hidden until explicitly selected; unknown saved paths
+are retained as stale upgrade evidence but never become executable.
+
+The active view is loaded before trailing-help normalization and command
+matching. Root, namespace, exact, and trailing human help; root and scoped agent
+help; recovery projections; reference workflows; and routing consume that same
+view. A disabled command therefore takes the existing `unknown_command` path
+before lazy PAT resolution or provider I/O. View validation is deliberately
+narrower than full-catalog validation: a visible terminal producer may have no
+visible consumer, but each visible required-reference consumer must have a
+reachable visible producer and every visible recovery action must resolve
+inside the view. Selection never auto-enables another command to repair an
+invalid graph.
+
+`config show` is a read-only view and reconciliation task. A malformed
+serialized profile is the only load failure that `config edit` treats as
+in-tool repairable. Unsafe objects or modes and unavailable paths require
+external filesystem repair followed by `config show`; root help fails with the
+same typed fault instead of resembling an intentionally empty view, while
+config-scoped help remains reachable. `config edit` is a
+fixed-`tool_local`-target write: its line-oriented selector uses document-local
+numbers, persists only exact catalog paths, and crosses the mutation invoker
+only after the explicit `save` token. Cancellation, EOF, or context interruption
+before that action performs no write. Once replacement is attempted, a raw
+failure is an uncertain mutation outcome and routes to `config show`; confirmed
+success is not overwritten by later context cancellation.
 
 Human text help is a hierarchical catalog projection, not another registry.
 The root partitions the catalog into directly runnable single-word commands
@@ -296,7 +343,8 @@ Do not infer effect from an HTTP method, command name, or adapter function. A `P
 
 ```text
 argv
-  -> CLI selects one CommandSpec from Catalog
+  -> CLI derives the active view from DefaultCatalog and local selection state
+  -> CLI selects one CommandSpec from that Catalog view
   -> CLI validates role/reference declarations, parses task input, and chooses presentation
   -> application use case interprets the user outcome
   -> domain validates Effect, Intent, TargetRef, Impact, auth, and API envelopes

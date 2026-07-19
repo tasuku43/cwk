@@ -71,6 +71,7 @@ go run ./cmd/cwk rooms list --help
 go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
+go run ./cmd/cwk config show
 go run ./cmd/cwk doctor
 ```
 
@@ -80,7 +81,50 @@ and `<exact-command> --help` shows one command's usage and catalog-derived input
 facts, including repeatable flags and opaque-reference kinds. Machine-readable
 agent help keeps its compact exact-outcome root index so a known path can request
 its complete contract directly. All of these views are derived from the same
-catalog.
+active view of the complete catalog.
+
+### Curate the command view
+
+Use the local command selector when an agent does not need every supported
+workflow:
+
+```sh
+cwk config show
+cwk config edit
+```
+
+`config edit` lists configurable exact command paths in catalog order and
+assigns document-local numbers. Toggle choices by number, use `all` or `none`,
+then enter `save`. Before that save action starts, `cancel`, EOF, or Ctrl-C
+leaves the previous preference unchanged. Once replacement is attempted, an
+uncertain failure must be reconciled with `config show` rather than retried
+blindly. `help`, `config show`, and `config edit` are catalog-declared always
+on. If saved content is malformed, config-scoped help and `config edit` remain
+available without presenting a false root command view; an unsafe or
+inaccessible file/directory must first be repaired locally and then inspected
+with `config show`.
+
+After saving, an off command disappears from human and agent help, recovery and
+reference-workflow projections, and command routing. Invoking it produces the
+same `unknown_command` result as an unknown path before PAT resolution or a
+Chatwork request. A saved exact-path allowlist is authoritative, so commands
+introduced by a later release remain off until selected. With no preference
+file, all current configurable commands are on for backward compatibility.
+
+The file is
+`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
+Linux, and `%AppData%\\cwk\\command-selection.json` on Windows. It contains no
+PAT or provider data and is separate from the retired OAuth `config.json`.
+Writes use a restricted same-directory temporary file. Unix replacement uses
+rename plus directory sync; Windows requests replace-existing through the
+portable filesystem API, which does not promise cross-platform atomicity or
+durability.
+
+This feature reduces an agent's attention surface; it is not authorization,
+sandboxing, or a security control. A local actor can re-enable commands through
+`config edit`, edit the file, or delete it to restore the all-enabled default.
+Enabling a command does not bypass PAT authentication, Chatwork permissions,
+canonical references, or access-change/destructive confirmation.
 
 The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API token from the command environment before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
 
