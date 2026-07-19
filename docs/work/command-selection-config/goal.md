@@ -1,5 +1,9 @@
 # Work Goal: Persistent command selection
 
+> Historical completed work packet. Its public workflow has been superseded by
+> [Single terminal command selector](../config-terminal-selector/goal.md); the
+> remainder is retained unchanged as the original completion evidence.
+
 - Status: Complete
 - Owner: Codex
 - Target: Current implementation cycle

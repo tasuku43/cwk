@@ -138,21 +138,55 @@ The test suite has complementary levels:
   namespace sections, exact namespace membership/counts, no leaf duplication at
   root, relative namespace listings, natural trailing-help equivalence, and
   unchanged unknown-command faults.
-- Command-selection tests keep `help`, `config show`, and `config edit`
-  always-on; prove missing state enables the complete current catalog while a
-  saved allowlist keeps later additions off; and make root, namespace, exact,
-  trailing, agent, recovery, workflow, and routing views agree. They reject a
-  visible consumer without a reachable producer and a visible recovery action
-  whose command is hidden, without auto-enabling either dependency.
+- Command-selection catalog tests keep exactly `help`, `doctor`, `version`, and
+  `config` always-on; prove missing state enables every current configurable
+  Chatwork command while a saved allowlist keeps later additions off; and make
+  root, namespace, exact, trailing, agent, recovery, workflow, and routing
+  views agree. They reject a visible consumer without a reachable producer and
+  a visible recovery action whose command is hidden, without auto-enabling
+  either dependency.
+- Command-selection TTY tests drive the single `config` selector through a
+  synthetic terminal. They require textual `[read]`, `[create]`, and `[write]`
+  effect badges even when color is unavailable, catalog-derived color spans
+  that never replace those labels, deterministic Up/Down movement, Space
+  toggling, Enter-only save, and q/Escape/Ctrl-C cancellation. An invalid
+  active view remains inside the selector with an actionable diagnostic and
+  zero writes. Every exit path restores the alternate screen, cursor, output
+  mode, and raw input mode; restoration completes before an Enter-confirmed
+  save, and restoration failure prevents that save. Non-TTY stdin or stdout
+  produces `interactive_terminal_required` without ANSI output or persistence.
+  Width/height tests also prove a hidden or truncated exact command disables
+  movement, toggle, and save while retaining a non-saving exit.
 - Command-selection storage tests cover XDG behavior on macOS/Linux, AppData on
   Windows, strict bounded JSON, stale paths, modes, symbolic links, special
   files, Unix rename/directory durability, Windows replace-existing behavior,
-  pre-save cancellation/EOF, and unchanged prior bytes after invalid input.
-  Repair tests distinguish malformed content from unsafe or inaccessible
-  storage, reject false empty root help, and preserve confirmed success under
-  late cancellation. Disabled invocation must be `unknown_command` with zero
-  PAT resolution and zero provider calls; re-enabling must not bypass the
-  original authentication or mutation confirmation contract.
+  pre-Enter q/EOF/context cancellation, and unchanged prior bytes after an
+  invalid selection. Repair tests distinguish malformed content from unsafe or
+  inaccessible storage, reject false empty root help, migrate formerly
+  selectable `doctor` and `version` entries without reintroducing them as
+  choices, and preserve confirmed success under late cancellation. Disabled
+  invocation must be `unknown_command` with zero PAT resolution and zero
+  provider calls; re-enabling must not bypass the original authentication or
+  mutation confirmation contract.
+- Command-selection reconciliation tests add one bounded `command-selection`
+  check to always-on `doctor`. Synthetic default, saved, stale, legacy,
+  malformed, unsafe, and unavailable states fix its state/source,
+  enabled/disabled/stale/legacy counts and deterministic ordered SHA-256
+  fingerprint. An uncertain save records expected `source=saved` and its
+  candidate fingerprint; tests require both to match the subsequent doctor
+  result and reject the same fingerprint reported as `source=default`, so an
+  uncertain write is inspected without a second mutation or false success.
+  Scoped agent help publishes the exact dynamic error-message grammar, and a
+  JSON error fixture must match it byte-for-byte around the fingerprint.
+- Terminal-adapter tests require both stdin and stdout to be terminals, cover
+  setup rollback, short/control-write failure, idempotent restoration, sizing,
+  ready input, and blocked-read cancellation followed by a successful later
+  read. They compile the pinned `x/term` plus `x/sys` platform implementation
+  for Darwin, Linux, and Windows. Unix coverage fixes bounded descriptor polling
+  and reading; Windows coverage fixes a locked reader thread, exact thread-
+  handle cancellation through `CancelSynchronousIo`, join-before-return,
+  VT-output enablement, and restoration of the prior console mode. Cancellation
+  must leave no reader that can consume a later invocation's terminal input.
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
   multi-sender message selection contract and the inclusive 1..100 primary
@@ -208,7 +242,7 @@ Every strong statement should identify its enforcement path.
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
-| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, always-on `help`/`config show`/`config edit`, actionable required-reference/recovery closure validation, strict platform storage with Unix durability and explicit Windows limits, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, strict platform storage with Unix durability and explicit Windows limits, doctor count/fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
 | Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
 | Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |

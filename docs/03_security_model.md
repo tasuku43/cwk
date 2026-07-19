@@ -191,21 +191,36 @@ the production destination.
 
 The persisted command allowlist reduces the agent's attention surface; it is
 not an authorization, access-control, sandbox, or security boundary. The same
-local principal that runs `cwk` may edit or remove the file, invoke `config
-edit`, or install another binary. Removing the file intentionally restores the
-documented missing-state behavior in which all current configurable commands
-are visible. Hidden commands must therefore never be used as evidence that an
-operation is forbidden or inaccessible.
+local principal that runs `cwk` may edit or remove the file, invoke `config`,
+or install another binary. Removing the file intentionally restores the
+documented missing-state behavior in which all current configurable Chatwork
+commands are visible. Hidden commands must therefore never be used as evidence
+that an operation is forbidden or inaccessible.
 
-`help`, `config show`, and `config edit` remain catalog-declared always-on so
-valid state is inspectable and reversible. Disabled paths fail as
+`help`, `doctor`, `version`, and the single exact `config` write remain
+catalog-declared always-on so the local view is diagnosable and reversible.
+Disabled paths fail as
 `unknown_command` before PAT resolution or provider I/O, but re-enabling a path
 grants no Chatwork authority:
 PAT authentication, provider permissions, canonical-reference validation,
 typed intent and impact, and access-change/destructive confirmation still run
-unchanged. The UI and contract identify this limit as
-`security-boundary=false`; no TTY or selector input is treated as proof of human
-approval.
+unchanged. An attached TTY, raw mode, cursor movement, Space, and Enter prove no
+human identity or authorization. Enter confirms only the exact local preference
+replacement admitted by the fixed-target mutation policy; it cannot approve a
+Chatwork action. The non-security contract remains explicit in scoped help and
+documentation without a repeated schema/purpose header in the selector.
+
+The interactive screen retains textual `[read]`, `[create]`, and `[write]`
+badges. Cyan, yellow, and magenta are redundant visual cues, never the source
+of effect truth; red is not used because effect is not a destructive-severity
+classification. ANSI sequences are fixed CLI structure excluded from display
+width, while command text is visibly escaped before it can enter a row. A
+catalog string cannot introduce a terminal control sequence or replace an
+effect badge.
+If the terminal cannot display the complete current command path together with
+its checkbox and effect, movement, Space, and Enter are ignored and the screen
+requests a resize. Only q/Ctrl-C/closure remains effective, so clipped or absent
+identity cannot authorize an unseen preference replacement.
 
 The non-secret preference is stored at
 `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
@@ -216,13 +231,37 @@ provider response, personal data, or copied command metadata. Infrastructure
 rejects symbolic-link and special-file targets and replaces from a restricted
 same-directory temporary file. Unix uses rename plus opened-directory sync;
 Windows replace-existing has no portable atomicity or durability guarantee.
-Malformed, unsafe, or unavailable state never silently enables everything or
-presents a false empty root view. Only malformed serialized content enters the
-explicit `config edit` repair flow. Unsafe modes/objects and inaccessible paths
-must be repaired outside `cwk` and then inspected with `config show`.
-Cancellation before the save action leaves prior state unchanged. After
-replacement is attempted, raw failure is uncertain and reconciles through
-`config show`; confirmed success is not replaced by late cancellation.
+Malformed, unsafe, or unavailable state never silently activates the complete
+Chatwork surface or makes a failed load executable. Only malformed serialized
+content enters the explicit `config` repair flow: it starts from a clearly
+marked replacement draft and changes nothing until Enter. Unsafe modes/objects
+refuse the selector and require external filesystem repair; unavailable storage
+must have access restored. The always-on read-only `doctor` reports invalid,
+unsafe, or unavailable command-selection state without mutating it.
+
+Terminal control is also phase-bounded. The infrastructure-only
+`golang.org/x/term` adapter requires interactive stdin and stdout, owns raw
+mode, alternate-screen entry, size lookup, and idempotent restoration, and
+exposes no selection or authority policy. A non-TTY invocation fails before
+persistence. Up/Down and Space modify only an in-memory draft. q, Escape, EOF,
+terminal closure, or cancellation before Enter restores the terminal on the
+bounded graceful path and leaves the prior preference unchanged. Enter
+validates the complete active view and fixed-target request, restores the
+terminal, and only then invokes the save action; restoration failure makes zero
+save calls. After replacement is attempted, a raw failure is uncertain and
+reconciles through `doctor`; confirmed success is not replaced by late
+cancellation. Process termination that cannot run cleanup is not claimed to
+restore terminal modes, but it still cannot persist a draft whose Enter save
+boundary was never crossed.
+
+The successful write and `doctor` expose the same versioned SHA-256 fingerprint
+of the ordered canonical enabled paths. This bounded fingerprint and its
+counts contain command metadata only, never PAT or provider data, and let the
+read-only diagnostic distinguish the state present after an uncertain write.
+Profiles from the preceding selector may contain `doctor` or `version`; those
+two exact legacy entries are ignored for active-view construction and removed
+on the next Enter save. No other always-on or unknown path receives that
+migration exception.
 
 ### Processes
 
@@ -302,8 +341,18 @@ Every new side-effect class should include tests for:
   before credential resolution or provider I/O;
 - malformed, oversized, duplicate-key, trailing-value, symbolic-link, or
   special-file command-selection state without a silent all-enabled fallback;
-- canceled, EOF, invalid, or dependency-incomplete selection leaving the prior
-  preference unchanged;
+- non-TTY rejection; fragmented CSI/SS3 keys; bounded terminal frames; and
+  restoration across success, quit, EOF, cancellation, validation failure, and
+  terminal failure;
+- canceled, EOF, invalid, dependency-incomplete, or pre-Enter selection leaving
+  the prior preference unchanged, and restoration failure making zero save
+  calls;
+- uncertain command-selection writes reconciling through the exact read-only
+  `doctor` fingerprint rather than another mutation;
+- legacy `doctor`/`version` selection entries normalizing without admitting
+  another always-on path;
+- textual effect badges remaining present without ANSI color, with hostile
+  command text unable to create a control sequence;
 - a re-enabled Chatwork mutation still requiring its original PAT, exact target,
   and typed confirmation policy.
 

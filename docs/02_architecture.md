@@ -75,6 +75,21 @@ pins this reduced boundary.
 production provider boundary. `internal/infra/sampledata` is a deterministic
 offline repository retained only for generic contract tests.
 
+`internal/infra/terminalui` is the sole production terminal-mode adapter. It
+confines `golang.org/x/term` and platform-scoped `golang.org/x/sys` imports to
+infrastructure, requires both stdin and stdout to be terminals, enters raw input
+and an alternate screen, reports the bounded terminal size, and restores every
+mode it changed. `x/term` supplies terminal detection and state management;
+`x/sys/unix` supplies context-responsive descriptor polling/reading, while
+`x/sys/windows` supplies synchronous console reading, exact reader-thread
+handles, `CancelSynchronousIo`, and VT-output mode management. The Windows read
+is confined to one locked OS thread, and cancellation joins that reader before
+returning. Cancellation therefore stops the platform read without leaving a
+goroutine able to consume a later invocation's input. The adapter does not
+interpret selector keys, choose commands, render catalog facts, or decide
+whether a preference may be saved; those presentation and product decisions
+remain in CLI. Non-terminal streams are rejected before a mutation attempt.
+
 The command-selection adapter owns one bounded, strict JSON preference file:
 `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
 Linux, and `%AppData%\\cwk\\command-selection.json` on Windows. It keeps that
@@ -99,6 +114,9 @@ which catalog paths may be selected or attach CLI recovery commands.
 - the controlled handoff to side-effect execution.
 - derivation of the active command-attention view from the complete catalog and
   the persisted exact-path selection.
+- the pure command-selector model, fragmented key-sequence parser, bounded
+  viewport, effect badges, and terminal frame rendered over the infrastructure
+  terminal session.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
@@ -150,11 +168,16 @@ expose login, status, logout, callback, or profile commands.
 release ledger. Each leaf declares whether it is configurable. Production
 loads an exact-path enabled allowlist and derives one catalog-order active view;
 it does not construct a second command registry or mutate the complete catalog.
-`help`, `config show`, and `config edit` are always-on, while every other leaf
-is independently configurable. Missing selection state enables every current
-configurable leaf. A present allowlist is authoritative, so a command added in
-a later release remains hidden until explicitly selected; unknown saved paths
-are retained as stale upgrade evidence but never become executable.
+`help`, `doctor`, `version`, and the single exact `config` write are always-on;
+the Chatwork task leaves are independently configurable. Missing selection
+state enables every current configurable Chatwork leaf. A present allowlist is
+authoritative, so a command added in a later release remains hidden until
+explicitly selected; unknown saved paths are retained as stale upgrade evidence
+but never become executable. Profiles written by the preceding selector may
+contain the formerly configurable exact paths `doctor` and `version`; only
+those two known legacy entries are removed before active-view validation and
+are omitted on the next confirmed save. This narrow migration does not make
+arbitrary always-on paths valid selection entries.
 
 The active view is loaded before trailing-help normalization and command
 matching. Root, namespace, exact, and trailing human help; root and scoped agent
@@ -167,18 +190,47 @@ reachable visible producer and every visible recovery action must resolve
 inside the view. Selection never auto-enables another command to repair an
 invalid graph.
 
-`config show` is a read-only view and reconciliation task. A malformed
-serialized profile is the only load failure that `config edit` treats as
-in-tool repairable. Unsafe objects or modes and unavailable paths require
-external filesystem repair followed by `config show`; root help fails with the
-same typed fault instead of resembling an intentionally empty view, while
-config-scoped help remains reachable. `config edit` is a
-fixed-`tool_local`-target write: its line-oriented selector uses document-local
-numbers, persists only exact catalog paths, and crosses the mutation invoker
-only after the explicit `save` token. Cancellation, EOF, or context interruption
-before that action performs no write. Once replacement is attempted, a raw
-failure is an uncertain mutation outcome and routes to `config show`; confirmed
-success is not overwritten by later context cancellation.
+`config` is one fixed-`tool_local`-target write and the sole public
+command-selection command. CLI builds its checkbox rows from
+`Catalog.ConfigurableCommands()` in curated catalog order, parses fragmented
+CSI/SS3 arrow input, and keeps scrolling, toggling, and viewport layout in a
+pure selector model. Every row retains a textual `[read]`, `[create]`, or
+`[write]` badge. Cyan, yellow, and magenta are supplemental cues only; ANSI
+bytes are CLI-authored, are excluded from display-width calculation, and never
+replace the text badge or encode authorization or destructive impact.
+CLI derives the always-on line and the profile-failure recovery island from
+`Catalog.AlwaysCommands()` rather than maintaining another path list. A frame
+that cannot show the complete current command identity admits only a
+non-saving exit until the terminal is resized.
+
+The selector persists only exact catalog paths. Up/Down moves, Space changes
+the in-memory draft, and q, Escape, EOF, context cancellation, or terminal
+closure exits without calling the store. Enter first validates active-view
+reference and recovery closure and constructs the fixed-target mutation
+request, then restores the terminal, and only after successful restoration
+crosses `execution.Invoker` and calls the save port. A validation or terminal
+restoration failure therefore leaves the prior profile unchanged. A raw error
+after the save action begins is an uncertain mutation outcome; confirmed
+success is not overwritten by later cancellation.
+
+`doctor` supplies the required read-only reconciliation. Its normal diagnostic
+result is augmented with command-selection state, source, enabled/disabled and
+stale/legacy counts, plus a versioned SHA-256 fingerprint over the ordered
+canonical enabled paths. Successful `config` output returns the same
+fingerprint. An uncertain fault names the expected `source=saved` as well as
+its candidate fingerprint; reconciliation succeeds only when `doctor` reports
+both, so an absent profile whose all-enabled default happens to hash identically
+is not mistaken for a persisted replacement. Scoped agent help declares the
+exact runtime message grammar, and the JSON error contract is tested against
+it rather than leaving these dynamic values in undeclared prose. Malformed
+serialized content is
+the only load failure that
+`config` treats as in-tool repairable, and it still writes only after Enter.
+Unsafe objects or modes and unavailable paths refuse the selector; `doctor`
+reports the corresponding unsafe or unavailable state, and the user must
+repair or restore the filesystem outside `cwk` before running `doctor` or
+`config` again. Exact help remains available without treating invalid state as
+permission to enable Chatwork commands.
 
 Human text help is a hierarchical catalog projection, not another registry.
 The root partitions the catalog into directly runnable single-word commands

@@ -31,9 +31,9 @@ Direct extraction of a declared field or canonical reference is allowed. Reconst
 
 ## Public runnable surface
 
-The complete public catalog exposes local `help`, `doctor`, and `version`
-utilities, `config show` and `config edit`, and the task-oriented Chatwork
-workflows defined below. The former `sample list` and `sample read` scaffold is
+The complete public catalog exposes the local `help`, `doctor`, `version`, and
+interactive `config` utilities plus the task-oriented Chatwork workflows
+defined below. The former `sample list` and `sample read` scaffold is
 retained only as an offline test fixture; it is absent from root help and cannot
 be invoked through the default catalog. Public opaque-reference and output
 contracts are proven by the Chatwork workflows themselves.
@@ -60,23 +60,55 @@ help; recovery actions; reference workflows; and command routing all consume
 that same active view. A disabled path therefore appears as the ordinary
 `unknown_command` and is rejected before PAT resolution or provider I/O.
 
-`help`, `config show`, and `config edit` are always-on catalog commands.
-`config show` reports the active, disabled, and stale saved paths. `config edit`
-is a line-oriented selector that persists only exact configurable command paths
-after an explicit `save`; its numbered choices are document-local aliases, not
-command identities. Saving rejects a view that strands a visible required
-reference consumer or points a visible recovery action at a hidden command.
+`help`, `doctor`, `version`, and `config` are always-on catalog commands. Every
+Chatwork task leaf is configurable; no local always-on operation is stored as a
+current selectable path. Bare `config` opens the sole selector on interactive
+stdin and stdout terminals. Up and Down move the cursor, Space toggles exactly
+one Chatwork leaf, Enter validates and persists the complete exact-path
+allowlist, and `q` exits with the prior profile unchanged. Redirected or
+otherwise non-terminal input fails with a typed fault rather than selecting a
+second grammar.
+
+Every row carries its literal catalog effect badge: `read`, `create`, or
+`write`. Cyan/read, yellow/create, and magenta/write may supplement the badge,
+but color is not semantic and red is not used to suggest that every write is
+destructive. The bounded renderer preserves cursor, checkbox, exact path, and
+badge before truncating optional summary text. If the current exact path or an
+item row cannot fit, the selector shows resize guidance and accepts only a
+non-saving exit; hidden or truncated command identity can never be toggled or
+saved.
+
+Before Enter, quitting, input closure, Ctrl-C, or context cancellation performs
+zero saves and restores terminal state. Enter first rejects a view that strands
+a visible required-reference consumer or points a visible recovery action at a
+hidden command, then restores the terminal, then invokes one fixed-target
+profile replacement. Restoration failure also performs zero saves, and a
+confirmed save is not overwritten by late cancellation.
 
 A missing preference means all current configurable commands are enabled, which
 preserves behavior for an existing installation. Once a preference has been
 saved, its allowlist is authoritative: commands added by a later release remain
 off until selected, and removed paths remain visible only as stale configuration
-evidence. Invalid state never silently restores the full view or presents a
-control-only root help page as a normal empty selection. Normal commands and
-`config show` fail closed. Config-scoped help remains available; `config edit`
-may deliberately replace malformed serialized content and does not write until
-`save`. Unsafe filesystem objects, modes, or inaccessible paths require local
-filesystem repair followed by `config show` rather than an edit loop.
+evidence. Invalid state never silently restores the full view or presents an
+always-on-only root help page as a normal empty selection. When active-profile
+loading fails, `doctor`, `version`, `config`, and scoped help for the always-on
+local commands remain reachable; bare root help and Chatwork discovery return
+the typed load fault because no truthful active Chatwork view exists. Malformed
+serialized content may enter the deliberate `config` repair flow and still
+writes nothing before Enter. Unsafe filesystem objects, modes, or inaccessible
+paths require local repair instead of an edit loop.
+
+Read-only `doctor`, not `help` or a second config leaf, reconciles an uncertain
+profile replacement. Its `command-selection` diagnostic reports source, state,
+enabled and disabled counts, and a deterministic `sha256:` fingerprint over
+the catalog-ordered enabled exact paths. An unavailable canonical state emits
+an unavailable fingerprint rather than fabricating one. The scoped agent error
+contract publishes the exact uncertain-message grammar containing expected
+`source=saved` and the candidate fingerprint; JSON and text errors follow that
+same grammar before routing to `doctor`. Profiles created by
+the retired selector may contain `doctor` or `version`; only those two legacy
+entries are ignored while deriving the view and removed on the next successful
+Enter save. Other always-on entries remain invalid.
 
 The preference is stored separately from credentials and the retired OAuth
 configuration: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json`
@@ -293,7 +325,12 @@ Persistent command selection is an additive pre-1.0 local workflow. It does
 not remove capabilities from `DefaultCatalog`; it derives the help and routing
 view for one installation from a saved exact-path allowlist. Missing state
 retains the former all-enabled behavior, while a saved profile keeps commands
-introduced by later releases off until explicitly selected.
+introduced by later releases off until explicitly selected. The later
+single-selector refinement deliberately removed public `config show` and
+`config edit`, made `help`/`doctor`/`version`/`config` always on, adopted one
+terminal Up/Down/Space/Enter/`q` interaction, and moved read-only uncertain-save
+reconciliation to `doctor`. The profile schema and location did not change;
+legacy `doctor`/`version` entries are normalized on the next save.
 
 ## Explicit non-goals
 

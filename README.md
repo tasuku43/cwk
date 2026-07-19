@@ -71,7 +71,7 @@ go run ./cmd/cwk rooms list --help
 go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
-go run ./cmd/cwk config show
+go run ./cmd/cwk config
 go run ./cmd/cwk doctor
 ```
 
@@ -89,20 +89,40 @@ Use the local command selector when an agent does not need every supported
 workflow:
 
 ```sh
-cwk config show
-cwk config edit
+cwk config
 ```
 
-`config edit` lists configurable exact command paths in catalog order and
-assigns document-local numbers. Toggle choices by number, use `all` or `none`,
-then enter `save`. Before that save action starts, `cancel`, EOF, or Ctrl-C
-leaves the previous preference unchanged. Once replacement is attempted, an
-uncertain failure must be reconciled with `config show` rather than retried
-blindly. `help`, `config show`, and `config edit` are catalog-declared always
-on. If saved content is malformed, config-scoped help and `config edit` remain
-available without presenting a false root command view; an unsafe or
-inaccessible file/directory must first be repaired locally and then inspected
-with `config show`.
+`config` requires interactive stdin and stdout terminals. Use Up and Down to
+move, Space to toggle the selected Chatwork task, Enter to validate and save,
+or `q` to leave the last saved profile unchanged. Each row keeps its literal
+`read`, `create`, or `write` effect badge. Cyan, yellow, and magenta are only
+supplemental cues for those badges; color is never the sole meaning, and red is
+not used to imply that every write is destructive. Redirected or otherwise
+non-terminal invocation fails with a typed error instead of falling back to a
+second input grammar. If the terminal cannot show the current exact command
+path and effect together, movement, toggle, and save are disabled until it is
+resized; `q` still exits without saving.
+
+Before Enter, `q`, input closure, Ctrl-C, or context cancellation performs no
+save. Enter validates reference and recovery closure, restores the terminal,
+and only then starts one profile replacement; restoration failure also saves
+nothing.
+If that replacement has an uncertain outcome, run the always-on read-only
+`doctor` task before another mutation. Its `command-selection` diagnostic
+reports source, state, enabled and disabled counts, and a deterministic
+`sha256:` fingerprint of the catalog-ordered enabled selection. `help` is
+command discovery, not saved-state reconciliation. Scoped agent help publishes
+the exact uncertain-error grammar used by both text and JSON output.
+
+`help`, `doctor`, `version`, and `config` are catalog-declared always on; only
+Chatwork task leaves are selectable. When the active profile cannot be loaded,
+`doctor`, `version`, `config`, and scoped help for those local commands remain
+reachable. Bare root help returns the typed load fault instead of presenting
+the failed profile as a valid empty Chatwork view. Malformed serialized content
+can enter the explicit `config` repair flow, while unsafe or inaccessible
+storage must be repaired locally and inspected with `doctor`. Profiles written
+by the retired selector may contain `doctor` or `version`; only those two
+legacy entries are tolerated and removed by the next successful Enter save.
 
 After saving, an off command disappears from human and agent help, recovery and
 reference-workflow projections, and command routing. Invoking it produces the
@@ -122,11 +142,19 @@ durability.
 
 This feature reduces an agent's attention surface; it is not authorization,
 sandboxing, or a security control. A local actor can re-enable commands through
-`config edit`, edit the file, or delete it to restore the all-enabled default.
+`config`, edit the file, or delete it to restore the all-enabled default.
 Enabling a command does not bypass PAT authentication, Chatwork permissions,
 canonical references, or access-change/destructive confirmation.
 
-The `doctor` task is a minimal utility slice through the domain, application, infrastructure, and CLI layers. Chatwork task commands now own the public discover-to-act workflows: for example, pass the canonical `room_ref` emitted by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API token from the command environment before invoking an API task. The former synthetic sample pair remains only as an offline test fixture and is not returned by public help.
+The `doctor` task is a local, read-only utility slice through the domain,
+application, infrastructure, and CLI layers. It reports runtime diagnostics and
+the command-selection reconciliation fingerprint without reading a Chatwork
+credential or calling Chatwork. Chatwork task commands own the public
+discover-to-act workflows: for example, pass the canonical `room_ref` emitted
+by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API
+token from the command environment before invoking an API task. The former
+synthetic sample pair remains only as an offline test fixture and is not
+returned by public help.
 
 ### Authenticate
 

@@ -166,19 +166,42 @@ do not infer that choice from namespace, effect, or provider ownership. The
 complete `DefaultCatalog` remains the capability/API/release contract, while a
 saved exact-path allowlist controls only the active help and routing view. A
 saved profile keeps a newly added configurable command off until selected;
-missing profile state enables all current configurable commands. Keep `help`,
-`config show`, and `config edit` always-on. Validate the active view so visible
-required-reference consumers retain a reachable visible producer and visible
-recovery actions resolve inside the view; do not silently auto-enable a
-dependency. Human and agent help, trailing-help normalization, workflows,
-recoveries, and routing must all consume the same active view.
+missing profile state enables all current configurable commands. In this
+product keep `help`, `doctor`, `version`, and the single exact `config` write
+always-on; only Chatwork task leaves are selectable. Validate the active view
+so visible required-reference consumers retain a reachable visible producer
+and visible recovery actions resolve inside the view; do not silently
+auto-enable a dependency. Human and agent help, trailing-help normalization,
+workflows, recoveries, and routing must all consume the same active view.
 If persisted selection state is invalid, do not render the always-on control
 plane as though it were a deliberate empty root view. Keep config-scoped help
 reachable, distinguish repairable serialized content from unsafe or
-inaccessible storage, and route the latter to external repair followed by
-`config show`. Cancellation can promise an unchanged profile only before the
-save action; after replacement is attempted, use uncertain-outcome
-reconciliation, and never overwrite confirmed success with late cancellation.
+inaccessible storage, and route the latter to external repair plus read-only
+`doctor` diagnostics. Malformed serialized content may enter the explicit
+`config` repair selector, but it still writes only after Enter. Existing
+profiles may normalize only the two formerly selectable exact paths `doctor`
+and `version`; do not generalize that compatibility rule to arbitrary always-on
+paths. Cancellation can promise an unchanged profile only before the save
+action; after replacement is attempted, use the `doctor` fingerprint for
+uncertain-outcome reconciliation, and never overwrite confirmed success with
+late cancellation.
+
+Keep the terminal boundary layered. `config` is a fixed-`tool_local` write, not
+a read command with a hidden save. CLI owns the pure selector model, key
+semantics, catalog-derived rows, viewport, and presentation. Infrastructure
+alone imports `golang.org/x/term` and owns terminal detection, raw/alternate
+screen modes, sizing, and restoration. Require interactive stdin and stdout;
+non-TTY input fails before persistence. Up/Down and Space change only a draft.
+On Enter, validate active-view closure and the fixed-target request, restore the
+terminal, then invoke save; a restoration failure must make zero save calls.
+Quit, Escape, EOF, terminal closure, and pre-save cancellation leave the last
+saved profile unchanged on every graceful path.
+
+Every selector row keeps a textual `[read]`, `[create]`, or `[write]` badge.
+Cyan, yellow, and magenta may supplement those badges, but color is never
+effect truth or authority and red is not used as a generic write cue. Add ANSI
+only after terminal-safe text projection and width truncation so hostile text
+cannot author terminal structure and color bytes do not consume display width.
 
 Treat this selection as cognitive-surface curation only. It is not
 authorization, sandboxing, provider scope, or mutation approval, because a
@@ -364,7 +387,11 @@ Add the smallest set that proves the capability:
   reference/recovery closure, and cannot leak through any human/agent help or
   routing projection while disabled. Prove disabled execution performs zero
   PAT/provider calls and re-enabling retains the leaf's original security
-  policy.
+  policy. For this product also prove single-command routing, always-on
+  `help`/`doctor`/`version`/`config`, exact legacy normalization, non-TTY
+  rejection, fragmented arrow input, bounded hostile-text-safe frames, textual
+  effect badges independent of color, validate-restore-save ordering, zero-save
+  restoration failure, and read-only doctor fingerprint reconciliation.
 
 Tests must use temporary directories, fixed clocks, fake credentials, and local
 test servers. They must not require a developer account or live network.

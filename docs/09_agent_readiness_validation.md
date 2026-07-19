@@ -171,11 +171,15 @@ never evaluation inputs or retained evidence.
 ## Command-attention probe
 
 The active command-selection scenario uses a temporary synthetic config home
-and fake PAT/provider counters; it never reads or changes a developer's real
-preference. Starting with no preference file, the agent observes the complete
-current help view. It then runs the line-oriented `config edit`, disables
-`contact-requests list`, `contact-requests accept`, and `contact-requests
-reject`, and explicitly saves.
+plus a synthetic interactive terminal and fake PAT/provider counters; it never
+reads or changes a developer's real preference and needs no live Chatwork data.
+Starting with no preference file, the agent observes the complete current help
+view and the four always-on commands: `help`, `doctor`, `version`, and `config`.
+It opens the single `config` selector, uses Up and Down to move and Space to
+disable `contact-requests list`, `contact-requests accept`, and
+`contact-requests reject`, then presses Enter to save. The selector displays
+catalog-derived `[read]`, `[create]`, and `[write]` labels; optional color may
+reinforce an effect but never replaces its textual label.
 
 The scenario must prove all of the following without inspecting source or
 editing JSON directly:
@@ -185,12 +189,15 @@ editing JSON directly:
    paths; the empty contact-request namespace is not advertised;
 2. invoking a disabled path returns the ordinary `unknown_command` result with
    zero PAT-resolution and zero provider calls;
-3. `config show` identifies all three exact paths as disabled and states
-   `security-boundary=false` while `help`, `config show`, and `config edit`
-   remain visible;
-4. a second `config edit` can re-enable the three paths from its complete
-   catalog-derived selector, after which normal and agent help expose them
-   again;
+3. the save result reports enabled/disabled/change counts and one deterministic
+   fingerprint; always-on `doctor` reports the same fingerprint plus valid
+   state, source, and enabled/disabled/stale/legacy counts without performing a
+   second mutation; an uncertain-save JSON fixture follows the exact message
+   grammar published by scoped agent help and distinguishes `source=saved`
+   from an identical `source=default` fingerprint;
+4. a second `config` run marks the three paths off and can re-enable them from
+   its complete catalog-derived selector, after which normal and agent help
+   expose them again;
 5. re-enabled contact-request commands still enforce their original PAT,
    canonical-reference, provider-permission, and `--confirm=access-change` or
    `--confirm=destructive` contracts; selection grants no authority; and
@@ -201,12 +208,34 @@ editing JSON directly:
 The saved-profile variant injects one synthetic catalog addition and verifies
 that it remains off until selected. The invalid-state variant proves ordinary
 commands and root help do not silently fall back to all enabled or a false
-empty view. Config-scoped help remains available; malformed content can enter
-`config edit`, while unsafe or inaccessible filesystem state requires local
-repair and `config show`. The selector writes nothing before an explicit
-`save`; cancellation, EOF, and a blocked-input context interruption before that
-action preserve the prior bytes. A separate fixture cancels after a confirmed
-save and proves that success is not reclassified as retryable cancellation.
+empty view. Config help remains available; malformed serialized content may
+enter the `config` repair selector, while unsafe or inaccessible filesystem
+state requires local repair followed by always-on `doctor`. A legacy profile
+containing formerly selectable `doctor` or `version` paths loads the remaining
+Chatwork selection without offering either local command as a toggle, reports
+the legacy count through doctor, and removes those entries only after Enter
+saves the normalized replacement.
+
+The invalid-view selector stays open after Enter, renders the exact actionable
+dependency/recovery diagnostic, and writes nothing until the draft is repaired
+and Enter is pressed again. q, Escape, Ctrl-C, EOF, input failure, and blocked
+input context cancellation preserve the last saved bytes. Every path that
+leaves the selector restores the alternate screen, cursor, Windows output mode
+when applicable, and raw input mode exactly once. Restoration occurs before
+the save boundary; a restoration failure prevents persistence, while a late
+cancellation after confirmed save cannot reclassify success. If either stdin
+or stdout is not a TTY, `config` emits the typed
+`interactive_terminal_required` failure, no selector/ANSI transcript, and no
+write.
+
+The terminal fixture also checks deterministic viewport rendering, fragmented
+CSI/SS3 arrow sequences, and textual effect labels that remain after ANSI color
+spans are removed. Infrastructure tests cover `x/term` raw mode and setup
+rollback; supported Unix and Windows cross-builds prevent platform-specific
+mode code from becoming a native-only success.
+Catalog-mutation fixtures prove the always-on line and failure-recovery island
+change with catalog metadata. Narrow-width and low-height fixtures prove Space
+and Enter cannot act until the complete current command identity is visible.
 
 ## No-post-processing audit
 
@@ -224,16 +253,21 @@ go run ./cmd/cwk help --format agent
 go run ./cmd/cwk help rooms --format agent
 go run ./cmd/cwk help messages list --format agent
 go run ./cmd/cwk help files list --format agent
-go run ./cmd/cwk config show
-go run ./cmd/cwk config edit --help
-go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailingHelp|TestProductionHelp'
+go run ./cmd/cwk config --help
+go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailingHelp|TestProductionHelp|TestConfig|TestCommandSelection'
+go test ./internal/infra/terminalui
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...
+GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
 go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageLimit)'
 ```
 
 These prove the bounded human root-to-namespace-to-command navigation, the
 direct machine root-to-scope path, scoped contracts, structured output/error
 behavior, and exact Chatwork reference reuse without requiring a developer
-account. Candidate-C evidence validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input. The active sender-selection scenario proves exact sender OR semantics, direct typed reply context, stable gapped source sequences, anchor/context distinction, one bounded provider call, and zero external post-processing. The active file-collection scenario proves the fixed six-position schema, canonical file/room reuse, explicit missing-message state, hostile filename containment, and zero external post-processing.
+account. The config and terminal probes use only synthetic streams, preference
+state, and adapters; the public selector itself is exercised manually only with
+an attached stdin/stdout TTY and a temporary config home. Candidate-C evidence
+validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input. The active sender-selection scenario proves exact sender OR semantics, direct typed reply context, stable gapped source sequences, anchor/context distinction, one bounded provider call, and zero external post-processing. The active file-collection scenario proves the fixed six-position schema, canonical file/room reuse, explicit missing-message state, hostile filename containment, and zero external post-processing.
 The broader message-limit tests prove exact 1..100 validation, deterministic
 equal-time ties, a `force`-only provider request, and no pagination. The active
 scenario proves newest-N selection by typed send time, unchanged provider-order

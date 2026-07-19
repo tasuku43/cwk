@@ -46,13 +46,27 @@ An agent that knows the user's desired outcome should reach the exact command co
   may derive a smaller active attention view by enabling exact command paths.
   Routing and every help projection consume that same view so an irrelevant
   task is neither advertised nor invocable through the configured CLI.
-- `help`, `config show`, and `config edit` remain visible in every attention
-  view so the selection is inspectable and reversible. This curation is not an
-  authorization, sandbox, or security boundary: a local actor able to edit or
-  remove the preference can restore commands.
+- `help`, `doctor`, `version`, and the sole interactive `config` selector remain
+  visible in every attention view so local operation and recovery are never
+  curated away. This curation is not an authorization, sandbox, or security
+  boundary: a local actor able to edit or remove the preference can restore
+  commands.
+- `config` accepts one terminal-native interaction: Up/Down navigates, Space
+  toggles, Enter validates and saves, and `q` leaves the prior selection
+  unchanged. Each choice retains a literal read/create/write badge; optional
+  color only supplements that text and never invents destructive meaning. If
+  the complete current identity is not visible, mutation keys remain inactive.
+- A non-terminal selector invocation fails explicitly. Before Enter, every
+  exit restores terminal state and performs zero saves; Enter validates the
+  active graph, restores the terminal, and only then crosses one mutation
+  boundary.
 - Invalid persisted state never masquerades as a deliberately empty attention
-  view. Config-scoped repair help remains reachable while normal discovery
-  fails with the typed configuration fault.
+  view. Always-on local operations and their scoped help remain reachable, but
+  bare root help returns the typed load fault because it cannot truthfully
+  project a Chatwork view. Read-only `doctor` reports command-selection source,
+  state, enabled/disabled counts, and a deterministic fingerprint for
+  uncertain-save reconciliation. `help` describes commands; it does not
+  reconcile saved state.
 - Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
 - Commands do not silently search again, choose a display-name match, or rely on hidden defaults.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
@@ -60,9 +74,16 @@ An agent that knows the user's desired outcome should reach the exact command co
 ### Enforcement
 
 - Catalog, routing, and help derive from `cli.Catalog`.
+- Always-on selector facts and the profile-failure recovery island derive from
+  that same catalog rather than another path list.
 - Full-catalog validation and capability coverage remain independent of the
   catalog-derived active view. View validation rejects a visible recovery edge
   or required-reference consumer whose prerequisite command is hidden.
+- Selector tests prove terminal restoration and zero saves before Enter,
+  non-terminal rejection, deterministic effect badges and narrow rendering,
+  blocked unseen mutations, declared uncertain-error grammar, doctor
+  fingerprint reconciliation, and migration of only the formerly selectable
+  `doctor` and `version` paths.
 - Root agent entries retain the 512-byte per-command budget.
 - Human-help tests prove that every catalog command belongs to exactly one root
   entry and round-trips through its canonical namespace.
