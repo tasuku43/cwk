@@ -85,8 +85,8 @@ func (e *Error) Validate() error {
 	if !validPublicText(e.Message, 1024) {
 		return fmt.Errorf("fault message is missing or unsafe")
 	}
-	if e.RetryAfter < 0 || (e.RetryAfter > 0 && !e.Retryable) {
-		return fmt.Errorf("retry-after requires a retryable fault")
+	if e.RetryAfter < 0 || (e.RetryAfter > 0 && !e.Retryable && e.Kind != KindRateLimited) {
+		return fmt.Errorf("retry-after requires a retryable or rate-limited fault")
 	}
 	for index, action := range e.NextActions {
 		if !validPublicText(action.Command, 512) || !validPublicText(action.Reason, 1024) {

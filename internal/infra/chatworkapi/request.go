@@ -10,6 +10,9 @@ import (
 )
 
 func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
+	if err := input.Validate(); err != nil {
+		return requestSpec{}, invalidRequest("Chatwork タスク入力がドメイン検証に失敗しました")
+	}
 	roomPath := func(suffix string) (string, error) {
 		room, err := decimal(input.Room, chatwork.ReferenceRoom)
 		if err != nil {
@@ -268,7 +271,11 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		if input.Task == chatwork.TaskInviteLinkDelete {
 			return noBodyRequest(http.MethodDelete, path, nil), nil
 		}
-		return formRequest(http.MethodPut, path, inviteForm(input)), nil
+		form, err := inviteUpdateForm(input)
+		if err != nil {
+			return requestSpec{}, err
+		}
+		return formRequest(http.MethodPut, path, form), nil
 	case chatwork.TaskContactRequestsList:
 		return noBodyRequest(http.MethodGet, "/incoming_requests", nil), nil
 	case chatwork.TaskContactRequestsAccept, chatwork.TaskContactRequestsReject:
@@ -289,11 +296,30 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 func inviteForm(input chatwork.Request) url.Values {
 	values := url.Values{}
 	setOptional(values, "code", input.InviteCode)
-	setOptional(values, "description", input.Description)
+	if input.DescriptionSet {
+		values.Set("description", input.Description)
+	}
 	if input.InviteApprovalSet {
 		values.Set("need_acceptance", bool01(input.InviteNeedsApproval))
 	}
 	return values
+}
+
+func inviteUpdateForm(input chatwork.Request) (url.Values, error) {
+	if !input.InviteApprovalSet || !input.DescriptionSet || input.Description == "" {
+		return nil, invalidRequest("招待リンク更新には明示した承認要件と空でない説明が必要です")
+	}
+	if (input.InviteCode == "") == !input.InviteRegenerateCode {
+		return nil, invalidRequest("招待リンク更新には明示コードまたはコード再生成のどちらか一方が必要です")
+	}
+	values := url.Values{
+		"description":     {input.Description},
+		"need_acceptance": {bool01(input.InviteNeedsApproval)},
+	}
+	if !input.InviteRegenerateCode {
+		values.Set("code", input.InviteCode)
+	}
+	return values, nil
 }
 
 func joinRefs(refs []chatwork.Reference) string {

@@ -90,6 +90,34 @@ The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-
 
 The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm=access-change` or `--confirm=destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
 
+Message boundary tests pin `200/204/404` both with and without the two official
+limitation headers, reject every value other than the sole official `true`,
+keep limitation-summary prose private, and prove partial/all restriction never
+renders as normal empty or not-found. Parser fixtures cover each official To,
+reply, quote, and complete code region plus malformed/unclosed/contradictory
+forms; malformed notation preserves escaped body and sibling records while
+producing an unknown whole relation set with no partial facts.
+
+Mutation boundary tests require `rooms create --account` to reach `/me` and
+`POST /rooms` through the same private binding, prove an exact mismatch or
+preflight failure makes zero room-create calls, and inspect the room form for
+absence of owner/account fields. They also reject generic/mismatched bindings,
+overlong names, and unknown icon presets before room I/O. Invite-link fixtures require code XOR
+regeneration, approval, and nonempty description before authentication; they
+pin the complete PUT form, code alphabet/length, explicit regeneration-only
+omission, create description support, exact result-reference binding, and zero
+calls for every empty/partial replacement.
+
+Boundary tests independently pin the provider-specific rate-limit contract:
+one strict official `x-ratelimit-reset` within five minutes, provider `Date`
+as the duration baseline with a local-clock fallback, no
+`Retry-After` fallback, exact bounded room-posting error classification to 10
+seconds, unknown timing for all unproved cases, and distinct read/mutation
+retryability and recovery. Fault validation permits advisory `retry_after` on
+only a non-retryable rate-limit fault; CLI snapshots require text `unknown`
+and JSON `null` when timing is absent. The transport attempt ceiling remains
+one, so these tests do not introduce an adapter retry loop.
+
 Capability status has a narrow meaning:
 
 | Status | Meaning |
@@ -248,6 +276,9 @@ Every strong statement should identify its enforcement path.
 | Pagination completeness | Cursor loop/budget/cancellation tests, retryability/catalog agreement, and no-partial-result assertion |
 | Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only presentation, and agent-help/reference-workflow projection |
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |
+| Chatwork message truthfulness | Status/header matrix, private-summary canary, normal-zero/partial/all/restricted/not-found distinctions, relation unknown/absent tests, and hostile escaped-body list continuity |
+| Chatwork room identity and invite replacement | Same-binding `/me` exact-match tests with zero-POST failures; owner-free room form; pre-auth code/XOR/full-field validation; exact PUT form and regeneration omission tests |
+| Chatwork rate-limit evidence | Strict header/body parsing tests, five-minute plausibility bounds, read/mutation catalog signatures, advisory-timing validation, and text/JSON unknown-timing snapshots |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
 | User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, strict platform storage with Unix durability and explicit Windows limits, doctor count/fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |

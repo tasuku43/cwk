@@ -56,6 +56,30 @@ func TestChatworkMutationRecoveryNeverReplaysAWrite(t *testing.T) {
 	}
 }
 
+func TestChatworkRateLimitRecoverySeparatesReadsFromMutations(t *testing.T) {
+	for _, spec := range chatworkCommandSpecs() {
+		code := "chatwork_rate_limited"
+		wantRetryable := true
+		wantCommand := spec.Path
+		if spec.Effect != operation.EffectRead {
+			code = "chatwork_mutation_rate_limited"
+			wantRetryable = false
+			wantCommand = "help " + spec.Path
+		}
+		var matched *CommandError
+		for index := range spec.Agent.Errors {
+			if spec.Agent.Errors[index].Code == code {
+				matched = &spec.Agent.Errors[index]
+				break
+			}
+		}
+		if matched == nil || matched.Kind != fault.KindRateLimited || matched.Retryable != wantRetryable ||
+			len(matched.NextActions) != 1 || matched.NextActions[0].Command != wantCommand {
+			t.Errorf("%s rate-limit contract = %+v, want code=%s retryable=%t recovery=%q", spec.Path, matched, code, wantRetryable, wantCommand)
+		}
+	}
+}
+
 func TestChatworkAPIFaultsCoverPAT(t *testing.T) {
 	want := map[string]faultSignature{
 		"chatwork_token_missing": {fault.KindAuthentication, false},
@@ -83,11 +107,29 @@ func TestChatworkTaskSpecificFaultsAreNotAdvertisedElsewhere(t *testing.T) {
 		if hasUnavailable != !wantMutation {
 			t.Errorf("%s provider unavailable fault present=%t, want %t", spec.Path, hasUnavailable, !wantMutation)
 		}
+		_, hasReadRateLimit := declared["chatwork_rate_limited"]
+		if hasReadRateLimit != !wantMutation {
+			t.Errorf("%s read rate-limit fault present=%t, want %t", spec.Path, hasReadRateLimit, !wantMutation)
+		}
+		_, hasMutationRateLimit := declared["chatwork_mutation_rate_limited"]
+		if hasMutationRateLimit != wantMutation {
+			t.Errorf("%s mutation rate-limit fault present=%t, want %t", spec.Path, hasMutationRateLimit, wantMutation)
+		}
 
-		wantNotation := spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow
-		_, hasNotation := declared["chatwork_notation_malformed"]
-		if hasNotation != wantNotation {
-			t.Errorf("%s notation fault present=%t, want %t", spec.Path, hasNotation, wantNotation)
+		wantMessageRead := spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow
+		_, hasLimitation := declared["chatwork_message_limitation_invalid"]
+		if hasLimitation != wantMessageRead {
+			t.Errorf("%s limitation fault present=%t, want %t", spec.Path, hasLimitation, wantMessageRead)
+		}
+		_, hasRestricted := declared["chatwork_message_restricted"]
+		wantRestricted := spec.chatwork.Task == chatwork.TaskMessagesShow
+		if hasRestricted != wantRestricted {
+			t.Errorf("%s restricted-message fault present=%t, want %t", spec.Path, hasRestricted, wantRestricted)
+		}
+		_, hasAccountVerification := declared["chatwork_account_verification_failed"]
+		wantAccountVerification := spec.chatwork.Task == chatwork.TaskRoomsCreate
+		if hasAccountVerification != wantAccountVerification {
+			t.Errorf("%s account-verification fault present=%t, want %t", spec.Path, hasAccountVerification, wantAccountVerification)
 		}
 
 		wantUpload := spec.chatwork.Task == chatwork.TaskFilesUpload

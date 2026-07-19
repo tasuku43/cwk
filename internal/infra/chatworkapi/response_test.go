@@ -95,6 +95,31 @@ func TestMapMessageListPreservesProviderOrderAndExactRoomScope(t *testing.T) {
 	}
 }
 
+func TestMapMessageListPreservesBodyAndOtherRecordsWhenNotationIsMalformed(t *testing.T) {
+	request := completeRequest(chatwork.TaskMessagesList)
+	malformedBody := "[To:1] visible [rp aid=bad to=2-7]"
+	result, err := mapResponse(request, []byte(`[
+		{"message_id":"30","account":{"account_id":1,"name":"A"},"body":"plain","send_time":300,"update_time":0},
+		{"message_id":"31","account":{"account_id":2,"name":"B"},"body":"[To:1] visible [rp aid=bad to=2-7]","send_time":301,"update_time":0}
+	]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Messages) != 2 {
+		t.Fatalf("messages = %+v, want both records", result.Messages)
+	}
+	message := result.Messages[1]
+	if message.Body != malformedBody || message.RelationState != chatwork.MessageRelationsUnknown {
+		t.Fatalf("malformed notation message = %+v", message)
+	}
+	if len(message.Recipients) != 0 || message.Reply != nil || len(message.Quotes) != 0 {
+		t.Fatalf("malformed notation leaked partial relation facts: %+v", message)
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatalf("result with unknown relations must remain valid: %v", err)
+	}
+}
+
 func TestEmptyMessageListPreservesExactRoomScope(t *testing.T) {
 	request := completeRequest(chatwork.TaskMessagesList)
 	result := emptyResult(request)

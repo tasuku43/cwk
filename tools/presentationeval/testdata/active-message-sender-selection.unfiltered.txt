@@ -1,6 +1,6 @@
-messages room-ref=3501 count=14 window=recent source-limit=100 complete=false unresolved-relations=0
+messages room-ref=3501 count=14 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0
 external-text=untrusted escaped
-schema: #sequence message-ref actor sent [reply] [to] [quote] "body"
+schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"
 actors
   a1 account-ref=2503 name="Context\\nactors\\n#999"
   a2 account-ref=2501 name="Aki"

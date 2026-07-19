@@ -22,7 +22,8 @@ func completeRequest(task chatwork.Task) chatwork.Request {
 		Request: testRef(chatwork.ReferenceRequest, "6"), Account: account, AssignedBy: account,
 		Admins: []chatwork.Reference{account}, Assignees: []chatwork.Reference{account},
 		Name: "room", Description: "description", Icon: "group", Body: "body", Status: "open",
-		Limit: 1700000000, LimitType: "time", ForceRecent: true, SelfUnread: true,
+		DescriptionSet: true,
+		Limit:          1700000000, LimitType: "time", ForceRecent: true, SelfUnread: true,
 		CreateDownloadURL: true, InviteCode: "public-room", InviteEnabled: true,
 		InviteNeedsApproval: false, InviteApprovalSet: true, FilePath: "fixture.bin", FileMessage: "file message",
 	}
@@ -96,7 +97,7 @@ func TestBuildRequestEncodesMutationFields(t *testing.T) {
 		{chatwork.TaskRoomsDelete, []string{"action_type=delete"}},
 		{chatwork.TaskMessagesSend, []string{"body=body", "self_unread=1"}},
 		{chatwork.TaskRoomTasksCreate, []string{"body=body", "to_ids=1", "limit=1700000000", "limit_type=time"}},
-		{chatwork.TaskInviteLinkUpdate, []string{"code=public-room", "need_acceptance=0"}},
+		{chatwork.TaskInviteLinkUpdate, []string{"code=public-room", "description=description", "need_acceptance=0"}},
 	} {
 		t.Run(string(test.task), func(t *testing.T) {
 			spec, err := client.buildRequest(completeRequest(test.task))
@@ -113,6 +114,85 @@ func TestBuildRequestEncodesMutationFields(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRoomsCreateDoesNotSendAuthenticatedAccountAsProviderField(t *testing.T) {
+	spec, err := (&Client{}).buildRequest(completeRequest(chatwork.TaskRoomsCreate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(spec.body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, field := range []string{"account", "owner"} {
+		if strings.Contains(string(body), field+"=") {
+			t.Fatalf("room creation body contains unsupported %s field: %q", field, body)
+		}
+	}
+}
+
+func TestInviteLinkUpdateEncodesCompleteReplacementAndExplicitRegeneration(t *testing.T) {
+	explicit := completeRequest(chatwork.TaskInviteLinkUpdate)
+	regenerate := explicit
+	regenerate.InviteCode = ""
+	regenerate.InviteRegenerateCode = true
+
+	for name, test := range map[string]struct {
+		request chatwork.Request
+		body    string
+	}{
+		"explicit code":   {request: explicit, body: "code=public-room&description=description&need_acceptance=0"},
+		"regenerate code": {request: regenerate, body: "description=description&need_acceptance=0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			spec, err := (&Client{}).buildRequest(test.request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			body, err := io.ReadAll(spec.body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(body) != test.body {
+				t.Fatalf("body = %q, want %q", body, test.body)
+			}
+		})
+	}
+}
+
+func TestInviteLinkUpdateBuilderRejectsIncompleteReplacement(t *testing.T) {
+	valid := completeRequest(chatwork.TaskInviteLinkUpdate)
+	tests := map[string]func(*chatwork.Request){
+		"missing code intent":   func(request *chatwork.Request) { request.InviteCode = "" },
+		"code and regeneration": func(request *chatwork.Request) { request.InviteRegenerateCode = true },
+		"missing approval":      func(request *chatwork.Request) { request.InviteApprovalSet = false },
+		"missing description":   func(request *chatwork.Request) { request.DescriptionSet = false },
+		"invalid code":          func(request *chatwork.Request) { request.InviteCode = "invalid!" },
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			request := valid
+			mutate(&request)
+			if _, err := (&Client{}).buildRequest(request); err == nil {
+				t.Fatal("incomplete invite-link replacement reached request construction")
+			}
+		})
+	}
+}
+
+func TestInviteLinkCreateIncludesExplicitDescription(t *testing.T) {
+	spec, err := (&Client{}).buildRequest(completeRequest(chatwork.TaskInviteLinkCreate))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := io.ReadAll(spec.body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "description=description") {
+		t.Fatalf("invite-link create body = %q", body)
 	}
 }
 

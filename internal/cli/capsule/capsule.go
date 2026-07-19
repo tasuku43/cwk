@@ -60,7 +60,7 @@ func Render(result chatwork.Result) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, window, result.MessageSelection); err != nil {
+		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, result.MessageAccess, window, result.MessageSelection); err != nil {
 			return "", err
 		}
 	case chatwork.TaskMessagesShow:
@@ -167,7 +167,7 @@ func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) 
 		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 }
 
-func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, window string, selection *chatwork.MessageSelection) error {
+func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, access chatwork.MessageAccessLimitation, window string, selection *chatwork.MessageSelection) error {
 	actors, actorByRef, err := messageActors(messages)
 	if err != nil {
 		return err
@@ -203,7 +203,12 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	if coverage.Limit > 0 {
 		fmt.Fprintf(output, " source-limit=%d", coverage.Limit)
 	}
-	fmt.Fprintf(output, " complete=%t unresolved-relations=%d\n", coverage.Complete, countUnresolved(messages))
+	accessValue, err := messageAccess(access)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(output, " complete=%t access-limitation=%s unresolved-relations=%d unknown-relation-sets=%d\n",
+		coverage.Complete, accessValue, countUnresolved(messages), countUnknownRelations(messages))
 	if selection != nil {
 		fmt.Fprintf(output, "selection source-count=%d", selection.SourceCount)
 		if selection.Filter.Limit > 0 {
@@ -218,7 +223,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		fmt.Fprintf(output, " anchors=%s\n", bracketedSequences(selection.AnchorSequences))
 	}
 	line(output, "external-text=untrusted escaped")
-	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"")
+	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] \"body\"")
 	line(output, "actors")
 	for index, actor := range actors {
 		line(output, "  a%d account-ref=%s name=%s", index+1, ref(actor.Ref), quoted(actor.Name))
@@ -241,6 +246,9 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 				values[quoteIndex] = accountRelation(quote, actorByRef)
 			}
 			fmt.Fprintf(output, " quote=%s", compactValues(values))
+		}
+		if message.RelationState == chatwork.MessageRelationsUnknown {
+			fmt.Fprintf(output, " relation-state=unknown")
 		}
 		line(output, " %s", quoted(message.Body))
 	}
@@ -334,6 +342,12 @@ func renderMessage(output *strings.Builder, message chatwork.Message) {
 }
 
 func renderMessageLine(output *strings.Builder, prefix string, message chatwork.Message) {
+	if message.RelationState == chatwork.MessageRelationsUnknown {
+		line(output, "%smessage-ref=%s room-ref=%s sender-ref=%s sender-name=untrusted:%s send-time=%d relation-state=unknown body=untrusted:%s",
+			prefix, ref(message.Ref), ref(message.Room), ref(message.Sender.Ref), quoted(message.Sender.Name),
+			message.SendTime, quoted(message.Body))
+		return
+	}
 	line(output, "%smessage-ref=%s room-ref=%s sender-ref=%s sender-name=untrusted:%s send-time=%d relations=%s body=untrusted:%s",
 		prefix, ref(message.Ref), ref(message.Room), ref(message.Sender.Ref), quoted(message.Sender.Name),
 		message.SendTime, relations(message), quoted(message.Body))
@@ -351,6 +365,9 @@ func messageWindow(kind string) (string, error) {
 }
 
 func relations(message chatwork.Message) string {
+	if message.RelationState == chatwork.MessageRelationsUnknown {
+		return "unknown"
+	}
 	values := make([]string, 0, len(message.Recipients)+1+len(message.Quotes))
 	for _, recipient := range message.Recipients {
 		values = append(values, fmt.Sprintf("to{target-ref=%s}", ref(recipient)))
@@ -510,6 +527,29 @@ func countUnresolved(messages []chatwork.Message) int {
 		}
 	}
 	return count
+}
+
+func countUnknownRelations(messages []chatwork.Message) int {
+	count := 0
+	for _, message := range messages {
+		if message.RelationState == chatwork.MessageRelationsUnknown {
+			count++
+		}
+	}
+	return count
+}
+
+func messageAccess(value chatwork.MessageAccessLimitation) (string, error) {
+	switch value {
+	case chatwork.MessageAccessNone:
+		return "none", nil
+	case chatwork.MessageAccessPartial:
+		return "partial", nil
+	case chatwork.MessageAccessAll:
+		return "all", nil
+	default:
+		return "", fmt.Errorf("task projection message access limitation is invalid")
+	}
 }
 
 func validateReferences(result chatwork.Result) error {

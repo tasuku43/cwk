@@ -183,7 +183,7 @@ The current default is the headerless task projection, a further reviewed subtra
 - task-relevant bounds, completeness, and uncertainty;
 - structural trust framing for every external-text field.
 
-It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes` and names the provider ceiling `source-limit`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender or count limit, every provider-returned message is selected. An active selection additionally emits one record before the trust declaration; it preserves the source-window count, an exact sender filter when present, candidate count and requested primary-message limit when count limiting is active, context policy unless it is the limit-only default `none`, and primary anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
+It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes` and names the provider ceiling `source-limit`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender or count limit, every provider-returned message is selected. An active selection additionally emits one record before the trust declaration; it preserves the source-window count, an exact sender filter when present, candidate count and requested primary-message limit when count limiting is active, context policy unless it is the limit-only default `none`, and primary anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. A record with an unproved relation set emits `relation-state=unknown` and omits relationship facts instead of claiming `relations=none`. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 Seven homogeneous read collections also declare `external-text=untrusted
 escaped` and one fixed schema before their provider-order records:
@@ -303,6 +303,25 @@ it in an operating-system credential service, or renders it. Missing or
 invalid token input fails before a provider task request; public destination
 overrides remain forbidden.
 
+`rooms create` requires `--account <account-ref>` as a credential-bound
+creation scope, not an owner. Chatwork's official room-create request has no
+owner field. After input and exact access-change confirmation validate, the
+adapter uses the same private PAT binding for `GET /me`; only an exact
+`account_id` match permits `POST /rooms`. The transport rechecks that verified
+session account against the request immediately before construction, so a
+generic or mismatched binding cannot bypass the CLI gate. A mismatch,
+cancellation, or failed
+identity check produces no room-create request and never publishes the actual
+identity or token. `--owner` is removed rather than retained as a misleading
+compatibility alias. The account reference comes from `account show`, but that
+earlier result alone is not current credential proof. The official 1--255
+character room-name bound and finite icon preset set also fail before
+authentication.
+
+Primary sources: Chatwork's
+[room-create reference](https://developer.chatwork.com/reference/post-rooms)
+and [`GET /me` reference](https://developer.chatwork.com/reference/get-me).
+
 The first implementation fixes these ceilings; command-line or environment overrides cannot raise them:
 
 | Boundary | Ceiling |
@@ -318,11 +337,71 @@ The first implementation fixes these ceilings; command-line or environment overr
 
 The provider documents a 100-item maximum for `GET /my/tasks`, room message, room task, room file, and incoming-request lists. Those results preserve that 100-item provider bound rather than claiming the 10,000-item aggregate ceiling. A user-selected message limit cannot raise or replace that source bound, and an oversized provider result fails before selection. The active contracts fix cancellation, message-window semantics, provider rate-limit behavior, mutation policy, PAT failure-before-I/O behavior, and publishable schema fixtures before live I/O is enabled. Multiple accounts remain deferred.
 
+For message retrieval, the 100-message source bound and provider access
+limitation are separate facts. A list `204` without
+`chatwork-message-limitation` is a true zero for that invocation; it does not
+prove that the room has no history. `200` plus the sole official value `true`
+means some messages in the requested window were restricted, and `204` plus
+`true` means every would-be result in that window was restricted. Exact
+message `404` plus `true` is `chatwork_message_restricted`; `404` without that
+header is `chatwork_not_found`. The limitation summary remains private
+provider prose. A false, duplicate, contradictory, or status-incompatible
+limitation signal fails as `chatwork_message_limitation_invalid` instead of
+being presented as complete or empty.
+
+Message notation is untrusted enrichment over a separately preserved body.
+Only the official complete To, reply, and quote forms and the reviewed complete
+code-delimited region contribute parser control. If a recognized form is
+malformed, unclosed, contradictory, or ambiguous, that one message retains its
+terminal-safe body but publishes `relation_state: unknown` and no partial
+typed relations. Other records in the list remain available. Unknown is not
+relation absence, and quote author/time never reconstruct a message identity.
+
+Primary sources: Chatwork's
+[message-list reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages),
+[exact-message reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages-message_id),
+[limitation change notice](https://developer.chatwork.com/changelog/2022-09-06-notice),
+and [message-notation guide](https://developer.chatwork.com/docs/message-notation).
+
+Chatwork's official general rate limit is 300 requests per five minutes. A
+`429` timing is known only when one `x-ratelimit-reset` header contains
+strict decimal Unix seconds in the future and no more than five minutes from
+the response and local clocks. A valid HTTP `Date` is the duration baseline;
+the local clock is used only when `Date` is absent or invalid. `Retry-After`,
+missing, duplicate, malformed, expired, or implausibly distant values do not
+establish timing. The two
+documented room-posting operations, message creation and task creation, have a
+combined 10-request/10-second room limit. Only their exact documented bounded
+JSON error, `Rate limit for message posting per room exceeded.`, establishes a
+10-second wait; its provider body remains private. Text errors render absent
+timing as `retry_after: unknown`, and JSON uses `null`.
+
+A rate-limited read is `retryable: true` and may point back to the exact read
+task. A rate-limited mutation is `retryable: false`, routes to scoped help, and
+is never automatically retried. A known wait on that mutation is advisory
+rate-limit evidence, not permission to repeat a change. The one-attempt
+transport policy remains unchanged.
+
 ## Mutation confirmation policy
 
 An exact invocation with validated canonical references and complete typed intent is sufficient for ordinary creates and updates, including message/task creation, room metadata changes, read-state changes, message edits, and task status changes. This is explicit command intent, not a general authorization grant.
 
 Mutations that change membership, contact access, or link exposure additionally require the exact `--confirm=access-change` value. In the fixed operation snapshot these are room creation, room-member replacement, invite-link creation/update, and incoming-contact-request acceptance. Destructive operations additionally require the exact `--confirm=destructive` value: room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection. Confirmation is invocation-local, is never inferred from a TTY or agent identity, and is not reused.
+
+`invite-link update` is a complete replacement over every public provider
+input, not a partial patch. It requires exactly one of a validated `--code`
+(1--50 ASCII letters, digits, `_`, or `-`) and `--regenerate-code`, plus an
+explicit `--approval` and nonempty `--description`. Only the regeneration flag
+permits omission of `code`; that omission intentionally invokes the documented
+random generation behavior. Empty and partial replacements fail before
+authentication. `description` is also available on create. Because the
+official reference does not define description omission or empty-string clear
+semantics, cwk neither merges a prior value nor exposes a speculative clear
+operation. The provider-confirmed result renders the resulting URL, approval,
+and nonempty description.
+
+Primary source: Chatwork's
+[invite-link update reference](https://developer.chatwork.com/reference/put-rooms-room_id-link).
 
 Every provider operation has one transport attempt. An uncertain mutation result is non-retryable and names an exact read-only catalog task for reconciliation before another mutation; it never recommends repeating the write.
 

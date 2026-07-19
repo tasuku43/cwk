@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
 func TestChatworkCatalogSpecsValidateWithPublicCatalog(t *testing.T) {
@@ -26,6 +28,89 @@ func TestChatworkCatalogContainsEveryTypedTaskOnce(t *testing.T) {
 	}
 	if len(seen) != 33 {
 		t.Fatalf("typed Chatwork task bindings = %d, want 33", len(seen))
+	}
+}
+
+func TestRoomsCreateCatalogBindsVerifiedAuthenticatedAccountScope(t *testing.T) {
+	var create CommandSpec
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path == "rooms create" {
+			create = command
+			break
+		}
+	}
+	if create.Path == "" {
+		t.Fatal("rooms create is absent from the Chatwork catalog")
+	}
+	if strings.Contains(create.Usage(), "--owner") || !strings.Contains(create.Usage(), "--account <account-ref>") {
+		t.Fatalf("rooms create usage = %q", create.Usage())
+	}
+	inputs := make(map[string]CommandInput, len(create.Agent.Inputs))
+	for _, input := range create.Agent.Inputs {
+		inputs[input.Name] = input
+	}
+	account := inputs["--account"]
+	if !account.Required || account.ReferenceKind != "chatwork-account" || strings.Contains(account.Description, "所有者") {
+		t.Fatalf("authenticated account input = %+v", account)
+	}
+	if !strings.Contains(inputs["--name"].Description, "1〜255") ||
+		!reflect.DeepEqual(inputs["--icon"].AllowedValues, chatwork.RoomIconPresetValues()) ||
+		!strings.Contains(inputs["--invite-code"].Description, "1〜50") {
+		t.Fatalf("rooms create official field constraints = name %+v icon %+v code %+v", inputs["--name"], inputs["--icon"], inputs["--invite-code"])
+	}
+	if _, exists := inputs["--owner"]; exists {
+		t.Fatal("rooms create still publishes --owner")
+	}
+	mutation := create.Agent.Mutation
+	if mutation == nil || mutation.ParentInput != "--account" || !reflect.DeepEqual(mutation.TargetInputs, []string{"--account"}) {
+		t.Fatalf("rooms create mutation = %+v", mutation)
+	}
+	var verification *CommandError
+	for index := range create.Agent.Errors {
+		if create.Agent.Errors[index].Code == "chatwork_account_verification_failed" {
+			verification = &create.Agent.Errors[index]
+			break
+		}
+	}
+	if verification == nil || verification.Retryable || len(verification.NextActions) != 1 ||
+		verification.NextActions[0].Command != "help rooms create" {
+		t.Fatalf("rooms create account-verification recovery = %+v", verification)
+	}
+}
+
+func TestInviteLinkCatalogPublishesCompleteReplacementAndDescription(t *testing.T) {
+	commands := make(map[string]CommandSpec)
+	for _, command := range chatworkCommandSpecs() {
+		commands[command.Path] = command
+	}
+	create := commands["invite-link create"]
+	update := commands["invite-link update"]
+	if create.Path == "" || update.Path == "" {
+		t.Fatal("invite-link mutation commands are absent from the Chatwork catalog")
+	}
+
+	createInputs := make(map[string]CommandInput, len(create.Agent.Inputs))
+	for _, input := range create.Agent.Inputs {
+		createInputs[input.Name] = input
+	}
+	if description := createInputs["--description"]; description.Name == "" || description.Required {
+		t.Fatalf("invite-link create description = %+v", description)
+	}
+
+	updateInputs := make(map[string]CommandInput, len(update.Agent.Inputs))
+	for _, input := range update.Agent.Inputs {
+		updateInputs[input.Name] = input
+	}
+	if updateInputs["--code"].Required || updateInputs["--regenerate-code"].Required ||
+		!updateInputs["--approval"].Required || !updateInputs["--description"].Required {
+		t.Fatalf("invite-link update inputs = %+v", updateInputs)
+	}
+	if !strings.Contains(update.Usage(), "[--code <code>] [--regenerate-code]") ||
+		!strings.Contains(update.Agent.Outcome, "すべて指定") {
+		t.Fatalf("invite-link update contract = usage %q outcome %q", update.Usage(), update.Agent.Outcome)
+	}
+	if update.Agent.Mutation == nil || update.Agent.Mutation.Impact.AccessChange != yes {
+		t.Fatalf("invite-link update mutation impact = %+v", update.Agent.Mutation)
 	}
 }
 

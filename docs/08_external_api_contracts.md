@@ -87,7 +87,7 @@ it must not imply that another page exists or manufacture a cursor.
 - A keyed operation has one opaque key per logical operation and reuses it across transport attempts.
 - A mutation with more than one attempt is valid only when the upstream operation is safe or keyed.
 
-The application mutation invoker calls its action once. Any proven-safe transport retry happens inside the adapter and does not repeat policy, confirmation, or logical intent construction. An adapter may retry only typed retryable failures, must respect `Retry-After` when applicable, and must not sleep past context cancellation or its overall budget.
+The application mutation invoker calls its action once. Any proven-safe transport retry happens inside the adapter and does not repeat policy, confirmation, or logical intent construction. An adapter may retry only typed retryable failures, must respect only the provider's documented and validated timing signal, and must not sleep past context cancellation or its overall budget. `Retry-After` is not a universal fallback when the provider contract names another header.
 
 Read-only application services recheck cancellation immediately after a port returns and suppress the result when a port ignored cancellation. Because exhaustive pagination returns no partial result, every `operation_canceled` path in its drain is retryable and matches the catalog's common read cancellation contract.
 
@@ -99,12 +99,65 @@ The template does not select a backoff formula or universal numeric ceiling beca
 
 Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
 
+For Chatwork `429`, the authoritative general timing signal is
+`x-ratelimit-reset`, whose official value is Unix seconds. The adapter accepts
+exactly one strict decimal value only when it is in the future and at most five
+minutes from both the local response time and a valid HTTP `Date`; an absent or
+invalid `Date` cannot make an otherwise current value invalid. When `Date` is
+valid, the displayed delay is `reset-Date`; otherwise it is derived from the
+local response time. It ignores `Retry-After`. Missing, duplicate, malformed,
+expired, or farther reset values yield unknown timing. The official combined room limit for message and task
+creation is 10 requests per 10 seconds. Only those two tasks with an exact
+bounded JSON envelope containing the single documented error `Rate limit for
+message posting per room exceeded.` select a 10-second wait; all other bodies
+fall back to validated general timing or unknown. Provider bodies never enter
+the public fault.
+
+Primary sources: Chatwork's
+[endpoint/rate-limit reference](https://developer.chatwork.com/ja/docs/endpoints),
+[message-create reference](https://developer.chatwork.com/reference/post-rooms-room_id-messages),
+and [task-create reference](https://developer.chatwork.com/reference/post-rooms-room_id-tasks).
+
+Catalog and runtime faults distinguish operation semantics. Read `429` uses
+`chatwork_rate_limited`, `retryable: true`, and the same exact read task as its
+next action. Mutation `429` uses `chatwork_mutation_rate_limited`,
+`retryable: false`, and scoped help as its next action. A mutation may still
+carry validated `retry_after` as advisory evidence without authorizing replay;
+there is no automatic retry and `MaxAttempts` remains one.
+
 CLI task interpretation maps an omitted window or explicit
 `messages list --window recent` to `ForceRecent=true`; explicit
 `--window changes` maps to false.
 Infrastructure therefore sends `force=1` for the normal latest bounded window
 and omits `force` only for the explicitly requested provider differential
 window. Neither mode claims complete room history.
+
+The message-list status is interpreted together with Chatwork's official
+limitation headers. `204` without `chatwork-message-limitation` means zero
+items for that invocation; `200` plus exact `true` is a partially restricted
+window, and `204` plus exact `true` is a fully restricted window. Exact-message
+`404` plus exact `true` is a permission restriction; without it, the same
+status is not-found. The summary header is never public or semantic. Its
+presence without the limitation header, duplicate/non-`true` limitation
+values, and limitation on any undocumented status are contract faults. A
+`true` limitation remains authoritative when summary prose is absent, so a
+secondary provider omission cannot silently make an incomplete result look
+complete.
+
+Body notation is decoded independently from wire/result validity. Complete
+official To, reply, and quote forms become typed facts; quote author/time do
+not become a message edge. A complete code region is skipped as literal body
+data. If a recognized form is malformed, unclosed, or contradictory, the
+adapter retains the original valid UTF-8 body, returns no parsed relation
+subset for that message, and marks its relation set unknown. It continues the
+rest of the list. Invalid JSON, identity, UTF-8, and fixed response bounds
+remain strict whole-response failures.
+
+Primary sources: Chatwork's
+[message-list reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages),
+[exact-message reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages-message_id),
+[limitation notice](https://developer.chatwork.com/changelog/2022-09-06-notice),
+and [notation guide](https://developer.chatwork.com/docs/message-notation).
 
 `messages list --sender`, `--limit`, and `--context` are application-owned
 selection inputs over that single bounded message response. The optional limit
@@ -143,6 +196,33 @@ The binding rules distinguish an object that does not exist yet from an existing
 
 For Chatwork, the injected policy has three finite decisions. Ordinary creates and updates need no extra flag after exact references, payload, effect, target, and impact validate. Room creation, room-member replacement, invite-link creation/update, and incoming-request acceptance require exact `--confirm=access-change`. Room leave/delete, message deletion, invite-link deletion, and incoming-request rejection require exact `--confirm=destructive`. The flag is invocation-local typed policy input, not reusable approval. Failure to supply the required exact value makes zero provider calls.
 
+The official `POST /rooms` form has no owner/account field. Public
+`rooms create --account` therefore binds the create scope only as an exact
+same-credential precondition: after confirmation, the private PAT binding must
+return the same `account_id` from `GET /me` before the room POST is constructed.
+The transport repeats that stored-account/request-account equality check before
+I/O, so generic or mismatched bindings fail closed even outside the CLI path.
+The requested administrators remain membership inputs and do not prove PAT
+identity. An identity mismatch or preflight failure makes zero room-create
+calls and cannot be classified as an unknown room mutation outcome. The
+official 1--255 character name bound and icon enum are also validated before
+authentication.
+
+The official invite-link PUT exposes `code`, `need_acceptance`, and
+`description`. Since omitted code generates a random value, approval has a
+documented default, and description omission is not documented as preserve,
+cwk models the operation as complete replacement. Domain and adapter require
+exactly one explicit code or regeneration, plus explicit approval and nonempty
+description. The form always includes approval/description and omits code only
+for regeneration. Code accepts only the official 1--50 character
+`[A-Za-z0-9_-]` language. No read/merge, URL decoding, empty-description clear,
+or partial update is supported.
+
+Primary sources: Chatwork's
+[room-create reference](https://developer.chatwork.com/reference/post-rooms),
+[`GET /me` reference](https://developer.chatwork.com/reference/get-me), and
+[invite-link update reference](https://developer.chatwork.com/reference/put-rooms-room_id-link).
+
 All Chatwork mutations are unsafe for automatic retry under this first contract because the provider snapshot supplies no CLI-owned idempotency guarantee. An unknown post-send outcome is non-retryable and its catalog fault names a read-only reconciliation command. That command may inspect the target or parent scope but cannot call a create/write task.
 
 ## Failure and recovery contract
@@ -152,7 +232,9 @@ All Chatwork mutations are unsafe for automatic retry under this first contract 
 - `kind`: broad recovery class;
 - `code`: stable project-specific identifier;
 - `retryable`: whether repeating the same logical command can be correct;
-- optional `retry_after`;
+- `retry_after`, which is a validated delay when known; an unproved rate limit
+  renders text `unknown`/JSON `null`, while a non-rate fault renders text
+  `none`/JSON `null`;
 - `next_actions`: exact commands that can resolve or investigate the failure;
 - a human message that is useful but not required for machine classification.
 
@@ -191,7 +273,8 @@ The first message-context semantic fixture must declare:
 - explicit To, reply, and quote mapping rules;
 - behavior when a reply parent is outside the returned window;
 - task-relevant completeness, coverage, uncertainty, and canonical references;
-- rate-limit, authentication, permission, malformed-notation, response-bound, and incomplete-context failures.
+- rate-limit, authentication, permission, notation uncertainty,
+  malformed-response/response-bound, and incomplete-context outcomes.
 
 An internally complete semantic result over a partial upstream window is still partial room context. Every eligible presentation must make that answer recoverable. A zero exit status means the declared bounded result was produced completely; it does not claim that all room history was retrieved.
 

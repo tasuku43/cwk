@@ -35,9 +35,13 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	}
 
 	var result chatwork.Result
+	mutationPortStarted := false
 	authenticatedAction := func(actionContext context.Context, session domainauthn.Session) error {
 		if c.chatwork == nil {
 			return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
+		}
+		if command.Effect != operation.EffectRead {
+			mutationPortStarted = true
 		}
 		value, executeErr := c.chatwork.Execute(actionContext, session.BindingID, request)
 		if executeErr == nil {
@@ -52,6 +56,9 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 		requirement := domainauthn.Requirement{}
 		if command.Agent.Authentication != nil {
 			requirement = command.Agent.Authentication.Clone()
+		}
+		if request.Task == chatwork.TaskRoomsCreate {
+			requirement.AccountID = request.Account.Value
 		}
 		var gate *appauthn.Gate
 		if c != nil {
@@ -73,7 +80,7 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 		}
 		err = execution.New(policy).Invoke(ctx, executionRequest, func(actionContext context.Context, _ operation.Intent) error {
 			actionErr := authenticated(actionContext)
-			if unclassifiedMutationServiceError(actionErr) {
+			if unclassifiedMutationServiceError(actionErr) && (mutationPortStarted || !operationCanceledServiceError(actionErr)) {
 				// Service-level cancellation or fallback classification cannot
 				// prove whether a called mutation reached Chatwork. Return an
 				// unstructured private sentinel so execution.Invoker applies its
@@ -210,7 +217,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 				request.Invite = refs[0]
 			case "--request":
 				request.Request = refs[0]
-			case "--account", "--owner":
+			case "--account":
 				request.Account = refs[0]
 			case "--sender":
 				request.MessageFilter.Senders = refs
@@ -236,6 +243,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			request.Name = value
 		case "--description":
 			request.Description = value
+			request.DescriptionSet = true
 		case "--icon":
 			request.Icon = value
 		case "--body":
@@ -275,6 +283,8 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			request.FileMessage = value
 		case "--invite-code", "--code":
 			request.InviteCode = value
+		case "--regenerate-code":
+			request.InviteRegenerateCode = true
 		case "--invite-approval", "--approval":
 			request.InviteApprovalSet = true
 			request.InviteNeedsApproval = value == "required"
@@ -324,7 +334,7 @@ func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, a
 }
 
 func chatworkBooleanFlag(name string) bool {
-	return name == "--self-unread" || name == "--create-download-url"
+	return name == "--self-unread" || name == "--create-download-url" || name == "--regenerate-code"
 }
 
 func containsExact(values []string, wanted string) bool {
@@ -342,4 +352,9 @@ func unclassifiedMutationServiceError(err error) bool {
 		return err != nil
 	}
 	return public.Code == "unclassified_chatwork_error" || public.Code == "operation_canceled"
+}
+
+func operationCanceledServiceError(err error) bool {
+	public, ok := fault.PublicCopy(err)
+	return ok && public.Code == "operation_canceled"
 }

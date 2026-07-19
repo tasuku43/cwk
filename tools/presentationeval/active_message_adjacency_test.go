@@ -131,7 +131,7 @@ func TestActiveMessageAdjacencyProjectionAnswersTheSemanticFixtureDirectly(t *te
 	if strings.Count(output, "external-text=untrusted escaped") != 1 || strings.Contains(output, "untrusted:") {
 		t.Fatalf("external-text trust is not declared once:\n%s", output)
 	}
-	if strings.Count(output, `schema: #sequence message-ref actor sent [reply] [to] [quote] "body"`) != 1 {
+	if strings.Count(output, `schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"`) != 1 {
 		t.Fatalf("fixed positional schema is absent or repeated:\n%s", output)
 	}
 	for alias, accountRef := range map[string]string{"a1": "2001", "a2": "2003", "a3": "2002", "a4": "2004"} {

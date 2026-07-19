@@ -87,7 +87,7 @@ func TestFaultRejectsIncompleteMachineContracts(t *testing.T) {
 		{Kind: KindInternal, Code: "valid", Message: "line\nbreak"},
 		{Kind: KindInternal, Code: "valid", Message: "line\u2028break"},
 		{Kind: KindInternal, Code: "valid", Message: "paragraph\u2029break"},
-		{Kind: KindRateLimited, Code: "rate_limited", Message: "wait", RetryAfter: time.Second},
+		{Kind: KindRateLimited, Code: "rate_limited", Message: "wait", Retryable: true, RetryAfter: -time.Second},
 		{Kind: KindNotFound, Code: "missing", Message: "missing", NextActions: []NextAction{{Command: "sample list"}}},
 		{Kind: KindNotFound, Code: "missing", Message: "missing", NextActions: []NextAction{{Command: "sample list\nunsafe", Reason: "retry"}}},
 		{Kind: KindNotFound, Code: "missing", Message: "missing", NextActions: []NextAction{{Command: "sample list", Reason: "line\u2028unsafe"}}},
@@ -96,5 +96,27 @@ func TestFaultRejectsIncompleteMachineContracts(t *testing.T) {
 		if err := item.Validate(); err == nil {
 			t.Errorf("case %d Validate() succeeded", index)
 		}
+	}
+}
+
+func TestRateLimitTimingDoesNotAuthorizeRetry(t *testing.T) {
+	rateLimited := &Error{
+		Kind:       KindRateLimited,
+		Code:       "mutation_rate_limited",
+		Message:    "wait before deciding whether to retry",
+		RetryAfter: 10 * time.Second,
+	}
+	if err := rateLimited.Validate(); err != nil {
+		t.Fatalf("non-retryable rate-limit timing = %v", err)
+	}
+
+	unavailable := &Error{
+		Kind:       KindUnavailable,
+		Code:       "provider_unavailable",
+		Message:    "the provider is unavailable",
+		RetryAfter: time.Second,
+	}
+	if err := unavailable.Validate(); err == nil {
+		t.Fatal("non-retryable non-rate-limit timing was accepted")
 	}
 }

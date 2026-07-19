@@ -514,8 +514,8 @@ func defaultAgentErrorContract() agentErrorContract {
 			{Name: "kind", Description: "コマンド間で共通の復旧分類。"},
 			{Name: "code", Description: "安定したコマンド固有のエラーコード。"},
 			{Name: "message", Description: "上流の原因を含まない、安全な人向け説明。"},
-			{Name: "retryable", Description: "コマンドの意図を変えずに再試行して成功し得るか。"},
-			{Name: "retry_after", Description: "任意の安定した待機時間、または null。"},
+			{Name: "retryable", Description: "同じ論理コマンドの再実行を契約が許可するか。Chatwork変更操作の自動再試行は常に行いません。"},
+			{Name: "retry_after", Description: "検証済みの待機根拠。rate_limited の null は解除時刻を取得できず不明であり、値があっても retryable=false の変更を再実行する許可ではありません。"},
 			{Name: "next_actions", Description: "復旧用の構造化されたコマンドと理由。"},
 		},
 		ExitCodes: []agentExitCode{

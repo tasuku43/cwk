@@ -189,6 +189,19 @@ Every authenticated Chatwork task follows this shape:
 6. The adapter attaches the token only as `x-chatworktoken` to the fixed
    production destination and follows no credential-bearing redirect.
 
+`rooms create` additionally binds `Requirement.AccountID` to the exact
+`--account` reference. After access-change confirmation and before the task
+port runs, the authenticator uses the newly created private binding for one
+`GET /me`, requires its canonical `account_id` to match, updates the
+secret-free session's subject/account metadata, and lets the gate revalidate
+that exact match. Failure removes the provisional record and sends no
+`POST /rooms`. The transport repeats the exact stored-account/request-account
+check before constructing the POST, preventing a generic binding from
+bypassing the gate. This is credential verification, not account/profile selection,
+owner assignment, or permission inference from the requested administrator
+list. The extra read uses the same fixed destination, timeout, response bounds,
+rate evidence, and cancellation context.
+
 The binding is process-local correlation metadata. Do not persist it, cache it
 across sessions, render it, log it, accept it from a user, or use it as proof of
 possession.

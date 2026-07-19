@@ -116,6 +116,13 @@ Chatwork data is converted into a typed, provider-independent task result before
 
 - Provider wire JSON is not the public domain model.
 - Explicit To, reply, quote, identity, ordering, coverage, and unresolved-reference facts remain distinguishable when relevant to the outcome.
+- Provider-authored access limitation is independent from a bounded window:
+  normal zero, partial restriction, full restriction of the requested window,
+  missing identity, and a restricted exact message are distinct outcomes.
+- A malformed reviewed notation form preserves the terminal-safe external body
+  and the rest of the result while marking that message's whole relation set
+  `unknown`; it never turns an unproved relation into `absent` or retains a
+  selectively stronger subset.
 - To does not become a reply; quoted prose, display names, and time proximity do not create relationships.
 - Missing or out-of-bound context remains observable rather than being hidden to make an output look complete.
 - Recurring bounded selection is expressed through finite typed task inputs and
@@ -158,6 +165,10 @@ raw Chatwork notation as semantic structure, undeclared provider or wire fields,
 duplicated coverage prose, derived depth/thread/root/child facts, or helpful
 non-contract defaults. Declared message bodies remain visible as untrusted
 external text; they are not reparsed by presentation to invent semantics.
+The message header separately exposes `access-limitation=none|partial|all` and
+the count of unknown relation sets. Only an affected record adds the optional
+`relation-state=unknown`; omitting it means the reviewed relation set was
+complete, not that external text contained no relation-like notation.
 
 When `messages list` selects exact senders, repeated sender inputs use OR
 semantics. The optional `replies` context is a bounded, direct one-hop expansion
@@ -235,6 +246,10 @@ chosen from available remote or credential state.
   produces/consumes no target reference, and becomes invalid when the product
   admits multiple possible targets.
 - Required-reference chains lead back to an invocable producer.
+- A caller-supplied account reference is not proof of credential identity.
+  `rooms create --account` is an exact same-PAT precondition verified through
+  `/me`; it is not a room-owner assignment because the provider create
+  operation exposes no owner input.
 
 ### Enforcement
 
@@ -254,6 +269,9 @@ An agent must know what a command can affect and whether a previous mutation may
 - Message creation binds its room parent and declares notification impact.
 - Message update/deletion binds the existing message and declares destructive/notification impact.
 - Authentication, permission, validation, and policy rejection cause zero downstream calls.
+- Invite-link replacement names every provider-exposed setting: an explicit
+  code or explicit regeneration, approval, and a nonempty description.
+  Provider omission is never interpreted as "leave unchanged".
 - An unclassified post-mutation outcome is non-retryable and points to read-only reconciliation.
 - Credentials and unsafe provider causes remain inside infrastructure.
 
@@ -283,7 +301,7 @@ The first complete implementation is bounded by the 32 REST operations linked fr
 
 1. map every operation to at least one task-oriented public workflow and mechanically reject gaps or unreviewed extras;
 2. implement single-account, process-local PAT authentication behind one secret-free binding, fixed-destination bounded transport, provider faults, and safe mutation intent;
-3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, and partial coverage;
+3. support room discovery followed by a bounded recent-message result with explicit relationships, canonical references, hostile text, partial coverage, access limitation, and relation uncertainty;
 4. implement every remaining operation with the same catalog, reference, authentication, effect, and recovery contracts;
 5. establish candidate C deterministically as the first stable presentation and prove its semantic answer, bounds, trust framing, and canonical reference flow;
 6. pass full, security, public, local-provider E2E, and agent-readiness gates without live credentials.
@@ -303,6 +321,10 @@ accept it in argv, persist it in project or user configuration, expose an
 authentication lifecycle command, or probe another credential source. Missing
 or invalid token input fails before a provider task request. The fixed
 production destination and secret-free ephemeral binding remain unchanged.
+The required `rooms create --account` reference does not choose a credential:
+after confirmation, infrastructure verifies that the already configured PAT's
+`GET /me` account is an exact match before issuing one room-create request.
+Mismatch or an uncompleted identity check makes zero room-create calls.
 
 Future provider additions, OAuth grants and lifecycle commands, token
 persistence, multiple accounts/profiles, GUI work, release publication,

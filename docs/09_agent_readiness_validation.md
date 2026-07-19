@@ -143,12 +143,48 @@ Each eligible candidate must preserve the same recovery decisions for:
 - no matching room and ambiguous room discovery;
 - missing authentication versus insufficient permission;
 - provider rate limits and temporary unavailability;
-- malformed or oversized notation;
+- malformed notation that preserves the escaped body with unknown relations, versus malformed/oversized wire responses that fail closed;
 - bounded results with missing referenced context;
 - output write failure with no zero-status partial success;
 - future mutation rejection and unclassified post-mutation outcomes.
 
+The rate-limit probe includes four distinct fixtures: a read with a valid
+future `x-ratelimit-reset`, a read with missing or malformed timing, a
+message/task room-post mutation with the exact documented 10-second error, and
+a mutation with only general or unknown timing. The agent must use a displayed
+wait only when present, use a valid provider `Date` as the duration baseline
+despite local clock skew, say that absent timing is unknown, reject
+`Retry-After`-only evidence, and distinguish `retryable: true` read recovery
+from `retryable: false` mutation help. It must never interpret the mutation's
+known delay as permission to replay or expose the bounded provider body.
+
+Message truthfulness probes separately cover normal `204` zero, partial
+`200`, fully restricted `204`, exact restricted `404`, and ordinary not-found
+`404`. The agent must not call a differential zero a missing room history or
+treat a partial/all restriction as complete. Another fixture places malformed
+To/reply/quote/code notation between valid list records; the agent must retain
+the terminal-safe body and sibling records, report that relation set as
+unknown rather than absent, and avoid inventing a relation from prose or quote
+metadata.
+
 Mutation probes also require the agent to distinguish the three typed policies without guessing: ordinary exact invocation, `--confirm=access-change`, and `--confirm=destructive`. The access-change fixture covers membership/link/contact exposure; the destructive fixture covers room leave/delete, message deletion, invite-link deletion, and request rejection. Missing/wrong confirmation must make zero provider calls, and an uncertain outcome must select the declared read-only reconciliation task rather than repeat the mutation.
+
+The room-create probe starts from `account show`, passes its exact account
+reference through `--account`, and verifies one same-binding `/me` check before
+one room POST. A second fixture returns a different synthetic `/me` account and
+requires `authentication_context_mismatch`, zero POSTs, no owner claim, and no
+identity/token leakage. Cancellation, rate limiting, and unavailability during
+that preflight must remain known zero-mutation outcomes rather than unknown
+room creation. A generic or mismatched binding, an overlong name, and an
+unknown icon preset must also fail before the room POST.
+
+The invite-link probe rejects empty, code-only, approval-only, description-
+missing, invalid-code, and code-plus-regeneration invocations with zero
+authentication/provider calls. Successful fixtures cover explicit code and
+explicit regeneration, inspect the full form, and require the resulting URL,
+approval, and description to be understandable without treating omitted
+provider fields as preserved. The agent must explain that description clear is
+unsupported because the official empty/omission transition is not established.
 
 Authentication probes require the agent to:
 

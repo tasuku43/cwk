@@ -2,6 +2,7 @@ package chatwork
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -77,6 +78,111 @@ func TestRequestRejectsInvalidText(t *testing.T) {
 	request := Request{Task: TaskMessagesSend, Body: "hello\x00world"}
 	if err := request.Validate(); err == nil {
 		t.Fatal("NUL body succeeded")
+	}
+}
+
+func TestRoomsCreateRequiresAuthenticatedAccountScope(t *testing.T) {
+	account := Reference{Kind: ReferenceAccount, Value: "1"}
+	request := Request{Task: TaskRoomsCreate, Name: "project", Admins: []Reference{account}}
+	if err := request.Validate(); err == nil {
+		t.Fatal("room creation without authenticated account reference succeeded")
+	}
+	request.Account = account
+	if err := request.Validate(); err != nil {
+		t.Fatalf("room creation with authenticated account reference failed: %v", err)
+	}
+
+	for name, mutate := range map[string]func(*Request){
+		"missing name":          func(value *Request) { value.Name = "" },
+		"oversized name":        func(value *Request) { value.Name = strings.Repeat("名", 256) },
+		"missing administrator": func(value *Request) { value.Admins = nil },
+		"invalid icon":          func(value *Request) { value.Icon = "arbitrary" },
+		"disabled invite input": func(value *Request) { value.InviteCode = "public-room" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := request
+			mutate(&invalid)
+			if err := invalid.Validate(); err == nil {
+				t.Fatal("invalid room creation input succeeded")
+			}
+		})
+	}
+	validIcon := request
+	validIcon.Icon = "meeting"
+	if err := validIcon.Validate(); err != nil {
+		t.Fatalf("official room icon failed: %v", err)
+	}
+}
+
+func TestInviteLinkUpdateRequiresCompleteExplicitReplacement(t *testing.T) {
+	valid := Request{
+		Task:              TaskInviteLinkUpdate,
+		Invite:            Reference{Kind: ReferenceInvite, Value: "7"},
+		InviteCode:        "valid-code_1",
+		InviteApprovalSet: true,
+		Description:       "replacement",
+		DescriptionSet:    true,
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("complete invite-link replacement failed: %v", err)
+	}
+	regenerate := valid
+	regenerate.InviteCode = ""
+	regenerate.InviteRegenerateCode = true
+	if err := regenerate.Validate(); err != nil {
+		t.Fatalf("explicit invite-link code regeneration failed: %v", err)
+	}
+
+	invalid := map[string]Request{
+		"missing invite":          func() Request { value := valid; value.Invite = Reference{}; return value }(),
+		"missing code intent":     func() Request { value := valid; value.InviteCode = ""; return value }(),
+		"code and regeneration":   func() Request { value := valid; value.InviteRegenerateCode = true; return value }(),
+		"missing approval":        func() Request { value := valid; value.InviteApprovalSet = false; return value }(),
+		"missing description":     func() Request { value := valid; value.DescriptionSet = false; return value }(),
+		"empty description":       func() Request { value := valid; value.Description = ""; return value }(),
+		"invalid code characters": func() Request { value := valid; value.InviteCode = "invalid!"; return value }(),
+		"oversized code":          func() Request { value := valid; value.InviteCode = string(make([]byte, 51)); return value }(),
+	}
+	for name, request := range invalid {
+		t.Run(name, func(t *testing.T) {
+			if err := request.Validate(); err == nil {
+				t.Fatal("invalid invite-link replacement succeeded")
+			}
+		})
+	}
+}
+
+func TestInviteLinkCreateValidatesOfficialCodeAlphabetAndLength(t *testing.T) {
+	valid := Request{Task: TaskInviteLinkCreate, InviteCode: "Az09_-"}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid invite-link code failed: %v", err)
+	}
+	for _, code := range []string{"invalid!", "コード", string(make([]byte, 51))} {
+		request := valid
+		request.InviteCode = code
+		if err := request.Validate(); err == nil {
+			t.Errorf("invalid invite-link code %q succeeded", code)
+		}
+	}
+}
+
+func TestInviteLinkMutationResultMustMatchRequestedReference(t *testing.T) {
+	requested := Reference{Kind: ReferenceInvite, Value: "7"}
+	other := Reference{Kind: ReferenceInvite, Value: "8"}
+	request := Request{
+		Task: TaskInviteLinkUpdate, Invite: requested, InviteCode: "replacement",
+		InviteApprovalSet: true, Description: "description", DescriptionSet: true,
+	}
+	result := Result{
+		Task: TaskInviteLinkUpdate, Coverage: Coverage{Kind: "confirmed", Complete: true},
+		InviteLink: &InviteLink{Ref: requested},
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatalf("matching invite-link result failed: %v", err)
+	}
+	result.InviteLink.Ref = other
+	if err := result.ValidateFor(request); err == nil {
+		t.Fatal("invite-link result for another target succeeded")
 	}
 }
 
@@ -230,6 +336,68 @@ func TestResultRejectsMessageRelationKindAndTargetMismatches(t *testing.T) {
 				t.Fatal("mismatched relation passed")
 			}
 		})
+	}
+}
+
+func TestResultDistinguishesUnknownMessageRelationsFromAbsentRelations(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "1"}
+	account := Reference{Kind: ReferenceAccount, Value: "2"}
+	message := Reference{Kind: ReferenceMessage, Value: "3"}
+	base := Result{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{
+		Ref: message, Room: room, Sender: Account{Ref: account}, RelationState: MessageRelationsUnknown,
+	}}}
+	if err := base.Validate(); err != nil {
+		t.Fatalf("unknown relation set failed: %v", err)
+	}
+
+	partial := base
+	partial.Messages = append([]Message(nil), base.Messages...)
+	partial.Messages[0].Recipients = []Reference{account}
+	if err := partial.Validate(); err == nil {
+		t.Fatal("unknown relation set with partial relation facts passed")
+	}
+
+	invalid := base
+	invalid.Messages = append([]Message(nil), base.Messages...)
+	invalid.Messages[0].RelationState = MessageRelationState(255)
+	if err := invalid.Validate(); err == nil {
+		t.Fatal("invalid relation state passed")
+	}
+}
+
+func TestResultValidatesMessageAccessLimitationCardinality(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "1"}
+	account := Reference{Kind: ReferenceAccount, Value: "2"}
+	message := Message{Ref: Reference{Kind: ReferenceMessage, Value: "3"}, Room: room, Sender: Account{Ref: account}}
+
+	partial := Result{Task: TaskMessagesList, MessageRoom: room, MessageAccess: MessageAccessPartial, Coverage: Coverage{Limit: 100}, Messages: []Message{message}}
+	if err := partial.Validate(); err != nil {
+		t.Fatalf("partially restricted result failed: %v", err)
+	}
+	partial.Messages = []Message{}
+	if err := partial.Validate(); err == nil {
+		t.Fatal("partially restricted source without visible messages passed")
+	}
+	partial.MessageSelection = &MessageSelection{
+		Filter:      MessageFilter{Senders: []Reference{account}, Context: MessageContextNone},
+		SourceCount: 1, CandidateCount: 0, SourceSequences: []int{}, AnchorSequences: []int{},
+	}
+	if err := partial.Validate(); err != nil {
+		t.Fatalf("partially restricted source with an explicitly empty local selection failed: %v", err)
+	}
+
+	all := Result{Task: TaskMessagesList, MessageRoom: room, MessageAccess: MessageAccessAll, Coverage: Coverage{Limit: 100}, Messages: []Message{}}
+	if err := all.Validate(); err != nil {
+		t.Fatalf("fully restricted result failed: %v", err)
+	}
+	all.Messages = []Message{message}
+	if err := all.Validate(); err == nil {
+		t.Fatal("fully restricted result with a visible message passed")
+	}
+
+	wrongTask := Result{Task: TaskRoomsList, MessageAccess: MessageAccessPartial, Rooms: []Room{}}
+	if err := wrongTask.Validate(); err == nil {
+		t.Fatal("message access limitation on another task passed")
 	}
 }
 

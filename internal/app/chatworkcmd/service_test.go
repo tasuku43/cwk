@@ -99,6 +99,33 @@ func TestExecuteResolvesUnfilteredMessageWindowWithoutSelection(t *testing.T) {
 	}
 }
 
+func TestExecutePreservesUnknownRelationsBodyAndAccessLimitation(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	body := "[rp aid=bad to=42-101] visible"
+	port := &fakePort{result: chatwork.Result{
+		MessageRoom:   room,
+		MessageAccess: chatwork.MessageAccessPartial,
+		Coverage:      chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+		Messages: []chatwork.Message{{
+			Ref: relationshipReference(t, chatwork.ReferenceMessage, "101"), Room: room,
+			Sender: chatwork.Account{Ref: account}, Body: body, RelationState: chatwork.MessageRelationsUnknown,
+		}},
+	}}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{Task: chatwork.TaskMessagesList, Room: room})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessageAccess != chatwork.MessageAccessPartial || len(result.Messages) != 1 ||
+		result.Messages[0].Body != body || result.Messages[0].RelationState != chatwork.MessageRelationsUnknown {
+		t.Fatalf("result = %+v", result)
+	}
+	if result.Messages[0].Reply != nil || len(result.Messages[0].Recipients) != 0 || len(result.Messages[0].Quotes) != 0 {
+		t.Fatalf("unknown relation set gained facts: %+v", result.Messages[0])
+	}
+}
+
 func TestExecuteKeepsMessagesShowRelationValidationAfterCLIOwnershipMove(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	message := chatwork.Message{

@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/cwk/internal/domain/doctor"
 	"github.com/tasuku43/cwk/internal/domain/fault"
@@ -207,6 +208,102 @@ func TestJSONErrorIsStableAndDoesNotExposePlainCause(t *testing.T) {
 	if document.SchemaVersion != 1 || document.Error.Kind != "internal" || document.Error.Code != "internal_error" ||
 		document.Error.RetryAfter != nil || len(document.Error.NextActions) != 1 {
 		t.Fatalf("error document = %+v", document)
+	}
+}
+
+func TestRateLimitTimingIsExplicitAndDoesNotAuthorizeMutationRetry(t *testing.T) {
+	unknown := renderTextError(errorPayload{
+		Kind: fault.KindRateLimited, Code: "chatwork_rate_limited",
+		Message: "Chatwork のレート上限に達しました", Retryable: true,
+	})
+	if !strings.Contains(string(unknown), "retry_after: unknown") {
+		t.Fatalf("rate-limit text timing = %q", unknown)
+	}
+	nonRateLimit := renderTextError(errorPayload{
+		Kind: fault.KindUnavailable, Code: "provider_unavailable",
+		Message: "provider unavailable", Retryable: true,
+	})
+	if !strings.Contains(string(nonRateLimit), "retry_after: none") {
+		t.Fatalf("non-rate-limit text timing = %q", nonRateLimit)
+	}
+
+	unknownSpec := utilitySpec("unknown-rate")
+	unknownSpec.Agent.Errors = append(unknownSpec.Agent.Errors, declaredCommandError(
+		fault.KindRateLimited,
+		"chatwork_rate_limited",
+		true,
+		"unknown-rate",
+		"Retry the read only after reviewing the timing evidence.",
+	))
+	unknownSpec.handler = func(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, _ []string) int {
+		return c.fail(ctx, fault.New(
+			fault.KindRateLimited,
+			"chatwork_rate_limited",
+			"Chatwork のレート上限に達しました",
+			true,
+		))
+	}
+	var unknownStdout, unknownStderr bytes.Buffer
+	unknownCatalog := NewCatalog(unknownSpec)
+	if err := unknownCatalog.Validate(); err != nil {
+		t.Fatalf("unknown-rate catalog = %v", err)
+	}
+	unknownCommand := newCLI(strings.NewReader(""), &unknownStdout, &unknownStderr, unknownCatalog, passingInspector("unused"))
+	if code := runCLI(unknownCommand, []string{"--error-format=json", "unknown-rate"}); code != ExitRateLimited {
+		t.Fatalf("Run() code = %d, stderr = %q", code, unknownStderr.String())
+	}
+	var unknownDocument errorDocument
+	if err := json.Unmarshal(unknownStderr.Bytes(), &unknownDocument); err != nil {
+		t.Fatalf("JSON error = %v, output = %q", err, unknownStderr.String())
+	}
+	if unknownDocument.Error.Code != "chatwork_rate_limited" || !unknownDocument.Error.Retryable ||
+		unknownDocument.Error.RetryAfter != nil {
+		t.Fatalf("unknown read rate-limit error = %+v", unknownDocument.Error)
+	}
+	var rawUnknown struct {
+		Error map[string]json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal(unknownStderr.Bytes(), &rawUnknown); err != nil {
+		t.Fatalf("raw JSON error = %v", err)
+	}
+	retryAfter, present := rawUnknown.Error["retry_after"]
+	if !present || string(retryAfter) != "null" {
+		t.Fatalf("unknown rate-limit retry_after = present %t, value %s", present, retryAfter)
+	}
+
+	spec := utilitySpec("test")
+	spec.Agent.Errors = append(spec.Agent.Errors, declaredCommandError(
+		fault.KindRateLimited,
+		"chatwork_mutation_rate_limited",
+		false,
+		"test",
+		"Inspect the mutation contract without automatically retrying.",
+	))
+	spec.handler = func(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, _ []string) int {
+		err := fault.New(
+			fault.KindRateLimited,
+			"chatwork_mutation_rate_limited",
+			"Chatwork の変更はレート上限により拒否されました。自動再試行は行いません",
+			false,
+		)
+		err.RetryAfter = 10 * time.Second
+		return c.fail(ctx, err)
+	}
+	var stdout, stderr bytes.Buffer
+	catalog := NewCatalog(spec)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("test catalog = %v", err)
+	}
+	command := newCLI(strings.NewReader(""), &stdout, &stderr, catalog, passingInspector("unused"))
+	if code := runCLI(command, []string{"--error-format=json", "test"}); code != ExitRateLimited {
+		t.Fatalf("Run() code = %d, stderr = %q", code, stderr.String())
+	}
+	var document errorDocument
+	if err := json.Unmarshal(stderr.Bytes(), &document); err != nil {
+		t.Fatalf("JSON error = %v, output = %q", err, stderr.String())
+	}
+	if document.Error.Retryable || document.Error.RetryAfter == nil || *document.Error.RetryAfter != "10s" {
+		t.Fatalf("mutation rate-limit error = %+v", document.Error)
 	}
 }
 

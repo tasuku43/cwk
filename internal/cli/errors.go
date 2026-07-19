@@ -209,7 +209,11 @@ func renderTextError(payload errorPayload) []byte {
 	fmt.Fprintf(&output, "code: %s\n", payload.Code)
 	fmt.Fprintf(&output, "retryable: %t\n", payload.Retryable)
 	if payload.RetryAfter == nil {
-		fmt.Fprintln(&output, "retry_after: none")
+		if payload.Kind == fault.KindRateLimited {
+			fmt.Fprintln(&output, "retry_after: unknown")
+		} else {
+			fmt.Fprintln(&output, "retry_after: none")
+		}
 	} else {
 		fmt.Fprintf(&output, "retry_after: %s\n", *payload.RetryAfter)
 	}

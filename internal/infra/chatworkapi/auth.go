@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/tasuku43/cwk/internal/domain/authn"
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
@@ -48,6 +49,7 @@ type Client struct {
 	source   requestCredential
 	baseURL  string
 	http     httpDoer
+	now      func() time.Time
 	newID    func() (string, error)
 	readFile func(string) ([]byte, error)
 }
@@ -119,7 +121,64 @@ func (c *Client) Authenticate(ctx context.Context, requirement authn.Requirement
 	c.mu.Lock()
 	c.records[binding] = credentialRecord{credential: credential, session: session.Clone()}
 	c.mu.Unlock()
+	if requirement.AccountID != "" {
+		identity, identityErr := c.Execute(ctx, binding, chatwork.Request{Task: chatwork.TaskAccountShow})
+		if identityErr != nil {
+			c.removeBinding(binding)
+			return authn.Session{}, accountVerificationFailure(identityErr)
+		}
+		if identity.Account == nil || identity.Account.Ref.Kind != chatwork.ReferenceAccount {
+			c.removeBinding(binding)
+			return authn.Session{}, fault.New(fault.KindContract, "chatwork_response_invalid", "Chatwork が認証アカウントを確認できる応答を返しませんでした", false)
+		}
+		if identity.Account.Ref.Value != requirement.AccountID {
+			c.removeBinding(binding)
+			return authn.Session{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が要求された Chatwork アカウントと一致しません", false)
+		}
+		session.AccountID = identity.Account.Ref.Value
+		session.SubjectID = identity.Account.Ref.Value
+		if err := session.Validate(); err != nil {
+			c.removeBinding(binding)
+			return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証セッションは無効です", false)
+		}
+		c.mu.Lock()
+		record, exists := c.records[binding]
+		if exists {
+			record.session = session.Clone()
+			c.records[binding] = record
+		}
+		c.mu.Unlock()
+		if !exists {
+			return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork 認証バインドを利用できません", false)
+		}
+	}
 	return session.Clone(), nil
+}
+
+func accountVerificationFailure(err error) error {
+	structured, ok := fault.PublicCopy(err)
+	if !ok {
+		return fault.New(fault.KindAuthentication, "authentication_failed", "Chatwork 認証アカウントを確認できませんでした", false)
+	}
+	switch structured.Kind {
+	case fault.KindRateLimited:
+		mapped := fault.New(fault.KindRateLimited, "chatwork_mutation_rate_limited", "Chatwork の認証アカウント確認はレート上限により完了しませんでした。変更は実行していません", false)
+		mapped.RetryAfter = structured.RetryAfter
+		return mapped
+	case fault.KindUnavailable:
+		return fault.New(fault.KindUnavailable, "chatwork_account_verification_failed", "Chatwork の認証アカウントを確認できなかったため、変更は実行していません", false)
+	default:
+		return structured
+	}
+}
+
+func (c *Client) removeBinding(binding authn.BindingID) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	delete(c.records, binding)
+	c.mu.Unlock()
 }
 
 func newClient(baseURL, token string, httpClient httpDoer, newID func() (string, error), readFile func(string) ([]byte, error)) *Client {
@@ -132,6 +191,7 @@ func newClientWithCredential(baseURL string, credential requestCredential, httpC
 		source:   credential,
 		baseURL:  baseURL,
 		http:     httpClient,
+		now:      time.Now,
 		newID:    newID,
 		readFile: readFile,
 	}

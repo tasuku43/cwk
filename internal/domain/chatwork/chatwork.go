@@ -137,30 +137,32 @@ type Request struct {
 	Invite  Reference
 	Request Reference
 
-	Account             Reference
-	AssignedBy          Reference
-	Admins              []Reference
-	Members             []Reference
-	ReadonlyMembers     []Reference
-	Assignees           []Reference
-	Name                string
-	Description         string
-	Icon                string
-	Body                string
-	Status              string
-	RoomAction          string
-	Limit               int64
-	LimitType           string
-	ForceRecent         bool
-	SelfUnread          bool
-	CreateDownloadURL   bool
-	InviteCode          string
-	InviteEnabled       bool
-	InviteNeedsApproval bool
-	InviteApprovalSet   bool
-	FilePath            string
-	FileMessage         string
-	MessageFilter       MessageFilter
+	Account              Reference
+	AssignedBy           Reference
+	Admins               []Reference
+	Members              []Reference
+	ReadonlyMembers      []Reference
+	Assignees            []Reference
+	Name                 string
+	Description          string
+	Icon                 string
+	Body                 string
+	Status               string
+	RoomAction           string
+	Limit                int64
+	LimitType            string
+	ForceRecent          bool
+	SelfUnread           bool
+	CreateDownloadURL    bool
+	InviteCode           string
+	InviteRegenerateCode bool
+	InviteEnabled        bool
+	InviteNeedsApproval  bool
+	InviteApprovalSet    bool
+	DescriptionSet       bool
+	FilePath             string
+	FileMessage          string
+	MessageFilter        MessageFilter
 }
 
 func (r Request) Validate() error {
@@ -209,6 +211,43 @@ func (r Request) Validate() error {
 			return err
 		}
 	}
+	if r.Task == TaskRoomsCreate {
+		if r.Account.Value == "" {
+			return fmt.Errorf("room creation requires an authenticated account reference")
+		}
+		if r.Name == "" || utf8.RuneCountInString(r.Name) > 255 {
+			return fmt.Errorf("room creation name must contain 1 to 255 characters")
+		}
+		if len(r.Admins) == 0 {
+			return fmt.Errorf("room creation requires at least one administrator")
+		}
+		if r.Icon != "" && !validRoomIconPreset(r.Icon) {
+			return fmt.Errorf("room creation icon preset is invalid")
+		}
+		if !r.InviteEnabled && (r.InviteCode != "" || r.InviteApprovalSet) {
+			return fmt.Errorf("room creation invite settings require an enabled invite link")
+		}
+	}
+	if r.InviteCode != "" && !validInviteCode(r.InviteCode) {
+		return fmt.Errorf("invite link code must contain 1 to 50 ASCII letters, digits, underscores, or hyphens")
+	}
+	if r.InviteRegenerateCode && r.Task != TaskInviteLinkUpdate {
+		return fmt.Errorf("invite link code regeneration is only valid for invite-link update")
+	}
+	if r.Task == TaskInviteLinkUpdate {
+		if r.Invite.Value == "" {
+			return fmt.Errorf("invite-link update requires an invite reference")
+		}
+		if (r.InviteCode == "") == !r.InviteRegenerateCode {
+			return fmt.Errorf("invite-link update requires exactly one explicit code or code regeneration")
+		}
+		if !r.InviteApprovalSet {
+			return fmt.Errorf("invite-link update requires an explicit approval setting")
+		}
+		if !r.DescriptionSet || r.Description == "" {
+			return fmt.Errorf("invite-link update requires an explicit nonempty description")
+		}
+	}
 	if r.Task != TaskMessagesList && messageFilterActive(r.MessageFilter) {
 		return fmt.Errorf("message filter is only valid for messages.list")
 	}
@@ -216,6 +255,43 @@ func (r Request) Validate() error {
 		return err
 	}
 	return nil
+}
+
+func validInviteCode(value string) bool {
+	if len(value) < 1 || len(value) > 50 {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		character := value[index]
+		if (character >= 'A' && character <= 'Z') ||
+			(character >= 'a' && character <= 'z') ||
+			(character >= '0' && character <= '9') ||
+			character == '_' || character == '-' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+var roomIconPresets = []string{
+	"meeting", "group", "check", "document", "event", "project", "business", "study",
+	"security", "star", "idea", "heart", "magcup", "beer", "music", "sports", "travel",
+}
+
+// RoomIconPresetValues returns the fixed official room-create vocabulary.
+// Callers receive a copy so catalog construction cannot mutate domain policy.
+func RoomIconPresetValues() []string {
+	return append([]string(nil), roomIconPresets...)
+}
+
+func validRoomIconPreset(value string) bool {
+	for _, preset := range roomIconPresets {
+		if value == preset {
+			return true
+		}
+	}
+	return false
 }
 
 func validateMessageFilter(filter MessageFilter) error {
@@ -331,16 +407,29 @@ type Room struct {
 }
 
 type Message struct {
-	Ref        Reference
-	Room       Reference
-	Sender     Account
-	Body       string
-	SendTime   int64
-	UpdateTime int64
-	Recipients []Reference
-	Reply      *Relation
-	Quotes     []Relation
+	Ref           Reference
+	Room          Reference
+	Sender        Account
+	Body          string
+	SendTime      int64
+	UpdateTime    int64
+	RelationState MessageRelationState
+	Recipients    []Reference
+	Reply         *Relation
+	Quotes        []Relation
 }
+
+// MessageRelationState records whether the complete reviewed relation set was
+// derived from provider notation. The zero value is complete so existing
+// provider-independent fixtures cannot accidentally claim uncertainty. An
+// unknown state carries no partial relation facts: retaining a few facts after
+// one malformed tag would overstate what the notation proved.
+type MessageRelationState uint8
+
+const (
+	MessageRelationsComplete MessageRelationState = iota
+	MessageRelationsUnknown
+)
 
 type Relation struct {
 	Kind       string
@@ -424,6 +513,18 @@ type Coverage struct {
 	Description string
 }
 
+// MessageAccessLimitation is the provider-authored completeness signal for one
+// messages.list invocation. It is independent from Coverage: a recent or
+// differential window is bounded even when no messages inside that window are
+// access-restricted.
+type MessageAccessLimitation uint8
+
+const (
+	MessageAccessNone MessageAccessLimitation = iota
+	MessageAccessPartial
+	MessageAccessAll
+)
+
 // MessageSelection records how an application-owned filter projected one
 // provider message window. Source sequences retain their original one-based
 // positions even when filtering creates gaps. Anchor sequences identify the
@@ -444,6 +545,7 @@ type Result struct {
 	// present when Messages is an explicitly empty collection so presentation
 	// never has to reconstruct the requested room from an item.
 	MessageRoom      Reference
+	MessageAccess    MessageAccessLimitation
 	Account          *Account
 	Status           *Status
 	Rooms            []Room
@@ -472,6 +574,9 @@ func (r Result) Validate() error {
 	}
 	if r.Task != TaskMessagesList && r.MessageRoom != (Reference{}) {
 		return fmt.Errorf("Chatwork result message room is only valid for messages.list")
+	}
+	if r.Task != TaskMessagesList && r.MessageAccess != MessageAccessNone {
+		return fmt.Errorf("Chatwork result message access limitation is only valid for messages.list")
 	}
 	if r.Task != TaskMessagesList && r.MessageSelection != nil {
 		return fmt.Errorf("Chatwork result message selection is only valid for messages.list")
@@ -593,6 +698,10 @@ func (r Result) ValidateFor(request Request) error {
 		if len(r.Affected) != 1 || r.Affected[0] != request.TaskRef {
 			return fmt.Errorf("Chatwork result affected task does not match the request")
 		}
+	case TaskInviteLinkUpdate, TaskInviteLinkDelete:
+		if r.InviteLink.Ref != request.Invite {
+			return fmt.Errorf("Chatwork result invite link does not match the request")
+		}
 	}
 	return nil
 }
@@ -663,6 +772,16 @@ func (r Result) validateVariantFacts() error {
 		}
 	case TaskMessagesList, TaskMessagesShow:
 		if r.Task == TaskMessagesList {
+			if r.MessageAccess != MessageAccessNone && r.MessageAccess != MessageAccessPartial && r.MessageAccess != MessageAccessAll {
+				return fmt.Errorf("Chatwork message access limitation is invalid")
+			}
+			if r.MessageAccess == MessageAccessPartial && len(r.Messages) == 0 &&
+				(r.MessageSelection == nil || r.MessageSelection.SourceCount == 0) {
+				return fmt.Errorf("Chatwork partially restricted message result must retain at least one visible message")
+			}
+			if r.MessageAccess == MessageAccessAll && len(r.Messages) != 0 {
+				return fmt.Errorf("Chatwork fully restricted message result must not contain visible messages")
+			}
 			if err := validateResultReference("message window room", r.MessageRoom, ReferenceRoom, false); err != nil {
 				return err
 			}
@@ -911,6 +1030,13 @@ func validateResultMessage(field string, message Message) error {
 	}
 	if err := validateResultAccount(field+" sender", message.Sender, false); err != nil {
 		return err
+	}
+	if message.RelationState != MessageRelationsComplete && message.RelationState != MessageRelationsUnknown {
+		return fmt.Errorf("Chatwork result %s relation state is invalid", field)
+	}
+	if message.RelationState == MessageRelationsUnknown &&
+		(len(message.Recipients) != 0 || message.Reply != nil || len(message.Quotes) != 0) {
+		return fmt.Errorf("Chatwork result %s has partial facts for an unknown relation set", field)
 	}
 	for index, recipient := range message.Recipients {
 		if err := validateResultReference(fmt.Sprintf("%s recipient[%d]", field, index), recipient, ReferenceAccount, false); err != nil {

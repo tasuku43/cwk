@@ -224,6 +224,21 @@ func TestScopedAgentHelpIsACompleteProjectionOfEveryCatalogCommand(t *testing.T)
 	}
 }
 
+func TestAgentErrorContractDefinesUnknownAndAdvisoryRateLimitTiming(t *testing.T) {
+	contract := defaultAgentErrorContract()
+	fields := make(map[string]string, len(contract.Fields))
+	for _, field := range contract.Fields {
+		fields[field.Name] = field.Description
+	}
+	if !strings.Contains(fields["retry_after"], "不明") ||
+		!strings.Contains(fields["retry_after"], "再実行する許可ではありません") {
+		t.Fatalf("retry_after contract = %q", fields["retry_after"])
+	}
+	if !strings.Contains(fields["retryable"], "自動再試行は常に行いません") {
+		t.Fatalf("retryable contract = %q", fields["retryable"])
+	}
+}
+
 func TestDoctorAgentHelpDeclaresCommandSelectionGrammarAndRuntimeRecovery(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)

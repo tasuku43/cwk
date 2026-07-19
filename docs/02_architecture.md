@@ -124,8 +124,8 @@ which catalog paths may be selected or attach CLI recovery commands.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
-- Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
-- Infrastructure decodes Chatwork wire DTOs and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity.
+- Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, access-limitation, relation-set state, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
+- Infrastructure decodes Chatwork wire DTOs, validates the status/header combination that distinguishes normal zero, partial/all access restriction, restricted exact message, and not-found, and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity. A malformed recognized notation form returns the body with an unknown whole relation set rather than failing its list or retaining partial facts.
 - Application use cases select the bounded data required by one outcome,
   resolve only explicit relationships available within that bound, and return
   a typed task result with coverage and unresolved facts. Message selection runs
@@ -136,7 +136,7 @@ For Chatwork output, including relationship-aware message results and the curren
   final physical order remain those of the unfiltered provider window.
   Application-only sender/context/limit fields are removed before the
   infrastructure port is called.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, optional primary-message limit, context, and anchor metadata directly from application. Presentation emits candidate count and requested limit only for count limiting and omits context only for the limit-only default `none`. The provider ceiling is rendered separately as `source-limit`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges retain per-record labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, optional primary-message limit, context, and anchor metadata directly from application. Presentation emits candidate count and requested limit only for count limiting and omits context only for the limit-only default `none`. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -163,6 +163,19 @@ invalid `CWK_API_TOKEN` fails during composition before a provider task request.
 The token determines the one account used by that command process and remains
 private to infrastructure. `cwk` does not accept it in argv, persist it, or
 expose login, status, logout, callback, or profile commands.
+
+Room creation adds a command-specific identity precondition without adding a
+credential selector. CLI clones the catalog requirement and binds its exact
+`AccountID` from `--account`. After confirmation, the infrastructure
+authenticator creates its private PAT binding, executes `GET /me` through that
+same binding, and replaces provisional subject/account metadata only on an
+exact canonical match. It removes the provisional binding on failure. The
+application gate rechecks the resulting secret-free session before the room
+task port can call `POST /rooms`; infrastructure also rechecks the stored
+verified account against the room request before request construction, so a
+generic binding cannot bypass the gate. The provider request contains no
+account or owner field. Identity-probe failures are classified as pre-mutation
+outcomes, so they cannot imply an unknown room-create result.
 
 ## Catalog as the public source of truth
 
@@ -422,12 +435,33 @@ For mutations, validation failure must occur before the external side effect. `a
 
 The Chatwork policy implementation derives one of three confirmation requirements from typed impact and the fixed operation contract: exact invocation only, exact `--confirm=access-change`, or exact `--confirm=destructive`. CLI parsing supplies the typed confirmation, application policy compares it with the snapshotted intent, and infrastructure never interprets the flag. Every logical provider operation permits one transport attempt. An unclassified post-action result routes only to a catalog-declared read-only reconciliation task.
 
+Invite-link update is a full-replacement use case. CLI/domain enforce the XOR
+between exact code and explicit regeneration and require approval plus
+nonempty description before authentication. Infrastructure repeats the
+invariant before form construction, sends `need_acceptance` and `description`
+on every update, and omits `code` only for explicit regeneration. It does not
+perform GET/merge or recover a code from the response URL.
+
 ## Error ownership
 
 - Domain errors explain invalid values or invariants.
 - Application errors explain task failure or ambiguity.
 - Infrastructure errors map unstable upstream details into a stable `fault.Error` without leaking secrets.
 - CLI maps fault kind, code, retryability, retry-after, and next actions to stable human and machine presentation and exit statuses.
+
+The Chatwork adapter owns rate-limit evidence. It reads only one strict decimal
+`x-ratelimit-reset` value, rejects values outside the official five-minute
+window relative to both a valid response date and the local response time, and
+uses a valid response `Date` as the wait-duration baseline, falling back to the
+local response time only when that header is absent or invalid. It does not
+interpret `Retry-After` as a Chatwork contract. For message/task room
+posting it may privately inspect the bounded error envelope; only the exact
+documented single error selects the combined-room 10-second wait. No provider
+body crosses the infrastructure boundary. The catalog declares separate read
+and mutation rate-limit faults and recovery: reads may retry the same task;
+mutations remain non-retryable and route to scoped help. CLI presentation maps
+missing timing to text `unknown` and JSON `null`; timing never overrides the
+catalog retry decision.
 
 Public fault messages and next-action reasons are Japanese, while kind, code,
 retryability, retry-after representation, next command, JSON keys, and exit

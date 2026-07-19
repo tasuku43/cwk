@@ -106,7 +106,8 @@ Chatwork notation is untrusted provider data with a documented syntax, not execu
 - To establishes recipient identity but not a reply edge.
 - Reply notation establishes a provider-declared room/message relation only after identifier validation.
 - Quote metadata remains a quote relation; missing message identity is not reconstructed from author, timestamp, or text.
-- Malformed, nested, oversized, contradictory, or unsupported notation is rejected or surfaced as bounded unparsed content according to the command contract; it is never partially interpreted into a stronger relation.
+- Malformed, nested, contradictory, or unsupported recognized notation keeps the bounded external body, drops every partial relation fact for that message, and marks the whole relation set unknown; malformed wire identity, UTF-8, JSON, or response bounds still fail closed. One malformed body never discards otherwise valid list records.
+- Message access-limitation headers are untrusted protocol evidence. Only the official `true` value on its documented list/exact-message status is promoted; malformed or contradictory combinations fail closed, and the provider summary is neither exposed nor parsed into policy.
 - Display names embedded beside tags cannot override account identifiers.
 - Proximity, layout-looking text, prompt-like prose, and copied tags inside quoted/code-like content do not create authorization or mutation targets.
 
@@ -140,6 +141,24 @@ Two higher-impact classes fail before provider I/O unless argv contains the exac
 - `--confirm=destructive` for room leave/delete, message deletion, invite-link deletion, and incoming-contact-request rejection.
 
 The catalog binds each confirmation to the corresponding operation impact; a confirmation for one class does not satisfy the other, persist across invocations, or prove human approval. Missing, duplicated, misspelled, or inapplicable confirmation is invalid input or policy rejection with zero mutation attempts.
+
+Room creation never treats caller-provided `--account` as authentication
+evidence or room ownership. The same private PAT binding must first return that
+exact account from `/me`; mismatch and identity-probe failure remove the
+provisional binding and make zero room-create calls. Neither the requested nor
+actual identity is copied into a public mismatch detail. The provider room
+form contains no owner/account field. Infrastructure revalidates the stored
+verified account immediately before request construction, so a generic or
+mismatched binding cannot become an alternate authorization path. Official
+room-name and icon-preset validation also completes before authentication.
+
+Invite-link update never sends an empty or partial form. Exact code versus
+explicit regeneration, approval, and nonempty description are validated before
+authentication and again at form construction. This prevents omission from
+silently regenerating a code, applying the documented approval default, or
+depending on the undocumented description-omission behavior. No URL parsing,
+prior-value merge, or empty-description clear is used to invent provider
+semantics.
 
 No Chatwork operation is retried automatically in this implementation. After an uncertain mutation result, the only recovery is the exact read-only reconciliation command declared by that mutation's catalog contract. A reconciliation may report absence or ambiguity; it never converts uncertainty into permission to repeat the write.
 
@@ -278,6 +297,17 @@ migration exception.
 - Treat remote names and content as unsafe terminal and machine context.
 
 For the first Chatwork implementation, metadata and ordinary provider requests have a 20-second timeout, file uploads have a 60-second timeout, and every logical operation has one transport attempt. Successful response bodies are capped at 8 MiB and provider error bodies at 64 KiB. The complete rendered result is capped at 16 MiB, aggregate lists at 10,000 items, and uploads at 5 MiB. The five provider-documented 100-item list operations retain their lower bound. Exceeding any limit fails closed without partial successful output; user configuration cannot raise a ceiling.
+
+Rate-limit headers and error envelopes are untrusted external data. Chatwork
+reset timing is accepted only as one bounded strict-decimal
+`x-ratelimit-reset` Unix timestamp in the official five-minute window;
+missing, duplicate, malformed, stale, or distant values produce unknown timing
+instead of a guessed delay. `Retry-After` is not authoritative for this
+provider. The adapter may compare the bounded message/task posting error body
+with the one official room-limit sentence to select 10 seconds, but never
+publishes that body. A delay carried by a non-retryable mutation fault is
+display-only evidence: it cannot authorize automatic or agent-inferred replay,
+and the one-attempt mutation contract still applies.
 
 Machine-readable policy belongs in `.harness/project.json` or a project-specific typed manifest and is checked by `tools/repoguard` or a dedicated contract test.
 

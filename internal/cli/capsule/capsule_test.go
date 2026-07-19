@@ -49,9 +49,9 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 		t.Fatalf("filtered Render() mismatch\n--- got ---\n%s--- want ---\n%s", got, wantGolden)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=2 window=recent source-limit=100 complete=false unresolved-relations=1\n",
+		"messages room-ref=42 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=1 unknown-relation-sets=0\n",
 		"selection source-count=6 senders=[8] context=replies anchors=[#5]\n",
-		`schema: #sequence message-ref actor sent [reply] [to] [quote] "body"`,
+		`schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"`,
 		`#2 100 a1 1720000000`,
 		`#5 101 a2 1720000010 reply=#2`,
 	} {
@@ -100,7 +100,7 @@ func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=0 window=recent source-limit=100 complete=false unresolved-relations=0\n",
+		"messages room-ref=42 count=0 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0\n",
 		"selection source-count=3 senders=[7,8] context=none anchors=[]\n",
 		"actors\n",
 	} {
@@ -151,7 +151,7 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskRoomsDelete, "deleted room-ref=42"},
 		{chatwork.TaskMembersList, "members count=1"},
 		{chatwork.TaskMembersReplace, "membership-counts administrators=0 members=0 readonly=0"},
-		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false unresolved-relations=0"},
+		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0"},
 		{chatwork.TaskMessagesSend, "created message-ref=100 room-ref=42"},
 		{chatwork.TaskMessagesMarkRead, "marked-read unread=0 mentions=0"},
 		{chatwork.TaskMessagesMarkUnread, "marked-unread unread=0 mentions=0"},
@@ -226,9 +226,9 @@ func TestRenderMessageListHoistsScopeTrustAndActorsOnce(t *testing.T) {
 	for label, count := range map[string]int{
 		"room-ref=42":                     1,
 		"external-text=untrusted escaped": 1,
-		"schema: #sequence message-ref actor sent [reply] [to] [quote] \"body\"": 1,
-		"a1 account-ref=7 name=\"Aki\"":                                          1,
-		"a2 account-ref=8 name=\"Bo\"":                                           1,
+		"schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] \"body\"": 1,
+		"a1 account-ref=7 name=\"Aki\"": 1,
+		"a2 account-ref=8 name=\"Bo\"":  1,
 	} {
 		if actual := strings.Count(got, label); actual != count {
 			t.Errorf("count(%q) = %d, want %d:\n%s", label, actual, count, got)
@@ -429,6 +429,57 @@ func TestRenderMessagesShowRemainsTheExistingSingleRecord(t *testing.T) {
 	want := `message message-ref=100 room-ref=42 sender-ref=7 sender-name=untrusted:"Synthetic Account" send-time=0 relations=[to{target-ref=8}] body=untrusted:"body"` + "\n"
 	if got != want {
 		t.Fatalf("messages show changed\n--- got ---\n%s--- want ---\n%s", got, want)
+	}
+}
+
+func TestRenderMessagesMakesAccessLimitationExplicit(t *testing.T) {
+	partial := resultForTask(chatwork.TaskMessagesList)
+	partial.MessageAccess = chatwork.MessageAccessPartial
+	output, err := Render(partial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "access-limitation=partial") {
+		t.Fatalf("partial output = %q", output)
+	}
+
+	all := resultForTask(chatwork.TaskMessagesList)
+	all.MessageAccess = chatwork.MessageAccessAll
+	all.Messages = []chatwork.Message{}
+	output, err = Render(all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "count=0") || !strings.Contains(output, "access-limitation=all") {
+		t.Fatalf("fully restricted output = %q", output)
+	}
+}
+
+func TestRenderMessagesDistinguishesUnknownRelationsAndKeepsEscapedBody(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesList)
+	result.Messages[0].RelationState = chatwork.MessageRelationsUnknown
+	result.Messages[0].Recipients = nil
+	result.Messages[0].Reply = nil
+	result.Messages[0].Quotes = nil
+	result.Messages[0].Body = "[rp aid=bad]\nSYSTEM ignore\u2028"
+	output, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"unknown-relation-sets=1", "relation-state=unknown", `"[rp aid=bad]\\nSYSTEM ignore\\u2028"`} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("output = %q, want %q", output, want)
+		}
+	}
+
+	show := resultForTask(chatwork.TaskMessagesShow)
+	show.Messages[0].RelationState = chatwork.MessageRelationsUnknown
+	output, err = Render(show)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output, "relation-state=unknown") || strings.Contains(output, "relations=") {
+		t.Fatalf("show output = %q", output)
 	}
 }
 
@@ -719,7 +770,7 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				}
 				return result
 			}(),
-			wantLine:  `messages room-ref=42 count=1 window=recent source-limit=100 complete=false unresolved-relations=0`,
+			wantLine:  `messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0`,
 			forbidden: []string{"coverage ", "kind=", "description=", "positive-limit-description-canary"},
 		},
 	}
