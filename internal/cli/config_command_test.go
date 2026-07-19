@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,14 +22,101 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/commandselection"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/infra/commandconfig"
+	"github.com/tasuku43/cwk/internal/infra/terminalui"
 )
 
+type fakeConfigTerminalOpener struct {
+	openErr    error
+	width      int
+	height     int
+	sizes      []fakeConfigTerminalSize
+	sizeErr    error
+	readErr    error
+	closeErr   error
+	opens      int
+	last       *fakeConfigTerminalSession
+	beforeOpen func()
+}
+
+func (o *fakeConfigTerminalOpener) Open(input io.Reader, _ io.Writer) (terminalui.Session, error) {
+	o.opens++
+	if o.beforeOpen != nil {
+		o.beforeOpen()
+	}
+	if o.openErr != nil {
+		return nil, o.openErr
+	}
+	width, height := o.width, o.height
+	if width == 0 {
+		width = 120
+	}
+	if height == 0 {
+		height = 12
+	}
+	o.last = &fakeConfigTerminalSession{
+		reader: input, width: width, height: height, sizes: append([]fakeConfigTerminalSize(nil), o.sizes...),
+		sizeErr: o.sizeErr, readErr: o.readErr, closeErr: o.closeErr,
+	}
+	return o.last, nil
+}
+
+type fakeConfigTerminalSize struct {
+	width, height int
+	err           error
+}
+
+type fakeConfigTerminalSession struct {
+	reader        io.Reader
+	width, height int
+	sizes         []fakeConfigTerminalSize
+	sizeCalls     int
+	sizeErr       error
+	readErr       error
+	closeErr      error
+	closed        bool
+	closes        int
+}
+
+func (s *fakeConfigTerminalSession) Size() (int, int, error) {
+	if len(s.sizes) != 0 {
+		index := s.sizeCalls
+		if index >= len(s.sizes) {
+			index = len(s.sizes) - 1
+		}
+		s.sizeCalls++
+		return s.sizes[index].width, s.sizes[index].height, s.sizes[index].err
+	}
+	return s.width, s.height, s.sizeErr
+}
+
+func (s *fakeConfigTerminalSession) Read(ctx context.Context, buffer []byte) (int, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if s.readErr != nil {
+		return 0, s.readErr
+	}
+	if reader, ok := s.reader.(interface {
+		ReadContext(context.Context, []byte) (int, error)
+	}); ok {
+		return reader.ReadContext(ctx, buffer)
+	}
+	return s.reader.Read(buffer)
+}
+
+func (s *fakeConfigTerminalSession) Close() error {
+	s.closes++
+	s.closed = true
+	return s.closeErr
+}
+
 type commandSelectionHarness struct {
-	base    string
-	store   *commandconfig.FileStore
-	command *CLI
-	stdout  *bytes.Buffer
-	stderr  *bytes.Buffer
+	base     string
+	store    *commandconfig.FileStore
+	command  *CLI
+	terminal *fakeConfigTerminalOpener
+	stdout   *bytes.Buffer
+	stderr   *bytes.Buffer
 }
 
 func newCommandSelectionHarness(t *testing.T, input io.Reader) *commandSelectionHarness {
@@ -40,9 +126,11 @@ func newCommandSelectionHarness(t *testing.T, input io.Reader) *commandSelection
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	command := newCLI(input, stdout, stderr, DefaultCatalog(), passingInspector("unused"))
+	terminal := &fakeConfigTerminalOpener{}
+	command.terminal = terminal
 	command.commandSelection = configcmd.New(store)
 	return &commandSelectionHarness{
-		base: base, store: store, command: command, stdout: stdout, stderr: stderr,
+		base: base, store: store, command: command, terminal: terminal, stdout: stdout, stderr: stderr,
 	}
 }
 
@@ -50,6 +138,8 @@ func (h *commandSelectionHarness) reset(input io.Reader) {
 	h.command.In = input
 	h.stdout.Reset()
 	h.stderr.Reset()
+	h.terminal = &fakeConfigTerminalOpener{}
+	h.command.terminal = h.terminal
 }
 
 func saveCommandSelection(t *testing.T, store *commandconfig.FileStore, paths []string) {
@@ -84,204 +174,222 @@ func configurableCommandPaths(catalog Catalog) []string {
 	return paths
 }
 
-func commandNumber(t *testing.T, catalog Catalog, path string) int {
-	t.Helper()
+func configKeysForSelection(catalog Catalog, initial, target []string) string {
+	initialSet := stringSet(initial)
+	targetSet := stringSet(target)
+	var keys strings.Builder
+	cursor := 0
 	for index, command := range catalog.ConfigurableCommands() {
-		if command.Path == path {
-			return index + 1
+		if initialSet[command.Path] == targetSet[command.Path] {
+			continue
+		}
+		for cursor < index {
+			keys.WriteString("\x1b[B")
+			cursor++
+		}
+		keys.WriteByte(' ')
+	}
+	keys.WriteByte('\r')
+	return keys.String()
+}
+
+func stringSet(values []string) map[string]bool {
+	set := make(map[string]bool, len(values))
+	for _, value := range values {
+		set[value] = true
+	}
+	return set
+}
+
+func withoutPrefix(values []string, prefix string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if !strings.HasPrefix(value, prefix) {
+			result = append(result, value)
 		}
 	}
-	t.Fatalf("configurable command %q is missing", path)
-	return 0
+	return result
 }
 
-func TestConfigShowDefaultIsCatalogOrderedAndExplicitlyNotSecurity(t *testing.T) {
-	h := newCommandSelectionHarness(t, strings.NewReader(""))
-	if code := runCLI(h.command, []string{"config", "show"}); code != ExitOK {
-		t.Fatalf("config show exit = %d, stderr = %q", code, h.stderr.String())
-	}
-
-	var want strings.Builder
-	want.WriteString("config purpose=attention-only security-boundary=false source=default\n")
-	always := DefaultCatalog().AlwaysCommands()
-	fmt.Fprintf(&want, "always-on count=%d\n", len(always))
-	for _, command := range always {
-		fmt.Fprintf(&want, "  %s\n", command.Path)
-	}
-	configurable := DefaultCatalog().ConfigurableCommands()
-	fmt.Fprintf(&want, "enabled count=%d\n", len(configurable))
-	for _, command := range configurable {
-		fmt.Fprintf(&want, "  %s\n", command.Path)
-	}
-	want.WriteString("disabled count=0\n")
-	want.WriteString("stale count=0\n")
-	if got := h.stdout.String(); got != want.String() {
-		t.Fatalf("config show output =\n%s\nwant =\n%s", got, want.String())
-	}
-	if h.stderr.Len() != 0 {
-		t.Fatalf("config show stderr = %q", h.stderr.String())
-	}
-}
-
-func TestConfigShowSeparatesSavedEnabledDisabledAndStalePaths(t *testing.T) {
-	h := newCommandSelectionHarness(t, strings.NewReader(""))
-	saveCommandSelection(t, h.store, []string{"doctor", "retired command"})
-	if code := runCLI(h.command, []string{"config", "show"}); code != ExitOK {
-		t.Fatalf("config show exit = %d, stderr = %q", code, h.stderr.String())
-	}
-	var want strings.Builder
-	want.WriteString("config purpose=attention-only security-boundary=false source=saved\n")
-	always := DefaultCatalog().AlwaysCommands()
-	fmt.Fprintf(&want, "always-on count=%d\n", len(always))
-	for _, command := range always {
-		fmt.Fprintf(&want, "  %s\n", command.Path)
-	}
-	want.WriteString("enabled count=1\n  doctor\n")
-	configurable := DefaultCatalog().ConfigurableCommands()
-	fmt.Fprintf(&want, "disabled count=%d\n", len(configurable)-1)
-	for _, command := range configurable {
-		if command.Path != "doctor" {
-			fmt.Fprintf(&want, "  %s\n", command.Path)
-		}
-	}
-	want.WriteString("stale count=1\n  retired command\n")
-	if got := h.stdout.String(); got != want.String() {
-		t.Fatalf("saved config show output =\n%s\nwant =\n%s", got, want.String())
-	}
-}
-
-func TestConfigEditMenuUsesStableCatalogNumbersAndAtomicToggles(t *testing.T) {
+func TestConfigIsOneAlwaysOnInteractiveCommandAndLegacyPathsAreGone(t *testing.T) {
 	catalog := DefaultCatalog()
-	doctorNumber := commandNumber(t, catalog, "doctor")
-	versionNumber := commandNumber(t, catalog, "version")
-	input := fmt.Sprintf("%d,bad,%d\n%d %d\nsave\n", doctorNumber, versionNumber, doctorNumber, versionNumber)
-	h := newCommandSelectionHarness(t, strings.NewReader(input))
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitOK {
-		t.Fatalf("config edit exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
+	if _, found := catalog.Lookup("config"); !found {
+		t.Fatal("exact config command is missing")
+	}
+	for _, old := range []string{"config show", "config edit"} {
+		if _, found := catalog.Lookup(old); found {
+			t.Fatalf("legacy command %q remains in catalog", old)
+		}
+	}
+	wantAlways := []string{"doctor", "help", "version", "config"}
+	if got := catalogPaths(NewCatalog(catalog.AlwaysCommands()...)); !reflect.DeepEqual(got, wantAlways) {
+		t.Fatalf("always-on paths = %v, want %v", got, wantAlways)
+	}
+	for _, command := range catalog.ConfigurableCommands() {
+		if command.chatwork == nil {
+			t.Fatalf("non-Chatwork command %q is selectable", command.Path)
+		}
+	}
+
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+	h.command.terminal = &fakeConfigTerminalOpener{openErr: terminalui.ErrNotTerminal}
+	if code := runCLI(h.command, []string{"config"}); code != ExitUnavailable {
+		t.Fatalf("non-TTY config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: interactive_terminal_required") || !strings.Contains(h.stderr.String(), "cwk help config") {
+		t.Fatalf("non-TTY fault = stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	}
+}
+
+func TestProfileFailureRecoveryIslandDerivesFromCatalogMetadata(t *testing.T) {
+	catalog := DefaultCatalog()
+	for _, command := range catalog.Commands() {
+		scopedHelp := append([]string{"help"}, strings.Fields(command.Path)...)
+		if got := commandViewAlwaysInvocation(catalog, scopedHelp); got != !command.Configurable {
+			t.Fatalf("scoped help for %q allowed=%v want=%v", command.Path, got, !command.Configurable)
+		}
+		if command.Path != "help" {
+			if got := commandViewAlwaysInvocation(catalog, strings.Fields(command.Path)); got != !command.Configurable {
+				t.Fatalf("direct %q allowed=%v want=%v", command.Path, got, !command.Configurable)
+			}
+		}
+	}
+	if commandViewAlwaysInvocation(catalog, []string{"help"}) {
+		t.Fatal("bare root help must not present an always-only view after profile failure")
+	}
+
+	commands := catalog.Commands()
+	for index := range commands {
+		switch commands[index].Path {
+		case "version":
+			commands[index].Configurable = true
+		case "rooms list":
+			commands[index].Configurable = false
+		}
+	}
+	mutated := NewCatalog(commands...)
+	if commandViewAlwaysInvocation(mutated, []string{"version"}) {
+		t.Fatal("retired always-on path remained hard-coded in the recovery island")
+	}
+	if !commandViewAlwaysInvocation(mutated, []string{"rooms", "list"}) ||
+		!commandViewAlwaysInvocation(mutated, []string{"help", "rooms", "list"}) {
+		t.Fatal("new catalog-declared always-on path was not admitted to direct and scoped recovery")
+	}
+}
+
+func TestConfigTUITogglesInCatalogOrderShowsEffectsAndSavesAfterRestore(t *testing.T) {
+	catalog := DefaultCatalog()
+	initial := configurableCommandPaths(catalog)
+	target := withoutPrefix(initial, "contact-requests ")
+	h := newCommandSelectionHarness(t, strings.NewReader(configKeysForSelection(catalog, initial, target)))
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, target) {
+		t.Fatalf("saved paths=%v want=%v", got, target)
+	}
+	if h.terminal.last == nil || !h.terminal.last.closed || h.terminal.last.closes != 1 {
+		t.Fatalf("terminal was not restored exactly once: %+v", h.terminal.last)
 	}
 	output := h.stdout.String()
-	if !strings.HasPrefix(output, "Command selection (attention only; not an authorization or security boundary)\n") {
-		t.Fatalf("config edit omitted its non-security framing:\n%s", output)
-	}
-	for _, want := range []string{
-		"Always enabled:\n  help\n  config show\n  config edit\n",
-		"Enter numbers to toggle, or one of: all, none, save, cancel\nconfig> ",
-	} {
+	for _, want := range []string{"[read]", "[create]", "[write]", "config saved enabled=", "fingerprint=sha256:"} {
 		if !strings.Contains(output, want) {
-			t.Errorf("config edit menu lacks %q:\n%s", want, output)
+			t.Errorf("output lacks %q:\n%s", want, output)
 		}
 	}
-	last := -1
-	for index, command := range catalog.ConfigurableCommands() {
-		line := fmt.Sprintf("%d [x] %s", index+1, command.Path)
-		offset := strings.Index(output, line)
-		if offset <= last {
-			t.Errorf("initial menu line %q is absent or out of catalog order:\n%s", line, output)
+	for _, forbidden := range []string{"purpose=", "security-boundary=", "source=", "Selectable commands:", "config>"} {
+		if strings.Contains(output, forbidden) {
+			t.Errorf("legacy presentation %q remains:\n%s", forbidden, output)
 		}
-		last = offset
-	}
-	if !strings.Contains(output, "invalid selection") {
-		t.Errorf("invalid mixed line was not diagnosed:\n%s", output)
-	}
-
-	paths := loadCommandSelection(t, h.store)
-	if containsString(paths, "doctor") || containsString(paths, "version") {
-		t.Fatalf("valid toggle did not disable doctor/version: %v", paths)
-	}
-	if got, want := len(paths), len(catalog.ConfigurableCommands())-2; got != want {
-		t.Fatalf("saved enabled count = %d, want %d (%v)", got, want, paths)
-	}
-	if !strings.Contains(output, fmt.Sprintf("config saved enabled=%d disabled=2 changed=2 stale-removed=0", len(paths))) {
-		t.Errorf("save summary lacks exact counts:\n%s", output)
 	}
 }
 
-func TestConfigEditAllNoneAndStaleRemovalAreExplicit(t *testing.T) {
-	tests := []struct {
-		name        string
-		initial     []string
-		input       string
-		wantEnabled []string
-		wantStale   int
-		wantChanged int
-	}{
-		{name: "none", initial: []string{"doctor"}, input: "none\nsave\n", wantEnabled: []string{}, wantStale: 0, wantChanged: 1},
-		{name: "all removes stale", initial: []string{"doctor", "retired command"}, input: "all\nsave\n", wantEnabled: configurableCommandPaths(DefaultCatalog()), wantStale: 1, wantChanged: len(DefaultCatalog().ConfigurableCommands()) - 1},
+func TestBatchedMoveToggleAndSaveRepaintsEachActionableSelection(t *testing.T) {
+	catalog := DefaultCatalog()
+	choices := catalog.ConfigurableCommands()
+	if len(choices) < 2 {
+		t.Fatal("selector needs at least two configurable commands")
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			h := newCommandSelectionHarness(t, strings.NewReader(test.input))
-			saveCommandSelection(t, h.store, test.initial)
-			if code := runCLI(h.command, []string{"config", "edit"}); code != ExitOK {
-				t.Fatalf("config edit exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
-			}
-			if got := loadCommandSelection(t, h.store); !equalCommandPaths(got, test.wantEnabled) {
-				t.Fatalf("saved paths = %v, want %v", got, test.wantEnabled)
-			}
-			if !strings.Contains(h.stdout.String(), fmt.Sprintf("stale-removed=%d", test.wantStale)) {
-				t.Errorf("save summary lacks stale-removed=%d:\n%s", test.wantStale, h.stdout.String())
-			}
-			if !strings.Contains(h.stdout.String(), fmt.Sprintf("changed=%d", test.wantChanged)) {
-				t.Errorf("save summary lacks changed=%d:\n%s", test.wantChanged, h.stdout.String())
-			}
-		})
+
+	// Height four leaves exactly one item row. strings.Reader returns this
+	// complete Down, Space, Enter sequence in one terminal read, so the second
+	// command cannot be reviewed unless dispatch repaints between decoded keys.
+	h := newCommandSelectionHarness(t, strings.NewReader("\x1b[B \r"))
+	h.terminal.height = 4
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+
+	want := configurableCommandPaths(catalog)
+	want = append([]string(nil), want...)
+	want = append(want[:1], want[2:]...)
+	if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, want) {
+		t.Fatalf("saved paths=%v want=%v", got, want)
+	}
+	output := h.stdout.String()
+	identity := choices[1].Path
+	identityIndex := strings.Index(output, identity)
+	savedIndex := strings.Index(output, "config saved")
+	if identityIndex < 0 || savedIndex < 0 || identityIndex >= savedIndex {
+		t.Fatalf("batched target %q was not displayed before save:\n%s", identity, output)
 	}
 }
 
-func TestConfigEditCancelAndEOFPreservePreviousProfile(t *testing.T) {
+func TestConfigQuitEOFAndInterruptPreserveTheLastSavedProfile(t *testing.T) {
+	before := []string{"rooms list"}
 	for _, test := range []struct {
-		name  string
-		input string
+		name     string
+		input    string
+		wantCode int
+		wantText string
 	}{
-		{name: "cancel", input: "none\ncancel\n"},
-		{name: "EOF", input: "none\n"},
+		{name: "q", input: "q", wantCode: ExitOK, wantText: "config unchanged"},
+		{name: "escape", input: "\x1b", wantCode: ExitOK, wantText: "config unchanged"},
+		{name: "EOF", input: "", wantCode: ExitOK, wantText: "config unchanged"},
+		{name: "Ctrl-C", input: string([]byte{0x03}), wantCode: ExitCanceled, wantText: "code: operation_canceled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			h := newCommandSelectionHarness(t, strings.NewReader(test.input))
-			before := []string{"doctor"}
 			saveCommandSelection(t, h.store, before)
-			if code := runCLI(h.command, []string{"config", "edit"}); code != ExitCanceled {
-				t.Fatalf("config edit exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
+			if code := runCLI(h.command, []string{"config"}); code != test.wantCode {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 			}
 			if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, before) {
-				t.Fatalf("profile after %s = %v, want unchanged %v", test.name, got, before)
+				t.Fatalf("profile changed: got=%v want=%v", got, before)
 			}
-			if !strings.Contains(h.stderr.String(), "code: configuration_canceled") {
-				t.Errorf("%s stderr lacks stable cancellation: %q", test.name, h.stderr.String())
+			if !strings.Contains(h.stdout.String()+h.stderr.String(), test.wantText) {
+				t.Fatalf("result lacks %q: stdout=%q stderr=%q", test.wantText, h.stdout.String(), h.stderr.String())
+			}
+			if h.terminal.last == nil || !h.terminal.last.closed {
+				t.Fatal("terminal was not restored")
 			}
 		})
 	}
 }
 
-func TestConfigEditJSONCancellationKeepsStructuredErrorStreamPure(t *testing.T) {
-	h := newCommandSelectionHarness(t, strings.NewReader("cancel\n"))
-	if code := runCLI(h.command, []string{"--error-format=json", "config", "edit"}); code != ExitCanceled {
-		t.Fatalf("config edit JSON cancel exit = %d, stderr = %q", code, h.stderr.String())
-	}
-	if !strings.HasPrefix(h.stdout.String(), "Command selection (attention only;") {
-		t.Fatalf("selector transcript is missing from stdout: %q", h.stdout.String())
-	}
-	var document errorDocument
-	if err := json.Unmarshal(h.stderr.Bytes(), &document); err != nil {
-		t.Fatalf("stderr is not one pure JSON fault: %v\n%s", err, h.stderr.String())
-	}
-	if document.Error.Code != "configuration_canceled" || document.Error.Kind != fault.KindCanceled {
-		t.Fatalf("JSON cancellation = %+v", document.Error)
-	}
+type dataAndEOFReader struct {
+	data []byte
 }
 
-func TestConfigEditRejectsOversizedInputWithoutWriting(t *testing.T) {
-	h := newCommandSelectionHarness(t, strings.NewReader(strings.Repeat("1", maxConfigSelectionLineBytes+1)+"\n"))
-	before := []string{"doctor"}
-	saveCommandSelection(t, h.store, before)
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitInternal {
-		t.Fatalf("oversized config input exit = %d, stderr = %q", code, h.stderr.String())
+func (r *dataAndEOFReader) Read(buffer []byte) (int, error) {
+	if len(r.data) == 0 {
+		return 0, io.EOF
 	}
-	if !strings.Contains(h.stderr.String(), "code: configuration_input_failed") {
-		t.Fatalf("oversized input fault = %q", h.stderr.String())
+	count := copy(buffer, r.data)
+	r.data = r.data[count:]
+	return count, io.EOF
+}
+
+func TestConfigProcessesTerminalBytesReturnedWithEOF(t *testing.T) {
+	h := newCommandSelectionHarness(t, &dataAndEOFReader{data: []byte{'\r'}})
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 	}
-	if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, before) {
-		t.Fatalf("oversized input changed profile: got %v want %v", got, before)
+	if _, configured, err := h.store.Load(context.Background()); err != nil || !configured {
+		t.Fatalf("Enter returned with EOF was not saved: configured=%v err=%v", configured, err)
+	}
+	if !strings.Contains(h.stdout.String(), "config saved") {
+		t.Fatalf("result=%q", h.stdout.String())
 	}
 }
 
@@ -301,103 +409,120 @@ func (r *blockingCommandConfigReader) Read([]byte) (int, error) {
 	return 0, io.EOF
 }
 
-func TestConfigEditContextCancellationInterruptsBlockedInputWithoutWriting(t *testing.T) {
+func (r *blockingCommandConfigReader) ReadContext(ctx context.Context, _ []byte) (int, error) {
+	r.once.Do(func() { close(r.started) })
+	select {
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	case <-r.release:
+		return 0, io.EOF
+	}
+}
+
+func TestConfigContextCancellationRestoresTerminalAndWritesNothing(t *testing.T) {
 	reader := newBlockingCommandConfigReader()
 	h := newCommandSelectionHarness(t, reader)
-	before := []string{"doctor"}
+	before := []string{"rooms list"}
 	saveCommandSelection(t, h.store, before)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
-	go func() { done <- h.command.RunContext(ctx, []string{"config", "edit"}) }()
+	go func() { done <- h.command.RunContext(ctx, []string{"config"}) }()
 	select {
 	case <-reader.started:
 	case <-time.After(2 * time.Second):
 		close(reader.release)
-		t.Fatal("config edit did not begin reading stdin")
+		t.Fatal("config did not begin reading")
 	}
 	cancel()
 	select {
 	case code := <-done:
 		if code != ExitCanceled {
-			t.Errorf("canceled config edit exit = %d, stderr = %q", code, h.stderr.String())
+			t.Errorf("exit=%d stderr=%q", code, h.stderr.String())
 		}
 	case <-time.After(2 * time.Second):
 		close(reader.release)
-		t.Fatal("config edit did not honor context cancellation while stdin was blocked")
+		t.Fatal("config did not honor context cancellation")
 	}
 	close(reader.release)
 	if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, before) {
-		t.Fatalf("profile after context cancellation = %v, want unchanged %v", got, before)
+		t.Fatalf("profile changed: got=%v want=%v", got, before)
+	}
+	if h.terminal.last == nil || !h.terminal.last.closed {
+		t.Fatal("terminal was not restored")
 	}
 }
 
-func TestMalformedProfileFailsClosedAndConfigEditRepairsOnlyOnSave(t *testing.T) {
-	h := newCommandSelectionHarness(t, strings.NewReader(""))
+func TestMalformedProfileFailsTasksButAlwaysOnHelpAndExplicitConfigRepairRemainAvailable(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader("q"))
 	writeMalformedCommandSelection(t, h.base, []byte("{\n"))
-	if code := runCLI(h.command, []string{"config", "show"}); code != ExitUsage {
-		t.Fatalf("config show malformed exit = %d, stderr = %q", code, h.stderr.String())
-	}
-	if !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
-		t.Fatalf("config show malformed stderr = %q", h.stderr.String())
-	}
-
-	// A normal task fails on the preference before lazy PAT construction.
 	factoryCalls := 0
 	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
 		factoryCalls++
 		return nil, nil, errors.New("must not resolve authentication")
 	}
-	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitUsage {
-		t.Fatalf("normal command with malformed profile exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("task exit=%d stderr=%q", code, h.stderr.String())
 	}
 	if factoryCalls != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
 		t.Fatalf("malformed profile reached PAT or changed fault: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
 
-	// Root help must not silently masquerade as a deliberately empty view.
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"help"}); code != ExitUsage {
-		t.Fatalf("help with malformed profile exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("root help under invalid profile exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if !strings.Contains(h.stderr.String(), "code: command_selection_invalid") || !strings.Contains(h.stderr.String(), "cwk config edit") {
-		t.Fatalf("malformed-state root help did not expose the repair fault:\n%s", h.stderr.String())
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
+		t.Fatalf("root help masqueraded as a valid always-only view: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
-
-	// Config-scoped help remains available without presenting a false normal
-	// command view.
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"config", "--help"}); code != ExitOK {
-		t.Fatalf("config help with malformed profile exit = %d, stderr = %q", code, h.stderr.String())
+	if code := runCLI(h.command, []string{"help", "config"}); code != ExitOK {
+		t.Fatalf("config help under invalid profile exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if !strings.Contains(h.stdout.String(), "  show  Show") || !strings.Contains(h.stdout.String(), "  edit  Select") || strings.Contains(h.stdout.String(), "rooms") {
-		t.Fatalf("malformed-state config help did not isolate the repair commands:\n%s", h.stdout.String())
+	if !strings.Contains(h.stdout.String(), "cwk config") || strings.Contains(h.stdout.String(), "rooms") {
+		t.Fatalf("config help under invalid profile is not isolated:\n%s", h.stdout.String())
+	}
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"version"}); code != ExitOK {
+		t.Fatalf("version under invalid profile exit=%d stderr=%q", code, h.stderr.String())
+	}
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"doctor"}); code != ExitRejected {
+		t.Fatalf("doctor under invalid profile exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if !strings.Contains(h.stdout.String(), "command-selection\tfail\tstate=invalid") {
+		t.Fatalf("doctor lacks invalid selection diagnostic:\n%s", h.stdout.String())
+	}
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"help", "rooms"}); code != ExitUsage {
+		t.Fatalf("scoped task help under invalid profile exit=%d stderr=%q", code, h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
+		t.Fatalf("scoped task help masqueraded as unknown: %q", h.stderr.String())
 	}
 
-	// Merely entering and canceling the repair path must retain the bad bytes.
-	h.reset(strings.NewReader("cancel\n"))
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitCanceled {
-		t.Fatalf("config edit cancel malformed exit = %d, stderr = %q", code, h.stderr.String())
+	h.reset(strings.NewReader("q"))
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("repair quit exit=%d stderr=%q", code, h.stderr.String())
 	}
 	contents, err := os.ReadFile(filepath.Join(h.base, "cwk", "command-selection.json"))
 	if err != nil || string(contents) != "{\n" {
-		t.Fatalf("cancel changed malformed profile: contents=%q err=%v", contents, err)
+		t.Fatalf("quit changed malformed profile: contents=%q err=%v", contents, err)
 	}
 
-	h.reset(strings.NewReader("save\n"))
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitOK {
-		t.Fatalf("config edit repair exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
+	h.reset(strings.NewReader("\r"))
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("repair save exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 	}
 	if got, want := loadCommandSelection(t, h.store), configurableCommandPaths(DefaultCatalog()); !reflect.DeepEqual(got, want) {
-		t.Fatalf("repaired profile = %v, want all-enabled baseline %v", got, want)
+		t.Fatalf("repaired profile=%v want=%v", got, want)
 	}
 }
 
-func TestUnsafeProfileCannotEnterAnUnrepairableEditLoop(t *testing.T) {
+func TestUnsafeProfileKeepsAlwaysOnDiagnosticsAvailableAndRefusesSelector(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic-link creation requires platform-specific privileges on Windows")
 	}
-	h := newCommandSelectionHarness(t, strings.NewReader("save\n"))
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
 	app := filepath.Join(h.base, "cwk")
 	if err := os.Mkdir(app, 0o700); err != nil {
 		t.Fatal(err)
@@ -411,17 +536,28 @@ func TestUnsafeProfileCannotEnterAnUnrepairableEditLoop(t *testing.T) {
 	}
 
 	if code := runCLI(h.command, []string{"help"}); code != ExitUnavailable {
-		t.Fatalf("unsafe root help exit = %d, stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+		t.Fatalf("unsafe root help exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 	}
-	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") || !strings.Contains(h.stderr.String(), "cwk config show") {
-		t.Fatalf("unsafe root help presented a false command view: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") {
+		t.Fatalf("unsafe root help masqueraded as valid: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
-	h.reset(strings.NewReader("save\n"))
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitUnavailable {
-		t.Fatalf("unsafe config edit exit = %d, stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"help", "config"}); code != ExitOK {
+		t.Fatalf("unsafe scoped config help exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") || !strings.Contains(h.stderr.String(), "cwk config show") {
-		t.Fatalf("unsafe storage entered repair selector or lacked external-repair guidance: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	h.reset(strings.NewReader("\r"))
+	if code := runCLI(h.command, []string{"config"}); code != ExitUnavailable {
+		t.Fatalf("unsafe config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.terminal.opens != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") || !strings.Contains(h.stderr.String(), "cwk doctor") {
+		t.Fatalf("unsafe storage entered selector: opens=%d stderr=%q", h.terminal.opens, h.stderr.String())
+	}
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"doctor"}); code != ExitRejected {
+		t.Fatalf("unsafe doctor exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if !strings.Contains(h.stdout.String(), "command-selection\tfail\tstate=unsafe") {
+		t.Fatalf("doctor lacks safe storage state:\n%s", h.stdout.String())
 	}
 	contents, err := os.ReadFile(target)
 	if err != nil || string(contents) != "{}\n" {
@@ -432,45 +568,39 @@ func TestUnsafeProfileCannotEnterAnUnrepairableEditLoop(t *testing.T) {
 type unavailableCommandSelectionStore struct{}
 
 func (unavailableCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
-	return commandselection.Profile{}, false, fault.New(
-		fault.KindUnavailable,
-		"command_selection_unavailable",
-		"command selection is unavailable",
-		true,
-	)
+	return commandselection.Profile{}, false, fault.New(fault.KindUnavailable, "command_selection_unavailable", "command selection is unavailable", true)
 }
 
 func (unavailableCommandSelectionStore) Save(context.Context, commandselection.Profile) error {
 	return errors.New("must not save unavailable configuration")
 }
 
-func TestUnavailableProfileRoutesToInspectionAfterExternalRepair(t *testing.T) {
+func TestUnavailableProfileRoutesConfigToDoctorAndDoctorRemainsReadOnly(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newCLI(strings.NewReader("save\n"), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
+	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("runtime"))
 	command.commandSelection = configcmd.New(unavailableCommandSelectionStore{})
+	command.terminal = &fakeConfigTerminalOpener{}
 
-	for _, args := range [][]string{{"help"}, {"config", "edit"}} {
-		stdout.Reset()
-		stderr.Reset()
-		if code := command.RunContext(context.Background(), args); code != ExitUnavailable {
-			t.Fatalf("unavailable invocation %v exit=%d stdout=%q stderr=%q", args, code, stdout.String(), stderr.String())
-		}
-		if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: command_selection_unavailable") ||
-			!strings.Contains(stderr.String(), "cwk config show") || strings.Contains(stderr.String(), "cwk config edit") {
-			t.Fatalf("unavailable invocation %v has unusable recovery: stdout=%q stderr=%q", args, stdout.String(), stderr.String())
-		}
+	if code := command.RunContext(context.Background(), []string{"config"}); code != ExitUnavailable {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "cwk doctor") {
+		t.Fatalf("config unavailable recovery=%q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := command.RunContext(context.Background(), []string{"doctor"}); code != ExitRejected {
+		t.Fatalf("doctor exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "state=unavailable") {
+		t.Fatalf("doctor lacks unavailable diagnostic:\n%s", stdout.String())
 	}
 }
 
 type canceledCommandSelectionStore struct{}
 
 func (canceledCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
-	return commandselection.Profile{}, false, fault.New(
-		fault.KindCanceled,
-		"operation_canceled",
-		"command selection operation was canceled",
-		true,
-	)
+	return commandselection.Profile{}, false, fault.New(fault.KindCanceled, "operation_canceled", "command selection operation was canceled", true)
 }
 
 func (canceledCommandSelectionStore) Save(context.Context, commandselection.Profile) error {
@@ -481,20 +611,19 @@ func TestCanceledProfileLoadRetainsNormalRetryRecovery(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := newCLI(strings.NewReader(""), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
 	command.commandSelection = configcmd.New(canceledCommandSelectionStore{})
-
 	if code := command.RunContext(context.Background(), []string{"rooms", "list"}); code != ExitCanceled {
-		t.Fatalf("canceled profile load exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: operation_canceled") ||
-		!strings.Contains(stderr.String(), "cwk help") || strings.Contains(stderr.String(), "cwk config") {
-		t.Fatalf("canceled profile load has configuration-repair guidance: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: operation_canceled") || !strings.Contains(stderr.String(), "cwk help") {
+		t.Fatalf("canceled load recovery: stdout=%q stderr=%q", stdout.String(), stderr.String())
 	}
 }
 
 type cancelAfterConfigSaveStore struct {
-	cancel context.CancelFunc
-	saved  []string
-	saves  int
+	cancel        context.CancelFunc
+	saved         []string
+	saves         int
+	sessionClosed func() bool
 }
 
 func (s *cancelAfterConfigSaveStore) Load(context.Context) (commandselection.Profile, bool, error) {
@@ -502,35 +631,202 @@ func (s *cancelAfterConfigSaveStore) Load(context.Context) (commandselection.Pro
 }
 
 func (s *cancelAfterConfigSaveStore) Save(_ context.Context, profile commandselection.Profile) error {
+	if s.sessionClosed != nil && !s.sessionClosed() {
+		return fault.New(fault.KindContract, "save_before_terminal_restore", "terminal must be restored before save", false)
+	}
 	s.saves++
 	s.saved = profile.EnabledCommands()
 	s.cancel()
 	return nil
 }
 
-func TestConfigEditDoesNotOverwriteConfirmedSaveWithLateCancellation(t *testing.T) {
+func TestConfigRestoresBeforeSaveAndDoesNotOverwriteSuccessWithLateCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	store := &cancelAfterConfigSaveStore{cancel: cancel}
 	var stdout, stderr bytes.Buffer
-	command := newCLI(strings.NewReader("none\nsave\n"), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
+	terminal := &fakeConfigTerminalOpener{}
+	store := &cancelAfterConfigSaveStore{cancel: cancel, sessionClosed: func() bool { return terminal.last != nil && terminal.last.closed }}
+	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
 	command.commandSelection = configcmd.New(store)
-
-	if code := command.RunContext(ctx, []string{"config", "edit"}); code != ExitOK {
-		t.Fatalf("late-canceled save exit = %d, stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	command.terminal = terminal
+	if code := command.RunContext(ctx, []string{"config"}); code != ExitOK {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != 0 || !strings.Contains(stdout.String(), "config saved enabled=0") || stderr.Len() != 0 {
-		t.Fatalf("confirmed save was not reported exactly once: canceled=%v saves=%d saved=%v stdout=%q stderr=%q", ctx.Err(), store.saves, store.saved, stdout.String(), stderr.String())
+	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "config saved enabled=") || stderr.Len() != 0 {
+		t.Fatalf("save result: canceled=%v saves=%d saved=%d stdout=%q stderr=%q", ctx.Err(), store.saves, len(store.saved), stdout.String(), stderr.String())
+	}
+}
+
+func TestTerminalRestoreFailurePreventsSave(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+	h.terminal.closeErr = errors.New("restore failed")
+	if code := runCLI(h.command, []string{"config"}); code != ExitInternal {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "code: terminal_restore_failed") {
+		t.Fatalf("restore fault=%q", h.stderr.String())
+	}
+	if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
+		t.Fatalf("restore failure saved profile: configured=%v err=%v", configured, err)
+	}
+}
+
+func TestTerminalSetupRollbackFailureUsesNonRetryableRestoreRecovery(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	h.command.terminal = &fakeConfigTerminalOpener{openErr: errors.Join(errors.New("setup failed"), terminalui.ErrRestoreFailed)}
+	if code := runCLI(h.command, []string{"config"}); code != ExitInternal {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "code: terminal_restore_failed") || !strings.Contains(h.stderr.String(), "cwk doctor") {
+		t.Fatalf("setup rollback fault=%q", h.stderr.String())
+	}
+	if strings.Contains(h.stderr.String(), "cwk config\n") {
+		t.Fatalf("uncertain terminal state was presented as directly retryable: %q", h.stderr.String())
+	}
+	if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
+		t.Fatalf("setup rollback failure saved profile: configured=%v err=%v", configured, err)
+	}
+}
+
+func TestTerminalSizeAndInputFailuresRestoreAndSaveNothing(t *testing.T) {
+	for _, test := range []struct {
+		name     string
+		prepare  func(*fakeConfigTerminalOpener)
+		wantCode string
+	}{
+		{name: "size", prepare: func(terminal *fakeConfigTerminalOpener) { terminal.sizeErr = errors.New("size failed") }, wantCode: "terminal_setup_failed"},
+		{name: "input", prepare: func(terminal *fakeConfigTerminalOpener) { terminal.readErr = errors.New("read failed") }, wantCode: "configuration_input_failed"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+			test.prepare(h.terminal)
+			if code := runCLI(h.command, []string{"config"}); code != ExitInternal {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+			}
+			if !strings.Contains(h.stderr.String(), "code: "+test.wantCode) {
+				t.Fatalf("fault lacks %s: %q", test.wantCode, h.stderr.String())
+			}
+			if h.terminal.last == nil || !h.terminal.last.closed || h.terminal.last.closes != 1 {
+				t.Fatalf("terminal was not restored exactly once: %+v", h.terminal.last)
+			}
+			if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
+				t.Fatalf("failure saved profile: configured=%v err=%v", configured, err)
+			}
+		})
+	}
+}
+
+func TestHiddenSelectionCannotBeToggledOrSavedInAnUnusableTerminal(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		width, height int
+	}{
+		{name: "exact command does not fit", width: 16, height: 12},
+		{name: "no item row fits", width: 120, height: 3},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := newCommandSelectionHarness(t, strings.NewReader(" \rq"))
+			h.terminal.width = test.width
+			h.terminal.height = test.height
+			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+			}
+			if !strings.Contains(h.stdout.String(), "Resize terminal") || !strings.Contains(h.stdout.String(), "config unchanged") || strings.Contains(h.stdout.String(), "config saved") {
+				t.Fatalf("unusable terminal result:\n%s", h.stdout.String())
+			}
+			if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
+				t.Fatalf("hidden selection was persisted: configured=%v err=%v", configured, err)
+			}
+		})
+	}
+}
+
+func TestFirstActionAfterResizeOnlyFrameOnlyRedrawsTheSelection(t *testing.T) {
+	catalog := DefaultCatalog()
+	all := configurableCommandPaths(catalog)
+	withoutFirst := append([]string(nil), all[1:]...)
+	tests := []struct {
+		name           string
+		input          string
+		wantConfigured bool
+		wantPaths      []string
+	}{
+		{name: "first Enter only redraws", input: "\rq"},
+		{name: "first Space only redraws before Enter saves", input: " \r", wantConfigured: true, wantPaths: all},
+		{name: "second Enter may save", input: "\r\r", wantConfigured: true, wantPaths: all},
+		{name: "second Space may toggle", input: "  \r", wantConfigured: true, wantPaths: withoutFirst},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := newCommandSelectionHarness(t, strings.NewReader(test.input))
+			h.terminal.sizes = []fakeConfigTerminalSize{
+				{width: 16, height: 12},
+				{width: 120, height: 12},
+			}
+			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+			}
+			profile, configured, err := h.store.Load(context.Background())
+			if err != nil || configured != test.wantConfigured {
+				t.Fatalf("configured=%v err=%v, want configured=%v", configured, err, test.wantConfigured)
+			}
+			if configured && !reflect.DeepEqual(profile.EnabledCommands(), test.wantPaths) {
+				t.Fatalf("saved paths=%v want=%v", profile.EnabledCommands(), test.wantPaths)
+			}
+			if !strings.Contains(h.stdout.String(), "Resize terminal") || !strings.Contains(h.stdout.String(), all[0]) {
+				t.Fatalf("resize transition did not repaint the exact current identity:\n%s", h.stdout.String())
+			}
+		})
+	}
+}
+
+func TestInvalidViewNoticeMustFitCompletelyBeforeFurtherMutation(t *testing.T) {
+	catalog := DefaultCatalog()
+	before := configurableCommandPaths(catalog)
+	target := []string{"messages mark-read"}
+	for _, test := range []struct {
+		name          string
+		width, height int
+	}{
+		{name: "notice has no height", width: 120, height: 4},
+		{name: "notice does not fit width", width: 48, height: 5},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := configKeysForSelection(catalog, before, target) + "\rq"
+			h := newCommandSelectionHarness(t, strings.NewReader(input))
+			h.terminal.width = test.width
+			h.terminal.height = test.height
+			saveCommandSelection(t, h.store, before)
+			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+			}
+			if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, before) {
+				t.Fatalf("incomplete notice permitted a save: got=%v want=%v", got, before)
+			}
+			output := h.stdout.String()
+			if !strings.Contains(output, "Resize terminal") || strings.Contains(output, "config saved") {
+				t.Fatalf("incomplete notice did not fail closed:\n%s", output)
+			}
+		})
+	}
+}
+
+func TestLegacyDoctorAndVersionSelectionsLoadAndNormalizeOnEnter(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+	saveCommandSelection(t, h.store, []string{"doctor", "rooms list", "version"})
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if got, want := loadCommandSelection(t, h.store), []string{"rooms list"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("normalized paths=%v want=%v", got, want)
+	}
+	if !strings.Contains(h.stdout.String(), "legacy-removed=2") {
+		t.Fatalf("save lacks migration evidence:\n%s", h.stdout.String())
 	}
 }
 
 func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testing.T) {
 	h := newCommandSelectionHarness(t, strings.NewReader(""))
-	enabled := make([]string, 0)
-	for _, path := range configurableCommandPaths(DefaultCatalog()) {
-		if !strings.HasPrefix(path, "contact-requests ") {
-			enabled = append(enabled, path)
-		}
-	}
+	enabled := withoutPrefix(configurableCommandPaths(DefaultCatalog()), "contact-requests ")
 	saveCommandSelection(t, h.store, enabled)
 
 	for _, args := range [][]string{
@@ -542,24 +838,16 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 	} {
 		h.reset(strings.NewReader(""))
 		if code := runCLI(h.command, args); code == ExitOK {
-			t.Fatalf("hidden invocation %v unexpectedly succeeded: stdout=%q", args, h.stdout.String())
+			t.Fatalf("hidden invocation %v succeeded: stdout=%q", args, h.stdout.String())
 		}
 		if strings.Contains(h.stdout.String(), "contact-requests") {
-			t.Fatalf("hidden invocation %v leaked its path on stdout: %q", args, h.stdout.String())
+			t.Fatalf("hidden invocation %v leaked path: %q", args, h.stdout.String())
 		}
-	}
-
-	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
-		t.Fatalf("root help exit = %d, stderr = %q", code, h.stderr.String())
-	}
-	if strings.Contains(h.stdout.String(), "contact-requests") {
-		t.Fatalf("root help leaked disabled namespace:\n%s", h.stdout.String())
 	}
 
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"help", "--format", "agent"}); code != ExitOK {
-		t.Fatalf("root agent help exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("root agent help exit=%d stderr=%q", code, h.stderr.String())
 	}
 	var index agentIndexDocument
 	if err := json.Unmarshal(h.stdout.Bytes(), &index); err != nil {
@@ -571,8 +859,6 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 		}
 	}
 
-	// Scan every remaining scoped agent document: recovery actions and
-	// reference workflows must be projected from the same active catalog.
 	namespaces := make(map[string]struct{})
 	for _, command := range h.command.catalog.Commands() {
 		namespaces[commandNamespace(command.Path)] = struct{}{}
@@ -586,82 +872,211 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 		h.reset(strings.NewReader(""))
 		args := []string{"help", namespace, "--format", "agent"}
 		if code := runCLI(h.command, args); code != ExitOK {
-			t.Fatalf("scoped agent help %v exit = %d, stderr = %q", args, code, h.stderr.String())
+			t.Fatalf("scoped help %v exit=%d stderr=%q", args, code, h.stderr.String())
 		}
 		if strings.Contains(h.stdout.String(), "contact-requests") {
-			t.Fatalf("scoped agent help %q leaked disabled recovery/workflow:\n%s", namespace, h.stdout.String())
+			t.Fatalf("scoped help %q leaked disabled path:\n%s", namespace, h.stdout.String())
 		}
 	}
 }
 
-func TestDisabledRouteIsUnknownBeforePATResolutionAndSameCLIReenablesIt(t *testing.T) {
+func TestDisabledRouteIsUnknownBeforePATAndSameCLICanReenableIt(t *testing.T) {
 	h := newCommandSelectionHarness(t, strings.NewReader(""))
-	saveCommandSelection(t, h.store, []string{"doctor"})
+	saveCommandSelection(t, h.store, []string{})
 	factoryCalls := 0
 	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
 		factoryCalls++
 		return nil, nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "A Chatwork API token is required.", false)
 	}
 	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitUsage {
-		t.Fatalf("disabled rooms list exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("disabled route exit=%d stderr=%q", code, h.stderr.String())
 	}
 	if factoryCalls != 0 || !strings.Contains(h.stderr.String(), "code: unknown_command") {
-		t.Fatalf("disabled route resolved PAT or changed taxonomy: calls=%d stderr=%q", factoryCalls, h.stderr.String())
+		t.Fatalf("disabled route reached PAT: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
 
-	h.reset(strings.NewReader("all\nsave\n"))
-	if code := runCLI(h.command, []string{"config", "edit"}); code != ExitOK {
-		t.Fatalf("config edit all exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
+	all := configurableCommandPaths(DefaultCatalog())
+	h.reset(strings.NewReader(configKeysForSelection(DefaultCatalog(), []string{}, all)))
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("reenable config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 	}
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitAuthentication {
-		t.Fatalf("re-enabled rooms list exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("reenabled route exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if factoryCalls != 1 || strings.Contains(h.stderr.String(), "code: unknown_command") {
-		t.Fatalf("same CLI did not re-enable route under its original auth boundary: calls=%d stderr=%q", factoryCalls, h.stderr.String())
+	if factoryCalls != 1 {
+		t.Fatalf("PAT calls=%d want=1", factoryCalls)
 	}
 
-	// Re-enabling an access-changing mutation restores routing only; its
-	// invocation-local confirmation still rejects before authentication.
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"contact-requests", "accept", "--request", "123"}); code != ExitRejected {
-		t.Fatalf("re-enabled unconfirmed mutation exit = %d, stderr = %q", code, h.stderr.String())
+		t.Fatalf("unconfirmed mutation exit=%d stderr=%q", code, h.stderr.String())
 	}
 	if factoryCalls != 1 || !strings.Contains(h.stderr.String(), "code: mutation_rejected") {
-		t.Fatalf("re-enable bypassed confirmation or reached PAT: calls=%d stderr=%q", factoryCalls, h.stderr.String())
+		t.Fatalf("reenable bypassed confirmation: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
 }
 
-func TestConfigEditRejectsInvalidDependencyAndRecoveryViewsWithoutOverwriting(t *testing.T) {
-	tests := []struct {
-		name  string
-		paths []string
-		want  string
+func TestInvalidDependencyOrRecoverySelectionStaysInTUIAndDoesNotOverwrite(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		target []string
+		want   string
 	}{
-		{name: "missing producer", paths: []string{"messages mark-read"}, want: `enable one producer:`},
-		{name: "hidden recovery", paths: []string{"rooms list", "messages send"}, want: "messages list"},
-	}
-	for _, test := range tests {
+		{name: "missing producer", target: []string{"messages mark-read"}, want: "enable one producer:"},
+		{name: "hidden recovery", target: []string{"rooms list", "messages send"}, want: "messages list"},
+	} {
 		t.Run(test.name, func(t *testing.T) {
 			catalog := DefaultCatalog()
-			var numbers []string
-			for _, path := range test.paths {
-				numbers = append(numbers, fmt.Sprint(commandNumber(t, catalog, path)))
-			}
-			input := "none\n" + strings.Join(numbers, " ") + "\nsave\ncancel\n"
-			h := newCommandSelectionHarness(t, strings.NewReader(input))
 			before := configurableCommandPaths(catalog)
+			keys := configKeysForSelection(catalog, before, test.target)
+			h := newCommandSelectionHarness(t, strings.NewReader(keys))
 			saveCommandSelection(t, h.store, before)
-			if code := runCLI(h.command, []string{"config", "edit"}); code != ExitCanceled {
-				t.Fatalf("invalid view edit exit = %d, stdout = %q, stderr = %q", code, h.stdout.String(), h.stderr.String())
+			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 			}
 			if !strings.Contains(h.stdout.String(), test.want) {
-				t.Errorf("invalid view diagnostic lacks %q:\n%s", test.want, h.stdout.String())
+				t.Errorf("diagnostic lacks %q:\n%s", test.want, h.stdout.String())
 			}
 			if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, before) {
-				t.Fatalf("invalid view overwrote profile: got %v, want %v", got, before)
+				t.Fatalf("invalid view overwrote profile: got=%v want=%v", got, before)
 			}
 		})
+	}
+}
+
+type uncertainCommandSelectionStore struct {
+	profile commandselection.Profile
+	saved   bool
+	persist bool
+}
+
+func (s *uncertainCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
+	return s.profile, s.saved, nil
+}
+
+func (s *uncertainCommandSelectionStore) Save(_ context.Context, profile commandselection.Profile) error {
+	if s.persist {
+		s.profile = profile
+		s.saved = true
+	}
+	return errors.New("durability result unavailable")
+}
+
+func TestUnclassifiedSaveOutcomePointsToDoctorFingerprintReconciliation(t *testing.T) {
+	store := &uncertainCommandSelectionStore{persist: true}
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("runtime"))
+	command.commandSelection = configcmd.New(store)
+	command.terminal = &fakeConfigTerminalOpener{}
+	if code := command.RunContext(context.Background(), []string{"config"}); code != ExitContract {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "code: unclassified_mutation_outcome") || !strings.Contains(stderr.String(), "cwk doctor") || !strings.Contains(stderr.String(), "expected-source=saved") {
+		t.Fatalf("uncertain recovery=%q", stderr.String())
+	}
+	wantFingerprint := commandSelectionFingerprint(configurableCommandPaths(DefaultCatalog()))
+	if !strings.Contains(stderr.String(), wantFingerprint) {
+		t.Fatalf("uncertain fault lacks candidate fingerprint %s: %q", wantFingerprint, stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if code := command.RunContext(context.Background(), []string{"doctor"}); code != ExitOK {
+		t.Fatalf("doctor exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), wantFingerprint) || !strings.Contains(stdout.String(), "state=valid source=saved") {
+		t.Fatalf("doctor lacks reconciled fingerprint %s:\n%s", wantFingerprint, stdout.String())
+	}
+}
+
+func TestUnclassifiedSaveOutcomeDoesNotMistakeDefaultForPersistedCandidate(t *testing.T) {
+	store := &uncertainCommandSelectionStore{persist: false}
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("runtime"))
+	command.commandSelection = configcmd.New(store)
+	command.terminal = &fakeConfigTerminalOpener{}
+	if code := command.RunContext(context.Background(), []string{"config"}); code != ExitContract {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	wantFingerprint := commandSelectionFingerprint(configurableCommandPaths(DefaultCatalog()))
+	for _, want := range []string{"expected-source=saved", "candidate-fingerprint=" + wantFingerprint} {
+		if !strings.Contains(stderr.String(), want) {
+			t.Fatalf("uncertain fault lacks %q: %q", want, stderr.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	if code := command.RunContext(context.Background(), []string{"doctor"}); code != ExitOK {
+		t.Fatalf("doctor exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "state=valid source=default") || !strings.Contains(stdout.String(), wantFingerprint) {
+		t.Fatalf("doctor did not expose the same-selection but non-persisted state:\n%s", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "source=saved") {
+		t.Fatalf("default selection falsely reconciled as the saved candidate:\n%s", stdout.String())
+	}
+}
+
+func TestUnclassifiedSaveOutcomePublishesAndFollowsItsMessageGrammar(t *testing.T) {
+	helpHarness := newCommandSelectionHarness(t, strings.NewReader(""))
+	if code := runCLI(helpHarness.command, []string{"help", "config", "--format=agent"}); code != ExitOK {
+		t.Fatalf("help exit=%d stdout=%q stderr=%q", code, helpHarness.stdout.String(), helpHarness.stderr.String())
+	}
+	var helpDocument agentDocument
+	if err := json.Unmarshal(helpHarness.stdout.Bytes(), &helpDocument); err != nil {
+		t.Fatalf("config agent help: %v\n%s", err, helpHarness.stdout.String())
+	}
+	if len(helpDocument.Commands) != 1 || helpDocument.Commands[0].Path != "config" {
+		t.Fatalf("config help commands=%+v", helpDocument.Commands)
+	}
+	var declared *CommandError
+	for index := range helpDocument.Commands[0].Contract.Errors {
+		candidate := &helpDocument.Commands[0].Contract.Errors[index]
+		if candidate.Code == "unclassified_mutation_outcome" {
+			declared = candidate
+			break
+		}
+	}
+	if declared == nil || declared.MessageGrammar != commandSelectionUncertainMessageGrammar {
+		t.Fatalf("uncertain message grammar = %+v", declared)
+	}
+
+	store := &uncertainCommandSelectionStore{persist: true}
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("runtime"))
+	command.commandSelection = configcmd.New(store)
+	command.terminal = &fakeConfigTerminalOpener{}
+	if code := command.RunContext(context.Background(), []string{"--error-format=json", "config"}); code != ExitContract {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	var runtimeDocument errorDocument
+	if err := json.Unmarshal(stderr.Bytes(), &runtimeDocument); err != nil {
+		t.Fatalf("config JSON error: %v\n%s", err, stderr.String())
+	}
+	wantFingerprint := commandSelectionFingerprint(configurableCommandPaths(DefaultCatalog()))
+	if got, want := runtimeDocument.Error.Message, commandSelectionUncertainMessage(wantFingerprint); got != want {
+		t.Fatalf("uncertain message=%q want=%q", got, want)
+	}
+	if len(runtimeDocument.Error.NextActions) != 1 || runtimeDocument.Error.NextActions[0].Command != "doctor" {
+		t.Fatalf("uncertain next actions=%+v", runtimeDocument.Error.NextActions)
+	}
+}
+
+func TestCatalogRejectsUnsafeErrorMessageGrammar(t *testing.T) {
+	commands := DefaultCatalog().Commands()
+	for commandIndex := range commands {
+		if commands[commandIndex].Path != "config" {
+			continue
+		}
+		for errorIndex := range commands[commandIndex].Agent.Errors {
+			if commands[commandIndex].Agent.Errors[errorIndex].Code == "unclassified_mutation_outcome" {
+				commands[commandIndex].Agent.Errors[errorIndex].MessageGrammar = "unsafe\ngrammar"
+			}
+		}
+	}
+	if err := NewCatalog(commands...).Validate(); err == nil || !strings.Contains(err.Error(), "error message grammar") {
+		t.Fatalf("unsafe message grammar validation error=%v", err)
 	}
 }
 
@@ -674,25 +1089,4 @@ func writeMalformedCommandSelection(t *testing.T, base string, contents []byte) 
 	if err := os.WriteFile(filepath.Join(app, "command-selection.json"), contents, 0o600); err != nil {
 		t.Fatal(err)
 	}
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func equalCommandPaths(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
 }

@@ -13,14 +13,14 @@ import (
 )
 
 const (
-	// EditCommand is the exact catalog path that owns the fixed local profile.
-	EditCommand = "config edit"
+	// CommandPath is the exact catalog path that owns the fixed local profile.
+	CommandPath = "config"
 	// FixedTargetKind and FixedTargetID identify the command-owned singleton.
 	FixedTargetKind = "command-selection"
 	FixedTargetID   = "default"
 )
 
-var editImpact = operation.Impact{
+var configImpact = operation.Impact{
 	Cardinality:  operation.CardinalityOne,
 	Notification: operation.DeclarationNo,
 	AccessChange: operation.DeclarationNo,
@@ -112,23 +112,23 @@ func (s *Service) Save(ctx context.Context, profile commandselection.Profile) er
 	return s.store.Save(ctx, profile)
 }
 
-// EditIntent returns the exact fixed-target write intent owned by config edit.
-func EditIntent() operation.Intent {
+// Intent returns the exact fixed-target write intent owned by config.
+func Intent() operation.Intent {
 	return operation.Intent{
-		Command: EditCommand,
+		Command: CommandPath,
 		Effect:  operation.EffectWrite,
 		Target: operation.TargetRef{
 			Kind: FixedTargetKind,
 			ID:   FixedTargetID,
 		},
-		Impact: editImpact,
+		Impact: configImpact,
 	}
 }
 
-// EditRequest binds EditIntent to the execution boundary's expected catalog
+// Request binds Intent to the execution boundary's expected catalog
 // declaration.
-func EditRequest() execution.Request {
-	intent := EditIntent()
+func Request() execution.Request {
+	intent := Intent()
 	return execution.Request{
 		Intent:          intent,
 		ExpectedCommand: intent.Command,
@@ -138,8 +138,8 @@ func EditRequest() execution.Request {
 	}
 }
 
-// ExplicitSavePolicy admits only the exact config-edit singleton mutation and
-// only when the selector observed its literal save token. It is an execution
+// ExplicitSavePolicy admits only the exact config singleton mutation and only
+// when the selector observed Enter. It is an execution
 // invariant, not a security or human-authority claim.
 type ExplicitSavePolicy struct {
 	Confirmed bool
@@ -154,10 +154,10 @@ func (p ExplicitSavePolicy) Check(ctx context.Context, intent operation.Intent) 
 		return err
 	}
 	if !p.Confirmed {
-		return errors.New("literal save confirmation is required")
+		return errors.New("Enter confirmation is required")
 	}
-	if intent != EditIntent() {
-		return errors.New("command selection confirmation requires the exact config edit intent")
+	if intent != Intent() {
+		return errors.New("command selection confirmation requires the exact config intent")
 	}
 	return nil
 }

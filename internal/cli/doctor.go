@@ -26,6 +26,14 @@ func runDoctor(ctx context.Context, c *CLI, command CommandSpec, intent operatio
 	if err != nil {
 		return c.fail(ctx, err)
 	}
+	if check, present, err := c.commandSelectionDoctorCheck(ctx); err != nil {
+		return c.fail(ctx, err)
+	} else if present {
+		report.Checks = append(report.Checks, check)
+		if err := report.Validate(); err != nil {
+			return c.fail(ctx, fault.Wrap(fault.KindInternal, "internal_error", "The combined diagnostic report is invalid.", false, err))
+		}
+	}
 	if err := validateDoctorProjection(report); err != nil {
 		return c.fail(ctx, err)
 	}

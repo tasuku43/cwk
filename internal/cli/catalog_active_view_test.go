@@ -29,8 +29,8 @@ func TestDefaultCatalogDeclaresSelectableLeavesAndExactControlPlane(t *testing.T
 
 	for _, path := range []string{"doctor", "version"} {
 		command, found := catalog.Lookup(path)
-		if !found || !command.Configurable {
-			t.Fatalf("%q must be configurable: found=%v command=%+v", path, found, command)
+		if !found || command.Configurable {
+			t.Fatalf("%q must be always-on: found=%v command=%+v", path, found, command)
 		}
 	}
 	for _, command := range chatworkCommandSpecs() {
@@ -39,14 +39,14 @@ func TestDefaultCatalogDeclaresSelectableLeavesAndExactControlPlane(t *testing.T
 		}
 	}
 	always := catalog.AlwaysCommands()
-	if got, want := catalogPaths(NewCatalog(always...)), []string{"help", "config show", "config edit"}; !reflect.DeepEqual(got, want) {
+	if got, want := catalogPaths(NewCatalog(always...)), []string{"doctor", "help", "version", "config"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("always-on command paths = %v, want %v", got, want)
 	}
 }
 
 func TestActiveViewPreservesCatalogOrderNotSelectionOrder(t *testing.T) {
 	catalog := DefaultCatalog()
-	view, stale, err := catalog.ActiveView([]string{"version", "doctor"})
+	view, stale, err := catalog.ActiveView([]string{"rooms list", "account show"})
 	if err != nil {
 		t.Fatalf("ActiveView returned an error: %v", err)
 	}
@@ -55,7 +55,7 @@ func TestActiveViewPreservesCatalogOrderNotSelectionOrder(t *testing.T) {
 	}
 	want := make([]string, 0)
 	for _, command := range catalog.Commands() {
-		if !command.Configurable || command.Path == "doctor" || command.Path == "version" {
+		if !command.Configurable || command.Path == "account show" || command.Path == "rooms list" {
 			want = append(want, command.Path)
 		}
 	}
@@ -139,7 +139,7 @@ func TestActiveViewRejectsInvalidSelectionDocuments(t *testing.T) {
 		want    string
 	}{
 		{name: "always command", enabled: []string{"help"}, want: "always enabled"},
-		{name: "duplicate", enabled: []string{"doctor", "doctor"}, want: "duplicated"},
+		{name: "duplicate", enabled: []string{"rooms list", "rooms list"}, want: "duplicated"},
 		{name: "noncanonical", enabled: []string{"Rooms List"}, want: "command path is missing or invalid"},
 	}
 	for _, test := range tests {
@@ -197,7 +197,7 @@ func TestActiveViewAllowsTerminalProducer(t *testing.T) {
 
 func TestActiveViewDoesNotAliasFullCatalog(t *testing.T) {
 	full := DefaultCatalog()
-	view, _, err := full.ActiveView([]string{"doctor"})
+	view, _, err := full.ActiveView([]string{})
 	if err != nil {
 		t.Fatalf("ActiveView returned an error: %v", err)
 	}

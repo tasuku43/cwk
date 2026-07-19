@@ -32,9 +32,9 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		"Commands:\n" +
 		"  doctor   Run local, read-only diagnostics\n" +
 		"  help     Show human help or the agent command specification\n" +
-		"  version  Print version information\n\n" +
+		"  version  Print version information\n" +
+		"  config   Select the commands visible to agents\n\n" +
 		"Namespaces:\n" +
-		"  config            2 commands\n" +
 		"  account           2 commands\n" +
 		"  personal-tasks    1 command\n" +
 		"  contacts          1 command\n" +
@@ -225,6 +225,52 @@ func TestScopedAgentHelpIsACompleteProjectionOfEveryCatalogCommand(t *testing.T)
 				t.Errorf("agent command %q has incomplete output metadata: %+v", got.Path, got.Contract.Output)
 			}
 		})
+	}
+}
+
+func TestDoctorAgentHelpDeclaresCommandSelectionGrammarAndRuntimeRecovery(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := New(strings.NewReader(""), &stdout, &stderr)
+	if code := runCLI(command, []string{"help", "doctor", "--format=agent"}); code != ExitOK {
+		t.Fatalf("Run(help doctor --format=agent) code = %d, stderr = %q", code, stderr.String())
+	}
+	var document agentDocument
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+		t.Fatalf("doctor agent help is not JSON: %v\n%s", err, stdout.String())
+	}
+	if len(document.Commands) != 1 || document.Commands[0].Path != "doctor" {
+		t.Fatalf("doctor commands = %+v", document.Commands)
+	}
+	var detailDescription string
+	for _, field := range document.Commands[0].Contract.Output.Fields {
+		if field.Name == "detail" {
+			detailDescription = field.Description
+			break
+		}
+	}
+	if !strings.Contains(detailDescription, commandSelectionDoctorDetailGrammar) ||
+		!strings.Contains(detailDescription, "count is a non-negative base-10 integer") {
+		t.Fatalf("doctor detail contract does not publish the fixed grammar: %q", detailDescription)
+	}
+
+	for _, code := range []string{"command_selection_unsafe", "command_selection_unavailable"} {
+		var declared *CommandError
+		for index := range document.ErrorContract.GlobalErrors {
+			candidate := &document.ErrorContract.GlobalErrors[index]
+			if candidate.Code == code {
+				declared = candidate
+				break
+			}
+		}
+		if declared == nil || len(declared.NextActions) != 1 || declared.NextActions[0].Command != "doctor" {
+			t.Fatalf("declared %s recovery = %+v", code, declared)
+		}
+
+		runtimeFault := commandSelectionDispatchFault(fault.New(fault.KindUnavailable, code, code, false))
+		structured, ok := fault.PublicCopy(runtimeFault)
+		if !ok || len(structured.NextActions) != 1 || structured.NextActions[0] != declared.NextActions[0] {
+			t.Fatalf("runtime %s recovery = %+v; declared = %+v", code, structured, declared)
+		}
 	}
 }
 

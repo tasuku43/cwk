@@ -118,7 +118,7 @@ func TestServiceSaveDelegatesAndPreservesAdapterOutcome(t *testing.T) {
 
 	invokedErr := execution.New(ExplicitSavePolicy{Confirmed: true}).Invoke(
 		context.Background(),
-		EditRequest(),
+		Request(),
 		func(ctx context.Context, _ operation.Intent) error {
 			return New(&storeStub{saveErr: adapterErr}).Save(ctx, profile)
 		},
@@ -143,17 +143,17 @@ func TestServiceCancellationMakesZeroStoreCalls(t *testing.T) {
 }
 
 func TestExplicitSavePolicyAndRequestPinExactFixedIntent(t *testing.T) {
-	request := EditRequest()
+	request := Request()
 	if err := request.Intent.Validate(); err != nil {
-		t.Fatalf("EditIntent invalid: %v", err)
+		t.Fatalf("Intent invalid: %v", err)
 	}
-	if request.Intent.Command != "config edit" || request.Intent.Effect != operation.EffectWrite ||
+	if request.Intent.Command != "config" || request.Intent.Effect != operation.EffectWrite ||
 		request.Intent.Target != (operation.TargetRef{Kind: "command-selection", ID: "default"}) ||
 		request.Intent.Impact.Cardinality != operation.CardinalityOne ||
 		request.Intent.Impact.Notification != operation.DeclarationNo ||
 		request.Intent.Impact.AccessChange != operation.DeclarationNo ||
 		request.Intent.Impact.Destructive != operation.DeclarationNo {
-		t.Fatalf("EditRequest = %+v", request)
+		t.Fatalf("Request = %+v", request)
 	}
 
 	if err := (ExplicitSavePolicy{}).Check(context.Background(), request.Intent); err == nil {

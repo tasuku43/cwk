@@ -18,6 +18,7 @@ import (
 	"github.com/tasuku43/cwk/internal/infra/commandconfig"
 	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
+	"github.com/tasuku43/cwk/internal/infra/terminalui"
 )
 
 // CLI contains injected streams and application services.
@@ -31,6 +32,7 @@ type CLI struct {
 	baseCatalog      Catalog
 	catalog          Catalog
 	commandSelection *configcmd.Service
+	terminal         terminalui.Opener
 	doctor           *doctorcmd.Service
 	samples          *samplecmd.Service
 	chatwork         *chatworkcmd.Service
@@ -103,6 +105,7 @@ func newCLIWithSamples(
 		Version:     "dev",
 		baseCatalog: catalog,
 		catalog:     catalog,
+		terminal:    terminalui.New(),
 		doctor:      doctorcmd.New(inspector),
 		samples:     samplecmd.New(repository),
 	}
@@ -152,7 +155,7 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	commandArgs = normalizeRootAlias(commandArgs)
 	activeCatalog, activeErr := c.resolveActiveCatalog(ctx, baseCatalog)
 	if activeErr != nil {
-		if !commandViewControlInvocation(commandArgs) {
+		if !commandViewAlwaysInvocation(baseCatalog, commandArgs) {
 			return c.fail(ctx, commandSelectionDispatchFault(activeErr))
 		}
 		activeCatalog, _, err = baseCatalog.ActiveView([]string{})
@@ -213,7 +216,7 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 	}
 	enabled := make([]string, 0)
 	if configured {
-		enabled = profile.EnabledCommands()
+		enabled = normalizeLegacyCommandSelection(profile.EnabledCommands())
 	} else {
 		for _, command := range base.ConfigurableCommands() {
 			enabled = append(enabled, command.Path)
@@ -232,18 +235,24 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 	return view, nil
 }
 
-func commandViewControlInvocation(args []string) bool {
+func commandViewAlwaysInvocation(base Catalog, args []string) bool {
 	if len(args) == 0 {
 		return false
 	}
-	if args[0] == "config" {
-		return true
+	if args[0] == "help" {
+		_, selector, err := parseHelpArgs(args[1:])
+		if err != nil {
+			help, found := base.Lookup("help")
+			return found && !help.Configurable
+		}
+		if selector == "" {
+			return false
+		}
+		command, found := base.Lookup(selector)
+		return found && !command.Configurable
 	}
-	if args[0] != "help" {
-		return false
-	}
-	_, selector, err := parseHelpArgs(args[1:])
-	return err == nil && (selector == "config" || strings.HasPrefix(selector, "config "))
+	command, _, found := base.Match(args)
+	return found && !command.Configurable
 }
 
 func commandSelectionDispatchFault(err error) error {
@@ -251,9 +260,9 @@ func commandSelectionDispatchFault(err error) error {
 		next := fault.NextAction{Command: "help", Reason: "Retry the original command when the caller is ready."}
 		switch public.Code {
 		case "command_selection_invalid":
-			next = fault.NextAction{Command: "config edit", Reason: "Inspect and explicitly replace the invalid command selection."}
+			next = fault.NextAction{Command: "config", Reason: "Explicitly replace the invalid command selection."}
 		case "command_selection_unsafe", "command_selection_unavailable":
-			next = fault.NextAction{Command: "config show", Reason: "Restore the local configuration path, then inspect the command selection."}
+			next = fault.NextAction{Command: "doctor", Reason: "Restore the local configuration path, then inspect command-selection diagnostics."}
 		}
 		return fault.New(
 			public.Kind,

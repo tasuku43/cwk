@@ -208,12 +208,14 @@ type PaginationContract struct {
 }
 
 // CommandError declares one stable failure agents may handle without parsing
-// prose. Kind and Code use the exact runtime fault taxonomy.
+// undeclared prose. Kind and Code use the exact runtime fault taxonomy;
+// MessageGrammar is present when runtime values must remain in the message.
 type CommandError struct {
-	Code        string             `json:"code"`
-	Kind        fault.Kind         `json:"kind"`
-	Retryable   bool               `json:"retryable"`
-	NextActions []fault.NextAction `json:"next_actions"`
+	Code           string             `json:"code"`
+	Kind           fault.Kind         `json:"kind"`
+	Retryable      bool               `json:"retryable"`
+	MessageGrammar string             `json:"message_grammar,omitempty"`
+	NextActions    []fault.NextAction `json:"next_actions"`
 }
 
 // MutationContract connects a mutating command's public inputs to the target
@@ -330,19 +332,24 @@ func declaredCommandError(kind fault.Kind, code string, retryable bool, command,
 	}
 }
 
+func declaredCommandErrorWithMessageGrammar(kind fault.Kind, code string, retryable bool, grammar, command, reason string) CommandError {
+	declared := declaredCommandError(kind, code, retryable, command, reason)
+	declared.MessageGrammar = grammar
+	return declared
+}
+
 // DefaultCatalog returns the public CLI contract.
 func DefaultCatalog() Catalog {
 	commands := []CommandSpec{
 		CommandSpec{
-			Path:         "doctor",
-			Summary:      "Run local, read-only diagnostics",
-			Args:         "[--format tsv|json]",
-			Effect:       operation.EffectRead,
-			Role:         RoleUtility,
-			Configurable: true,
+			Path:    "doctor",
+			Summary: "Run local, read-only diagnostics",
+			Args:    "[--format tsv|json]",
+			Effect:  operation.EffectRead,
+			Role:    RoleUtility,
 			Agent: AgentContract{
 				CapabilityID: "system.diagnostics",
-				Outcome:      "Inspect the local runtime and receive a validated diagnostic report",
+				Outcome:      "Inspect the local runtime and command-selection state through a validated read-only diagnostic report",
 				Inputs: []CommandInput{
 					{Name: "--format", Source: InputSourceFlag, Required: false, Description: "Select the complete report representation.", AllowedValues: []string{"tsv", "json"}},
 				},
@@ -352,7 +359,7 @@ func DefaultCatalog() Catalog {
 					Fields: []OutputField{
 						{Name: "check", Type: OutputFieldTypeString, Description: "Stable diagnostic name with unsafe structural runes rendered as visible escapes."},
 						{Name: "status", Type: OutputFieldTypeString, Description: "Diagnostic result: pass, warn, or fail."},
-						{Name: "detail", Type: OutputFieldTypeString, Description: "Diagnostic detail with unsafe structural runes rendered as visible escapes."},
+						{Name: "detail", Type: OutputFieldTypeString, Description: "Diagnostic-specific detail with unsafe structural runes rendered as visible escapes. For check=command-selection, the exact ordered grammar is `" + commandSelectionDoctorDetailGrammar + "`; count is a non-negative base-10 integer."},
 					},
 					Completeness:      OutputCompletenessComplete,
 					JSONEnvelope:      "report",
@@ -411,11 +418,10 @@ func DefaultCatalog() Catalog {
 			handler: runHelp,
 		},
 		CommandSpec{
-			Path:         "version",
-			Summary:      "Print version information",
-			Effect:       operation.EffectRead,
-			Role:         RoleUtility,
-			Configurable: true,
+			Path:    "version",
+			Summary: "Print version information",
+			Effect:  operation.EffectRead,
+			Role:    RoleUtility,
 			Agent: AgentContract{
 				CapabilityID: "cli.version",
 				Outcome:      "Read the executable version and optional source commit identity",
@@ -779,6 +785,11 @@ func validateAgentContract(command CommandSpec) error {
 		)
 		if err := candidate.Validate(); err != nil {
 			return fmt.Errorf("agent error %d: %w", index, err)
+		}
+		if declaredError.MessageGrammar != "" {
+			if err := validateContractText("error message grammar", declaredError.MessageGrammar); err != nil {
+				return fmt.Errorf("agent error %q: %w", declaredError.Code, err)
+			}
 		}
 		for _, action := range declaredError.NextActions {
 			if err := validateContractText("error next command", action.Command); err != nil {
