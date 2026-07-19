@@ -188,8 +188,10 @@ The test suite has complementary levels:
   Width/height tests also prove a hidden or truncated exact command disables
   movement, toggle, and save while retaining a non-saving exit.
 - Command-selection storage tests cover XDG behavior on macOS/Linux, AppData on
-  Windows, strict bounded JSON, stale paths, modes, symbolic links, special
-  files, Unix rename/directory durability, Windows replace-existing behavior,
+  Windows, resolve-once support for an existing configuration-home symbolic
+  link, rejection of broken aliases and symbolic-link owned targets, strict
+  bounded JSON, stale paths, modes, special files, Unix rename/directory
+  durability, Windows replace-existing behavior,
   pre-Enter q/EOF/context cancellation, and unchanged prior bytes after an
   invalid selection. Repair tests distinguish malformed content from unsafe or
   inaccessible storage, reject false empty root help, migrate formerly
@@ -307,7 +309,7 @@ Every strong statement should identify its enforcement path.
 | Chatwork rate-limit evidence | Strict header/body parsing tests, five-minute plausibility bounds, read/mutation catalog signatures, advisory-timing validation, and text/JSON unknown-timing snapshots |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
-| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, strict platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
 | Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
 | Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |

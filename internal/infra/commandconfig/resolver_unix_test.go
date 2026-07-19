@@ -29,6 +29,33 @@ func TestResolveUserConfigDirUsesAbsoluteXDGOnUnixIncludingDarwin(t *testing.T) 
 	}
 }
 
+func TestProductionStoreResolvesSymlinkedXDGConfigHome(t *testing.T) {
+	parent := t.TempDir()
+	realBase := filepath.Join(parent, "dotfiles-config")
+	if err := os.Mkdir(realBase, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(parent, "xdg")
+	if err := os.Symlink(filepath.Base(realBase), alias); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("XDG_CONFIG_HOME", alias)
+	t.Setenv("HOME", filepath.Join(t.TempDir(), "home-must-not-be-used"))
+
+	profile, _ := commandselection.New([]string{"rooms list"})
+	store := NewFileStore()
+	if err := store.Save(context.Background(), profile); err != nil {
+		t.Fatalf("Save with symlinked XDG configuration home: %v", err)
+	}
+	loaded, configured, err := store.Load(context.Background())
+	if err != nil || !configured || len(loaded.EnabledCommands()) != 1 || loaded.EnabledCommands()[0] != "rooms list" {
+		t.Fatalf("Load with symlinked XDG configuration home = %#v, configured=%t err=%v", loaded, configured, err)
+	}
+	if _, err := os.Lstat(filepath.Join(realBase, applicationDirectory, configurationFile)); err != nil {
+		t.Fatalf("resolved XDG target does not contain configuration: %v", err)
+	}
+}
+
 func TestResolveUserConfigDirFallsBackToHomeDotConfig(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "home")
 	if err := os.Mkdir(home, 0o700); err != nil {

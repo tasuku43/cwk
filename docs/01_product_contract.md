@@ -139,6 +139,10 @@ grant or revoke Chatwork authority.
 The preference is stored separately from credentials and the retired OAuth
 configuration: `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json`
 on macOS and Linux, and `%AppData%\\cwk\\command-selection.json` on Windows.
+On macOS and Linux, an existing configuration-home symbolic link is resolved
+once to its absolute directory target before `cwk` joins or opens its owned
+path. The `cwk` directory and `command-selection.json` remain non-symbolic
+owned targets with their strict shape and Unix-mode contracts.
 The adapter uses a restricted same-directory temporary file, rename and
 directory sync on Unix, and portable replace-existing behavior on Windows;
 the Windows API does not supply a cross-platform atomicity or durability

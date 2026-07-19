@@ -94,8 +94,11 @@ The command-selection adapter owns one bounded, strict JSON preference file:
 `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
 Linux, and `%AppData%\\cwk\\command-selection.json` on Windows. It keeps that
 non-secret preference separate from the retired OAuth `cwk/config.json`,
-rejects symbolic-link or special-file targets, and replaces from a validated
-same-directory temporary file. Unix uses rename and directory sync through the
+resolves an existing configuration-home alias once to its absolute directory
+target, rejects a symbolic-link or special-file `cwk` directory or preference
+target, and replaces from a validated same-directory temporary file. Because
+load and save continue from the resolved path, a later alias change cannot
+redirect that invocation. Unix uses rename and directory sync through the
 already-open directory root. Windows requests replace-existing through the
 portable API, which does not guarantee atomicity or directory durability. The
 adapter implements an application-owned load/save port; it does not decide

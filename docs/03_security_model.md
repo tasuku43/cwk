@@ -246,9 +246,14 @@ The non-secret preference is stored at
 Linux and `%AppData%\\cwk\\command-selection.json` on Windows. It is separate
 from PAT state and from ADR 0003's retired OAuth `cwk/config.json`, and its
 schema accepts only bounded exact command paths. It must not contain a token,
-provider response, personal data, or copied command metadata. Infrastructure
-rejects symbolic-link and special-file targets and replaces from a restricted
-same-directory temporary file. Unix uses rename plus opened-directory sync;
+provider response, personal data, or copied command metadata. On macOS and
+Linux, infrastructure permits the configuration home itself to be an existing
+symbolic-link alias: it resolves the complete alias once to an absolute
+directory and uses only that result for the invocation. It still rejects
+symbolic-link or special-file `cwk` directories and preference files and
+replaces from a restricted same-directory temporary file. This distinction
+supports user-controlled dotfiles namespaces without letting a mutable owned
+leaf redirect replacement. Unix uses rename plus opened-directory sync;
 Windows replace-existing has no portable atomicity or durability guarantee.
 Malformed, unsafe, or unavailable state never silently activates the complete
 Chatwork surface or makes a failed load executable. Only malformed serialized

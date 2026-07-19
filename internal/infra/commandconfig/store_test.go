@@ -124,23 +124,48 @@ func TestFileStoreRejectsOversizedConfiguration(t *testing.T) {
 	}
 }
 
+func TestFileStoreResolvesConfigurationBaseSymlink(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic-link creation requires platform-specific privileges on Windows")
+	}
+	parent := t.TempDir()
+	realBase := filepath.Join(parent, "real")
+	if err := os.Mkdir(realBase, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	linkBase := filepath.Join(parent, "link")
+	if err := os.Symlink(filepath.Base(realBase), linkBase); err != nil {
+		t.Fatal(err)
+	}
+	store := NewFileStoreAt(linkBase)
+	if profile, configured, err := store.Load(context.Background()); err != nil || configured || len(profile.EnabledCommands()) != 0 {
+		t.Fatalf("missing Load through base symlink = %#v, configured=%t err=%v", profile, configured, err)
+	}
+	profile, _ := commandselection.New([]string{"rooms list"})
+	if err := store.Save(context.Background(), profile); err != nil {
+		t.Fatalf("Save through base symlink: %v", err)
+	}
+	loaded, configured, err := store.Load(context.Background())
+	if err != nil || !configured || fmt.Sprint(loaded.EnabledCommands()) != "[rooms list]" {
+		t.Fatalf("saved Load through base symlink = %#v, configured=%t err=%v", loaded, configured, err)
+	}
+	assertExactMode(t, filepath.Join(realBase, applicationDirectory), 0o700, true)
+	assertExactMode(t, filepath.Join(realBase, applicationDirectory, configurationFile), 0o600, false)
+}
+
 func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symbolic-link creation requires platform-specific privileges on Windows")
 	}
-	t.Run("base symlink", func(t *testing.T) {
+	t.Run("broken base symlink", func(t *testing.T) {
 		parent := t.TempDir()
-		realBase := filepath.Join(parent, "real")
-		if err := os.Mkdir(realBase, 0o700); err != nil {
-			t.Fatal(err)
-		}
 		linkBase := filepath.Join(parent, "link")
-		if err := os.Symlink(realBase, linkBase); err != nil {
+		if err := os.Symlink(filepath.Join(parent, "missing"), linkBase); err != nil {
 			t.Fatal(err)
 		}
 		_, _, err := NewFileStoreAt(linkBase).Load(context.Background())
 		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
-			t.Fatalf("Load base symlink error = %v", err)
+			t.Fatalf("Load broken base symlink error = %v", err)
 		}
 		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 	})

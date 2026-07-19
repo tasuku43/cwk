@@ -53,8 +53,8 @@ func NewFileStore() *FileStore {
 	return &FileStore{userConfigDir: resolveUserConfigDir}
 }
 
-// NewFileStoreAt constructs an isolated store below an already-resolved
-// absolute user configuration directory.
+// NewFileStoreAt constructs an isolated store below an absolute user
+// configuration directory, which may be an existing symbolic-link alias.
 func NewFileStoreAt(userConfigDir string) *FileStore {
 	return &FileStore{userConfigDir: func() (string, error) { return userConfigDir, nil }}
 }
@@ -330,7 +330,28 @@ func (s *FileStore) baseDirectory() (string, error) {
 	if err != nil || base == "" || !filepath.IsAbs(base) {
 		return "", unavailable("configuration directory resolution")
 	}
-	return filepath.Clean(base), nil
+	base = filepath.Clean(base)
+	info, err := os.Lstat(base)
+	if errors.Is(err, fs.ErrNotExist) {
+		return base, nil
+	}
+	if err != nil {
+		return "", unavailable("configuration directory metadata")
+	}
+	if info.Mode()&os.ModeSymlink == 0 {
+		return base, nil
+	}
+
+	resolved, err := filepath.EvalSymlinks(base)
+	if err != nil || resolved == "" || !filepath.IsAbs(resolved) {
+		return "", unsafeStorage("configuration base symlink resolution")
+	}
+	resolved = filepath.Clean(resolved)
+	resolvedInfo, err := os.Lstat(resolved)
+	if err != nil || resolvedInfo.Mode()&os.ModeSymlink != 0 || !resolvedInfo.IsDir() {
+		return "", unsafeStorage("configuration base symlink target")
+	}
+	return resolved, nil
 }
 
 func inspectDirectory(path string, restricted bool) (fs.FileInfo, bool, error) {
