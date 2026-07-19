@@ -103,12 +103,21 @@ const (
 	configTUIEscapeSS3
 )
 
+type configTUIFullWidthSpaceState uint8
+
+const (
+	configTUIFullWidthSpaceNone configTUIFullWidthSpaceState = iota
+	configTUIFullWidthSpaceE3
+	configTUIFullWidthSpaceE380
+)
+
 // configTUIKeyParser incrementally decodes the small key vocabulary used by
 // the selector. A caller that receives no continuation byte for a lone Escape
 // invokes flushEscape after its own bounded timeout.
 type configTUIKeyParser struct {
-	escapeState configTUIEscapeState
-	swallowLF   bool
+	escapeState         configTUIEscapeState
+	fullWidthSpaceState configTUIFullWidthSpaceState
+	swallowLF           bool
 }
 
 func (p *configTUIKeyParser) feed(chunk []byte) []configTUIKey {
@@ -161,6 +170,25 @@ func (p *configTUIKeyParser) feedByte(value byte, keys *[]configTUIKey) {
 			return
 		}
 
+		switch p.fullWidthSpaceState {
+		case configTUIFullWidthSpaceE3:
+			p.fullWidthSpaceState = configTUIFullWidthSpaceNone
+			if value == 0x80 {
+				p.fullWidthSpaceState = configTUIFullWidthSpaceE380
+				return
+			}
+			// Preserve the current byte as an independent key when the pending
+			// prefix was another three-byte UTF-8 rune.
+			continue
+		case configTUIFullWidthSpaceE380:
+			p.fullWidthSpaceState = configTUIFullWidthSpaceNone
+			if value == 0x80 {
+				appendConfigTUIKey(keys, configTUIKeyToggle)
+				return
+			}
+			continue
+		}
+
 		if p.swallowLF {
 			p.swallowLF = false
 			if value == '\n' {
@@ -168,6 +196,11 @@ func (p *configTUIKeyParser) feedByte(value byte, keys *[]configTUIKey) {
 			}
 		}
 		switch value {
+		case 0xe3:
+			// Japanese input methods commonly emit U+3000 for the physical
+			// Space key. Accept its UTF-8 form as the same toggle action while
+			// retaining ASCII Space as the canonical terminal key.
+			p.fullWidthSpaceState = configTUIFullWidthSpaceE3
 		case 0x1b:
 			p.escapeState = configTUIEscapeStarted
 		case 0x03:

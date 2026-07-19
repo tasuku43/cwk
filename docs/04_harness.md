@@ -148,8 +148,9 @@ The test suite has complementary levels:
 - Command-selection TTY tests drive the single `config` selector through a
   synthetic terminal. They require textual `[read]`, `[create]`, and `[write]`
   effect badges even when color is unavailable, catalog-derived color spans
-  that never replace those labels, deterministic Up/Down movement, Space
-  toggling, Enter-only save, and q/Escape/Ctrl-C cancellation. An invalid
+  that never replace those labels, deterministic Up/Down movement, ASCII and
+  fragmented UTF-8 U+3000 Space toggling, Enter-only save, and
+  q/Escape/Ctrl-C cancellation. An invalid
   active view remains inside the selector with an actionable diagnostic and
   zero writes. Every exit path restores the alternate screen, cursor, output
   mode, and raw input mode; restoration completes before an Enter-confirmed

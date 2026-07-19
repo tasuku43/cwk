@@ -22,6 +22,8 @@
   goroutine.
 - [x] Add deterministic key parsing, bounded viewport, and terminal lifecycle
   tests using synthetic streams.
+- [x] Accept ASCII and fragmented UTF-8 U+3000 Space as one toggle action and
+  prove unrelated UTF-8 cannot consume or fabricate the following key.
 - [x] Render a literal read/create/write badge on every selectable row, with
   cyan/yellow/magenta as optional non-semantic cues and no red effect mapping.
 - [x] Add deterministic ANSI, ANSI-stripped semantic, narrow-width,

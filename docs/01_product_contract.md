@@ -65,7 +65,9 @@ Chatwork task leaf is configurable; no local always-on operation is stored as a
 current selectable path. Bare `config` opens the sole selector on interactive
 stdin and stdout terminals. Up and Down move the cursor, Space toggles exactly
 one Chatwork leaf, Enter validates and persists the complete exact-path
-allowlist, and `q` exits with the prior profile unchanged. Redirected or
+allowlist, and `q` exits with the prior profile unchanged. The selector treats
+ASCII Space and U+3000 full-width space from a terminal input method as the
+same toggle without changing Enter's save boundary. Redirected or
 otherwise non-terminal input fails with a typed fault rather than selecting a
 second grammar.
 

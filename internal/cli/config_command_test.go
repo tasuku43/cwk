@@ -304,6 +304,22 @@ func TestConfigTUITogglesInCatalogOrderShowsEffectsAndSavesAfterRestore(t *testi
 	}
 }
 
+func TestConfigTUIFullWidthSpaceTogglesCurrentItem(t *testing.T) {
+	catalog := DefaultCatalog()
+	want := configurableCommandPaths(catalog)
+	want = append([]string(nil), want[1:]...)
+	h := newCommandSelectionHarness(t, strings.NewReader("　\r"))
+	if code := runCLI(h.command, []string{"config"}); code != ExitOK {
+		t.Fatalf("config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if got := loadCommandSelection(t, h.store); !reflect.DeepEqual(got, want) {
+		t.Fatalf("saved paths=%v want=%v", got, want)
+	}
+	if h.terminal.last == nil || !h.terminal.last.closed {
+		t.Fatalf("terminal was not restored: %+v", h.terminal.last)
+	}
+}
+
 func TestBatchedMoveToggleAndSaveRepaintsEachActionableSelection(t *testing.T) {
 	catalog := DefaultCatalog()
 	choices := catalog.ConfigurableCommands()

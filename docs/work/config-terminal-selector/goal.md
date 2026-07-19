@@ -41,6 +41,9 @@ selected direct cursor navigation and one exact command as the intended UX.
   and `config edit` are absent from routing and every help projection.
 - [x] On an interactive terminal, Up/Down moves a visible cursor, Space toggles
   exactly one choice, and Enter is the only key that starts persistence.
+- [x] ASCII Space and fragmented UTF-8 U+3000 full-width space produce the same
+  single toggle, so a Japanese terminal input method does not make the
+  advertised interaction inert.
 - [x] Every selectable row displays its literal `read`, `create`, or `write`
   effect badge. Cyan/read, yellow/create, and magenta/write are supplemental
   cues only; the badge remains sufficient without color, and red is not used

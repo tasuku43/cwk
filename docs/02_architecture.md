@@ -203,9 +203,10 @@ CLI derives the always-on line and the profile-failure recovery island from
 that cannot show the complete current command identity admits only a
 non-saving exit until the terminal is resized.
 
-The selector persists only exact catalog paths. Up/Down moves, Space changes
-the in-memory draft, and q, Escape, EOF, context cancellation, or terminal
-closure exits without calling the store. Enter first validates active-view
+The selector persists only exact catalog paths. Up/Down moves, ASCII Space or
+the UTF-8 encoding of U+3000 full-width space changes the in-memory draft, and
+q, Escape, EOF, context cancellation, or terminal closure exits without calling
+the store. Enter first validates active-view
 reference and recovery closure and constructs the fixed-target mutation
 request, then restores the terminal, and only after successful restoration
 crosses `execution.Invoker` and calls the save port. A validation or terminal

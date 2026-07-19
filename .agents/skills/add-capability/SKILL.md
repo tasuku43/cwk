@@ -191,8 +191,10 @@ a read command with a hidden save. CLI owns the pure selector model, key
 semantics, catalog-derived rows, viewport, and presentation. Infrastructure
 alone imports `golang.org/x/term` and owns terminal detection, raw/alternate
 screen modes, sizing, and restoration. Require interactive stdin and stdout;
-non-TTY input fails before persistence. Up/Down and Space change only a draft.
-On Enter, validate active-view closure and the fixed-target request, restore the
+non-TTY input fails before persistence. Up/Down and Space change only a draft;
+accept ASCII Space and fragmented UTF-8 U+3000 full-width space as the same
+toggle so a Japanese input method does not make the advertised key inert. On
+Enter, validate active-view closure and the fixed-target request, restore the
 terminal, then invoke save; a restoration failure must make zero save calls.
 Quit, Escape, EOF, terminal closure, and pre-save cancellation leave the last
 saved profile unchanged on every graceful path.

@@ -125,6 +125,29 @@ func TestConfigTUIKeyParserNormalizesCRLFAndRecognizesSelectorKeys(t *testing.T)
 	}
 }
 
+func TestConfigTUIKeyParserRecognizesFragmentedFullWidthSpace(t *testing.T) {
+	var parser configTUIKeyParser
+	encoded := []byte("　")
+	for index, value := range encoded {
+		keys := parser.feed([]byte{value})
+		if index+1 < len(encoded) {
+			if len(keys) != 0 {
+				t.Fatalf("fragment %d yielded keys: %v", index, keys)
+			}
+			continue
+		}
+		if !reflect.DeepEqual(keys, []configTUIKey{configTUIKeyToggle}) {
+			t.Fatalf("full-width Space = %v, want toggle", keys)
+		}
+	}
+
+	// A different three-byte rune must not consume the following ASCII Space
+	// or fabricate an additional toggle.
+	if keys := parser.feed([]byte("あ ")); !reflect.DeepEqual(keys, []configTUIKey{configTUIKeyToggle}) {
+		t.Fatalf("unrelated UTF-8 plus Space = %v, want one toggle", keys)
+	}
+}
+
 func TestConfigTUIKeyParserReprocessesByteAfterNonSequenceEscape(t *testing.T) {
 	var parser configTUIKeyParser
 	keys := parser.feed([]byte{0x1b, ' '})
