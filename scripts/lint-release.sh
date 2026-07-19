@@ -69,6 +69,14 @@ for required in \
     exit 1
   }
 done
+for required_install in \
+  'bin.install "@@BINARY_NAME@@"' \
+  'doc.install "LICENSE", "THIRD_PARTY_NOTICES"'; do
+  grep -qF "$required_install" "$template" || {
+    echo "Formula template is missing required install: $required_install" >&2
+    exit 1
+  }
+done
 
 if grep -qF -- '--clobber' .github/workflows/release.yml; then
   echo "release workflow must never overwrite existing release assets" >&2
@@ -218,6 +226,8 @@ cleanup() { rm -rf -- "$release_root"; }
 trap cleanup EXIT
 release_input_roots=(
   go.mod
+  LICENSE
+  THIRD_PARTY_NOTICES
   .harness/project.json
   .codex
   .github/workflows/release.yml
@@ -273,12 +283,6 @@ report_release_input_drift() {
   diff -u "$before" "$after" >&2 || true
 }
 
-dist=$release_root/dist
-primary_go_cache=$release_root/go-cache-primary
-reproduction_go_cache=$release_root/go-cache-reproduction
-mkdir -p "$dist" "$primary_go_cache" "$reproduction_go_cache"
-release_tag=v0.0.0
-release_revision=0000000000000000000000000000000000000000
 targets=(
   linux/amd64/tar.gz
   linux/arm64/tar.gz
@@ -286,6 +290,69 @@ targets=(
   darwin/arm64/tar.gz
   windows/amd64/zip
 )
+reviewed_notice_modules=$release_root/reviewed-notice-modules
+printf '%s\n' \
+  'golang.org/x/sys v0.37.0' \
+  'golang.org/x/term v0.36.0' >"$reviewed_notice_modules"
+production_modules_raw=$release_root/production-modules-raw
+: >"$production_modules_raw"
+for target in "${targets[@]}"; do
+  goos=${target%%/*}
+  remainder=${target#*/}
+  goarch=${remainder%%/*}
+  target_environment=(CGO_ENABLED=0 GOOS="$goos" GOARCH="$goarch")
+  case "$goarch" in
+    amd64) target_environment+=(GOAMD64=v1) ;;
+    arm64) target_environment+=(GOARM64=v8.0) ;;
+  esac
+  env "${target_environment[@]}" go list -deps \
+    -f '{{with .Module}}{{if not .Main}}{{if .Replace}}{{.Replace.Path}} {{.Replace.Version}}{{else}}{{.Path}} {{.Version}}{{end}}{{end}}{{end}}' \
+    "./cmd/$binary" >>"$production_modules_raw"
+done
+production_modules=$release_root/production-modules
+awk 'NF == 2' "$production_modules_raw" | LC_ALL=C sort -u >"$production_modules"
+if ! cmp -s "$reviewed_notice_modules" "$production_modules"; then
+  echo "linked production modules do not match the reviewed notice manifest:" >&2
+  diff -u "$reviewed_notice_modules" "$production_modules" >&2 || true
+  exit 1
+fi
+
+go_license=$(go env GOROOT)/LICENSE
+go_patents=$(go env GOROOT)/PATENTS
+term_license=$(go list -m -f '{{.Dir}}/LICENSE' golang.org/x/term)
+sys_license=$(go list -m -f '{{.Dir}}/LICENSE' golang.org/x/sys)
+for dependency_license in "$go_license" "$go_patents" "$term_license" "$sys_license"; do
+  if [[ ! -f $dependency_license || -L $dependency_license ]]; then
+    echo "reviewed dependency license is not a regular file: $dependency_license" >&2
+    exit 1
+  fi
+done
+expected_notices=$release_root/expected-third-party-notices
+{
+  printf '%s\n\n' 'THIRD-PARTY SOFTWARE NOTICES'
+  printf '%s\n%s\n' 'Go standard library and runtime go1.26.5' '------------------------------------------'
+  cat -- "$go_license"
+  printf '\n'
+  printf '%s\n%s\n' 'Go standard library and runtime PATENTS' '---------------------------------------'
+  cat -- "$go_patents"
+  printf '\n'
+  printf '%s\n%s\n' 'golang.org/x/term v0.36.0' '--------------------------'
+  cat -- "$term_license"
+  printf '\n'
+  printf '%s\n%s\n' 'golang.org/x/sys v0.37.0' '-------------------------'
+  cat -- "$sys_license"
+} >"$expected_notices"
+if ! cmp -s THIRD_PARTY_NOTICES "$expected_notices"; then
+  echo "THIRD_PARTY_NOTICES does not reproduce the reviewed Go license, patent grant, and module licenses verbatim" >&2
+  exit 1
+fi
+
+dist=$release_root/dist
+primary_go_cache=$release_root/go-cache-primary
+reproduction_go_cache=$release_root/go-cache-reproduction
+mkdir -p "$dist" "$primary_go_cache" "$reproduction_go_cache"
+release_tag=v0.0.0
+release_revision=0000000000000000000000000000000000000000
 expected_assets=$release_root/expected-assets.txt
 : >"$expected_assets"
 primary_inputs_before=$release_root/primary-inputs-before.txt
@@ -315,7 +382,8 @@ for target in "${targets[@]}"; do
   else
     members=$(tar -tzf "$archive")
   fi
-  if [[ $members != "$executable" ]]; then
+  expected_members=$(printf 'LICENSE\nTHIRD_PARTY_NOTICES\n%s' "$executable")
+  if [[ $members != "$expected_members" ]]; then
     echo "archive $asset contains unexpected entries: $members" >&2
     exit 1
   fi
@@ -327,8 +395,24 @@ for target in "${targets[@]}"; do
   else
     tar -xzf "$archive" -C "$extract_dir"
   fi
-  if [[ $(find "$extract_dir" -type f | wc -l | tr -d ' ') -ne 1 || ! -f $extract_dir/$executable ]]; then
-    echo "archive $asset did not extract to exactly $executable" >&2
+  if [[ $(find "$extract_dir" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ') -ne 3 || \
+        -n $(find "$extract_dir" -mindepth 1 -maxdepth 1 ! -type f -print -quit) || \
+        ! -f $extract_dir/$executable || ! -f $extract_dir/LICENSE || ! -f $extract_dir/THIRD_PARTY_NOTICES ]]; then
+    echo "archive $asset did not extract to exactly $executable, LICENSE, and THIRD_PARTY_NOTICES" >&2
+    exit 1
+  fi
+  go run ./tools/archivepack verify \
+    "$extension" \
+    "$archive" \
+    "$extract_dir/$executable" "$executable" 0755 \
+    THIRD_PARTY_NOTICES THIRD_PARTY_NOTICES 0644 \
+    LICENSE LICENSE 0644
+  if ! cmp -s LICENSE "$extract_dir/LICENSE"; then
+    echo "archive $asset contains changed project license" >&2
+    exit 1
+  fi
+  if ! cmp -s THIRD_PARTY_NOTICES "$extract_dir/THIRD_PARTY_NOTICES"; then
+    echo "archive $asset contains changed third-party notices" >&2
     exit 1
   fi
   metadata=$(go version -m "$extract_dir/$executable")
@@ -462,7 +546,8 @@ for expected_formula in \
   "$repository_url/releases/download/$release_tag/$arm64_asset" \
   "$repository_url/releases/download/$release_tag/$amd64_asset" \
   "sha256 \"$arm64_sha\"" \
-  "sha256 \"$amd64_sha\""; do
+  "sha256 \"$amd64_sha\"" \
+  'doc.install "LICENSE", "THIRD_PARTY_NOTICES"'; do
   if ! grep -Fq "$expected_formula" "$formula"; then
     echo "rendered Formula is missing: $expected_formula" >&2
     exit 1

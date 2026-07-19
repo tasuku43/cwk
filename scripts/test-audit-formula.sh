@@ -9,8 +9,21 @@ trap cleanup EXIT
 
 fake_brew=$PWD/scripts/testdata/fake-brew.sh
 formula=$test_root/cwk.rb
-printf '%s\n' 'class Cwk < Formula' 'end' >"$formula"
+printf '%s\n' \
+  'class Cwk < Formula' \
+  '  def install' \
+  '    doc.install "LICENSE", "THIRD_PARTY_NOTICES"' \
+  '  end' \
+  'end' >"$formula"
 legacy_tap=cwk-ci/audit
+
+missing_notices_formula=$test_root/cwk-missing-notices.rb
+printf '%s\n' 'class Cwk < Formula' 'end' >"$missing_notices_formula"
+if BREW_COMMAND=$fake_brew AUDIT_FORMULA_BINARY=cwk \
+  scripts/audit-formula.sh "$missing_notices_formula" >/dev/null 2>&1; then
+  echo "audit-formula accepted a Formula that discards release notices" >&2
+  exit 1
+fi
 
 run_case() {
   expected=$1

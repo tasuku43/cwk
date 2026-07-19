@@ -16,6 +16,7 @@ class @@FORMULA_CLASS@@ < Formula
 
   def install
     bin.install "@@BINARY_NAME@@"
+    doc.install "LICENSE", "THIRD_PARTY_NOTICES"
   end
 
   test do

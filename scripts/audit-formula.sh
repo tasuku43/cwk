@@ -19,6 +19,10 @@ if [[ ! -f $formula ]]; then
   echo "Formula not found: $formula" >&2
   exit 2
 fi
+if ! grep -qFx '    doc.install "LICENSE", "THIRD_PARTY_NOTICES"' "$formula"; then
+  echo "Formula must install LICENSE and THIRD_PARTY_NOTICES under its documentation prefix" >&2
+  exit 1
+fi
 if ! command -v "$brew_command" >/dev/null 2>&1; then
   echo "Homebrew command not found: $brew_command" >&2
   exit 2

@@ -75,11 +75,27 @@ if [[ $goos == "$host_os" && $goarch == "$host_arch" ]]; then
   fi
 fi
 
-go run ./tools/archivepack "$archive_format" "$work_dir/$executable" "$executable" "$work_dir/$archive"
+go run ./tools/archivepack \
+  "$archive_format" \
+  "$work_dir/$archive" \
+  "$work_dir/$executable" "$executable" 0755 \
+  THIRD_PARTY_NOTICES THIRD_PARTY_NOTICES 0644 \
+  LICENSE LICENSE 0644
+go run ./tools/archivepack verify \
+  "$archive_format" \
+  "$work_dir/$archive" \
+  "$work_dir/$executable" "$executable" 0755 \
+  THIRD_PARTY_NOTICES THIRD_PARTY_NOTICES 0644 \
+  LICENSE LICENSE 0644
+expected_members=$(printf 'LICENSE\nTHIRD_PARTY_NOTICES\n%s' "$executable")
 if [[ $goos == windows ]]; then
-  [[ $(unzip -Z1 "$work_dir/$archive") == "$executable" ]]
+  members=$(unzip -Z1 "$work_dir/$archive")
 else
-  [[ $(tar -tzf "$work_dir/$archive") == "$executable" ]]
+  members=$(tar -tzf "$work_dir/$archive")
+fi
+if [[ $members != "$expected_members" ]]; then
+  echo "release archive contains unexpected entries: $members" >&2
+  exit 1
 fi
 if ! ln "$work_dir/$archive" "$archive_path"; then
   echo "release archive appeared during build or cannot be created without overwrite: $archive_path" >&2

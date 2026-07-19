@@ -57,11 +57,11 @@ Each tag publishes:
 - generated release notes or reviewed notes describing user-visible changes;
 - prerelease metadata when the tag contains a prerelease suffix.
 
-Archives contain the intended binary and only explicitly reviewed supporting files such as the license. `scripts/package-release.sh` builds and verifies artifacts; `task release:check` validates the packaging contract.
+Archives contain exactly the intended binary, the project `LICENSE`, and the checked-in `THIRD_PARTY_NOTICES` artifact. `scripts/package-release.sh` builds and verifies artifacts; `task release:check` validates the packaging contract, verifies the notice text against the exact pinned Go toolchain license and patent-grant sources plus the reviewed dependency-module licenses, and fails closed if the modules linked by any supported target differ from that reviewed notice manifest.
 
 The packaging command is create-only. It stages and inspects an archive in a temporary directory on the output filesystem, then publishes it with an atomic no-overwrite hard link. It refuses to overwrite an archive that already exists or appears during the build.
 
-Archive creation uses the Go standard library rather than host-specific `tar`, `gzip`, or `zip` creation flags. Every archive contains one regular executable with mode `0755`, a fixed UTC modification time, empty user and group names, and numeric user and group IDs of zero. Gzip and ZIP headers use the same canonical time and contain no build-host identity. The packaging boundary forces module mode; fixes `GOAMD64` or `GOARM64` at the portable baseline; sets `GOFIPS140=off`; ignores ambient Go workspace, toolchain, experiment, and flag configuration; and disables implicit Go VCS stamping because the reviewed full revision is already embedded explicitly. Repository release inputs—including production and tool source, packaging and Formula policy, workflow configuration, project metadata, and the Codex harness—must be regular files and are content-fingerprinted through the final release check; dependency modules are verified around each archive pass; and local filesystem module replacements are rejected because their source would sit outside the public release input boundary. The exact Go version in `go.mod`, `-trimpath`, the source bytes, tag, revision, target, and verified module graph are part of the reproducibility input. This contract does not promise equal bytes across different Go versions or establish who performed a build.
+Archive creation uses the Go standard library rather than host-specific `tar`, `gzip`, or `zip` creation flags. Every archive contains exactly three regular entries in bytewise basename order: `LICENSE` and `THIRD_PARTY_NOTICES` with mode `0644`, then the executable with mode `0755`. Every entry has the same fixed UTC modification time; tar entries have empty user and group names and numeric user and group IDs of zero. Gzip and ZIP headers use the canonical time and contain no build-host identity. The packaging and release gates reopen each completed archive through the Go archive readers and verify the exact ordered names, header modes, canonical metadata, and reviewed contents rather than trusting caller arguments or extraction behavior. The packaging boundary forces module mode; fixes `GOAMD64` or `GOARM64` at the portable baseline; sets `GOFIPS140=off`; ignores ambient Go workspace, toolchain, experiment, and flag configuration; and disables implicit Go VCS stamping because the reviewed full revision is already embedded explicitly. Repository release inputs—including production and tool source, `LICENSE`, `THIRD_PARTY_NOTICES`, packaging and Formula policy, workflow configuration, project metadata, and the Codex harness—must be regular files and are content-fingerprinted through the final release check; dependency modules are verified around each archive pass; and local filesystem module replacements are rejected because their source would sit outside the public release input boundary. The exact Go version in `go.mod`, `-trimpath`, the source bytes, tag, revision, target, and verified module graph are part of the reproducibility input. This contract does not promise equal bytes across different Go versions or establish who performed a build.
 
 ## Executable release profile
 
@@ -70,14 +70,14 @@ Archive creation uses the Go standard library rather than host-specific `tar`, `
 1. requires the exact Go toolchain selected by `go.mod`;
 2. independently builds Linux `amd64` and `arm64`, macOS `amd64` and `arm64`, and Windows `amd64` twice with `CGO_ENABLED=0` and separate Go build caches;
 3. fingerprints release inputs before and after each pass and after the remaining release checks, reports source drift separately, and proves byte-for-byte reproducibility by comparing every corresponding archive digest across the two output directories;
-4. verifies the exact archive set and the single expected member in every primary archive;
-5. extracts every primary archive and checks its Go module, `GOOS`, and `GOARCH` build metadata;
+4. verifies the exact archive set and the three expected members, canonical order, header modes, canonical metadata, project license, and notice contents in every primary archive;
+5. extracts every primary archive and checks the executable's Go module, `GOOS`, and `GOARCH` build metadata;
 6. creates `checksums.txt`, proves it has a one-to-one correspondence with all five primary archives, and recomputes every digest;
 7. positively renders a stable Homebrew Formula from the real macOS archive checksums and verifies its URLs, digests, version, class, and placeholder removal;
 8. runs `ruby -c` against the rendered Formula; and
 9. exercises the isolated-tap ownership test for Formula audit cleanup.
 
-The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation itself has no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
+The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation and canonical header verification themselves have no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
 
 The workflow runs this canonical release profile once inside the Ubuntu preflight's full gate. The later macOS Formula job is deliberately narrower: it renders the checksum-pinned Formula, runs `ruby -c`, and performs the real Homebrew strict audit. It does not repeat `check.sh release`, because that would rebuild the complete five-target verification matrix on a different host and would incorrectly make Formula publication depend on Linux preflight tools such as ShellCheck being installed on the macOS runner. The Formula job consumes only artifacts produced after the preflight and build jobs succeed.
 
@@ -88,7 +88,7 @@ The release workflow follows this order:
 1. Validate tag syntax and resolve its exact source revision.
 2. Run source, security, release, and public-boundary gates required by policy.
 3. Build the complete pure-Go platform matrix from that revision.
-4. Verify archive names, contents, executable behavior, version, and commit.
+4. Verify archive names, canonical order and header modes, reviewed contents, executable behavior, version, and commit.
 5. Generate and verify `checksums.txt`.
 6. Publish one GitHub Release from the reviewed tag.
 7. For a stable tag, render the checksum-pinned Homebrew Formula and open a Formula update pull request.
@@ -109,6 +109,7 @@ Stable releases support macOS `arm64` and `amd64` through a generated Formula. T
 - uses the public release URL;
 - pins the exact checksum;
 - installs the binary without cloning source or requiring a Go toolchain;
+- installs the project license and third-party notices under the package documentation prefix;
 - contains no unreplaced template value or private authentication behavior.
 
 `scripts/render-formula.sh` renders the project Formula from the reviewed template. Formula changes are proposed through a pull request so the generated diff and release references are visible before merge.

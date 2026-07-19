@@ -87,7 +87,7 @@ Before publication:
 - Choose and commit an explicit project license.
 - Review dependency and bundled-asset licenses.
 - Decide the inbound contribution policy, such as MIT inbound licensing, DCO, or CLA.
-- Add required notices and attribution.
+- Add required notices and attribution. The checked-in project `LICENSE` and `THIRD_PARTY_NOTICES` are reviewed release inputs and accompany every public binary archive; the notice file preserves the pinned Go runtime/standard-library license and patent grant as well as every linked third-party module license.
 - Confirm names, logos, and examples do not imply unauthorized endorsement.
 
 This template uses MIT. A derived project may keep MIT, but must record that as a deliberate decision rather than inheriting it silently.
@@ -135,7 +135,7 @@ Before each public release, verify:
 - version and commit metadata are correct;
 - supported-platform artifacts are complete;
 - checksums and any provenance or signatures are present and verified;
-- archives contain only intended files;
+- archives contain only the intended executable, project `LICENSE`, and reviewed `THIRD_PARTY_NOTICES` artifact;
 - installation instructions work in a clean environment;
 - release notes disclose compatibility, security, and migration impact;
 - no artifact, Formula, URL, log, or metadata contains a forbidden identifier.
