@@ -51,7 +51,7 @@ jobs:
           else
             go run ./tools/releaseversion "${tag}" >>"${GITHUB_OUTPUT}"
           fi
-          revision=$(git rev-list -n 1 -- "${tag}")
+          revision=$(git rev-parse --verify "${tag}^{commit}")
           echo "tag=${tag}" >>"${GITHUB_OUTPUT}"
           echo "revision=${revision}" >>"${GITHUB_OUTPUT}"
 

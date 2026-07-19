@@ -211,7 +211,7 @@ for required in \
   '          ref: ${{ github.event_name == '\''workflow_dispatch'\'' && inputs.tag || github.ref }}' \
   '          RECOVERY_TAG: ${{ inputs.tag }}' \
   '            go run ./tools/releaseversion --stable "${tag}" >>"${GITHUB_OUTPUT}"' \
-  '          revision=$(git rev-list -n 1 -- "${tag}")' \
+  '          revision=$(git rev-parse --verify "${tag}^{commit}")' \
   '          echo "tag=${tag}" >>"${GITHUB_OUTPUT}"'; do
   require_exact_line "$preflight_job" "$required" "release preflight recovery binding"
 done

@@ -37,6 +37,12 @@
   annotated-note publication and adds a stable-tag-only, read-only recovery
   dispatch that verifies an existing six-file Release before resuming the same
   Formula audit and App-scoped tap publisher.
+- Recovery run `29699022181` exposed a preflight-only argument-order defect:
+  `git rev-list -n 1 -- <tag>` supplied no revision because `--` starts the
+  path list. It failed before the full gate and before any Release/tap write.
+  The correction peels the already validated annotated tag with
+  `git rev-parse --verify "${tag}^{commit}"`; a negative mutation test rejects
+  replacing that immutable binding with `HEAD`.
 
 ## Relevant structure
 

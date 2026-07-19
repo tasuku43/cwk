@@ -162,7 +162,7 @@ generation input.
 
 The manual recovery input is accepted only as a stable SemVer tag, is passed to
 shell through a quoted environment value, and resolves to the same immutable
-revision in preflight. Recovery is deliberately limited to the Homebrew
+peeled commit with `git rev-parse --verify` in preflight. Recovery is deliberately limited to the Homebrew
 rollout: it cannot be used to republish GitHub Release assets or to update a
 prerelease Formula.
 

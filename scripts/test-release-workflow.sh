@@ -112,6 +112,9 @@ replace_nth_line unpinned-publish-tag-checkout \
 replace_nth_line nonstable-recovery-tag \
   '            go run ./tools/releaseversion --stable "${tag}" >>"${GITHUB_OUTPUT}"' \
   '            go run ./tools/releaseversion "${tag}" >>"${GITHUB_OUTPUT}"'
+replace_nth_line moving-recovery-revision \
+  '          revision=$(git rev-parse --verify "${tag}^{commit}")' \
+  '          revision=$(git rev-parse --verify HEAD)'
 replace_nth_line prerelease-formula-recovery \
   "    if: github.event_name == 'workflow_dispatch' && needs.preflight.outputs.stable == 'true'" \
   "    if: github.event_name == 'workflow_dispatch'"
