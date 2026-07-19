@@ -175,6 +175,12 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 		return chatwork.Request{}, fmt.Errorf("Chatwork task declaration is invalid")
 	}
 	request := chatwork.Request{Task: command.chatwork.Task}
+	if request.Task == chatwork.TaskMessagesList {
+		// The public task defaults to the latest bounded provider window. Provider
+		// differential state remains available only through explicit
+		// --window changes, which the binding loop applies below.
+		request.ForceRecent = true
+	}
 	inputs := make(map[string]CommandInput, len(command.Agent.Inputs))
 	for _, input := range command.Agent.Inputs {
 		inputs[input.Name] = input

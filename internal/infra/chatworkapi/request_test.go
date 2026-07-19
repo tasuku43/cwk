@@ -152,8 +152,8 @@ func TestBuildMessageListRequestEmitsOnlyDocumentedForceQuery(t *testing.T) {
 		force bool
 		path  string
 	}{
-		"changes default": {path: "/rooms/2/messages"},
-		"recent":          {force: true, path: "/rooms/2/messages?force=1"},
+		"changes": {path: "/rooms/2/messages"},
+		"recent":  {force: true, path: "/rooms/2/messages?force=1"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := completeRequest(chatwork.TaskMessagesList)

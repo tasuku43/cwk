@@ -67,7 +67,7 @@ func activeMessageAdjacencyScenario() situation {
 		RequiredPaths: []string{"messages list"},
 		MaxCommands:   1,
 		Operations: map[string]fixtureOperation{
-			"messages list": operation("messages list", fixture.Result, map[string]string{"--room": "3001", "--window": "recent"}),
+			"messages list": operation("messages list", fixture.Result, map[string]string{"--room": "3001"}),
 		},
 	}
 }

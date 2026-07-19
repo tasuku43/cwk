@@ -58,7 +58,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window changes|recent] [--limit <count>] [--sender <account-ref>] [--context none|replies]"
+	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--limit <count>] [--sender <account-ref>] [--context none|replies]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -88,9 +88,12 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 		t.Fatalf("context input contract = %+v", context)
 	}
 	window := inputs["--window"]
-	if !reflect.DeepEqual(window.AllowedValues, []string{"changes", "recent"}) ||
-		!strings.Contains(window.Description, "changes") || !strings.Contains(window.Description, "default") ||
-		!strings.Contains(window.Description, "latest") {
+	if !reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
+		!strings.Contains(window.Description, "recent") || !strings.Contains(window.Description, "default") ||
+		!strings.Contains(window.Description, "differential") {
 		t.Fatalf("window input contract = %+v", window)
+	}
+	if strings.Contains(limit.Description, "Use --window recent") {
+		t.Fatalf("limit input repeats the new default window: %+v", limit)
 	}
 }

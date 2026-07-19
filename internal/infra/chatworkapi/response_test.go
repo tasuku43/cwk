@@ -1,6 +1,7 @@
 package chatworkapi
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
@@ -102,6 +103,35 @@ func TestEmptyMessageListPreservesExactRoomScope(t *testing.T) {
 	}
 	if err := result.ValidateFor(request); err != nil {
 		t.Fatalf("empty message window is not request-bound: %v", err)
+	}
+}
+
+func TestMessageListCoverageMatchesRequestedWindow(t *testing.T) {
+	for name, test := range map[string]struct {
+		forceRecent bool
+		kind        string
+		description string
+	}{
+		"recent": {
+			forceRecent: true,
+			kind:        "latest_window",
+			description: "latest messages",
+		},
+		"changes": {
+			forceRecent: false,
+			kind:        "differential_window",
+			description: "differential retrieval",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			request := completeRequest(chatwork.TaskMessagesList)
+			request.ForceRecent = test.forceRecent
+			coverage := coverageFor(request)
+			if coverage.Kind != test.kind || coverage.Limit != 100 || coverage.Complete ||
+				!strings.Contains(coverage.Description, test.description) {
+				t.Fatalf("coverage = %+v, want kind %q, limit 100, incomplete, description containing %q", coverage, test.kind, test.description)
+			}
+		})
 	}
 }
 

@@ -104,7 +104,7 @@ func TestActiveMessageLimitAddsReplyContextAfterPrimaryLimit(t *testing.T) {
 func TestActiveMessageLimitScenarioIsOneCommandWithoutPostProcessing(t *testing.T) {
 	scenario := messageLimitScenario()
 	wantArgv := []string{
-		"messages", "list", "--room", "3601", "--window", "recent", "--limit", "2", "--context", "replies",
+		"messages", "list", "--room", "3601", "--limit", "2", "--context", "replies",
 	}
 	if scenario.ID != "active.message-limit" || !reflect.DeepEqual(scenario.CommandArgv, wantArgv) ||
 		scenario.ProviderCallBudget != 1 || scenario.ExternalProcessingBudget != 0 || !json.Valid(scenario.AnswerKey) {

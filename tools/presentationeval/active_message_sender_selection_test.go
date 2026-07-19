@@ -218,7 +218,7 @@ func TestActiveMessageSenderSelectionProjectionIsDirectAndStructurallySafe(t *te
 func TestActiveMessageSenderSelectionScenarioIsOneCommandWithoutPostProcessing(t *testing.T) {
 	scenario := messageSenderSelectionScenario()
 	wantArgv := []string{
-		"messages", "list", "--room", "3501", "--window", "recent",
+		"messages", "list", "--room", "3501",
 		"--sender", "2501", "--sender", "2502", "--context", "replies",
 	}
 	if scenario.ID != "active.message-sender-selection" ||

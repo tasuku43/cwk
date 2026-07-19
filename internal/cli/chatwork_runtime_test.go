@@ -69,7 +69,7 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 	}}
 	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
 
-	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--window=recent"})
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7"})
 	if code != ExitOK {
 		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
 	}
@@ -88,6 +88,40 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("output does not contain %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestRunChatworkExplicitChangesPreservesDifferentialWindow(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		kind := "latest_window"
+		description := "latest bounded window"
+		if !request.ForceRecent {
+			kind = "differential_window"
+			description = "bounded provider changes"
+		}
+		return chatwork.Result{
+			Task:        request.Task,
+			MessageRoom: request.Room,
+			Coverage:    chatwork.Coverage{Kind: kind, Limit: 100, Complete: false, Description: description},
+			Messages:    []chatwork.Message{},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--window", "changes"})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
+	}
+	if port.request.Room != room || port.request.ForceRecent {
+		t.Fatalf("request = %+v, want exact room and explicit differential window", port.request)
+	}
+	if !strings.Contains(stdout.String(), "messages room-ref=7 count=0 window=changes source-limit=100") {
+		t.Fatalf("explicit changes output lost its typed window:\n%s", stdout.String())
 	}
 }
 
@@ -117,7 +151,7 @@ func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) 
 	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
 
 	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
-		"--room", "7", "--window=recent", "--sender", "1", "--sender=2", "--context", "replies",
+		"--room", "7", "--sender", "1", "--sender=2", "--context", "replies",
 	})
 	if code != ExitOK {
 		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
@@ -125,8 +159,8 @@ func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) 
 	if authenticator.calls != 1 || port.calls != 1 {
 		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
 	}
-	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
-		t.Fatalf("local message filter crossed the provider port: %+v", port.request.MessageFilter)
+	if !port.request.ForceRecent || len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
+		t.Fatalf("default window or provider request is wrong: %+v", port.request)
 	}
 	for _, want := range []string{
 		"selection source-count=5 senders=[1,2] context=replies anchors=[#2,#3]",
@@ -165,7 +199,7 @@ func TestRunChatworkLimitsNewestCandidatesAndKeepsProviderOrder(t *testing.T) {
 	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
 
 	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
-		"--room", "7", "--window", "recent", "--limit", "2",
+		"--room", "7", "--limit", "2",
 	})
 	if code != ExitOK {
 		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
@@ -173,8 +207,8 @@ func TestRunChatworkLimitsNewestCandidatesAndKeepsProviderOrder(t *testing.T) {
 	if authenticator.calls != 1 || port.calls != 1 {
 		t.Fatalf("calls = auth %d, port %d; want 1, 1", authenticator.calls, port.calls)
 	}
-	if len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
-		t.Fatalf("local limit crossed the provider port: %+v", port.request.MessageFilter)
+	if !port.request.ForceRecent || len(port.request.MessageFilter.Senders) != 0 || port.request.MessageFilter.Context != "" || port.request.MessageFilter.Limit != 0 {
+		t.Fatalf("default window or provider request is wrong: %+v", port.request)
 	}
 	for _, want := range []string{
 		"messages room-ref=7 count=2 window=recent source-limit=100",
@@ -203,8 +237,34 @@ func TestBuildChatworkMessageFilterDefaultsContextAndPreservesSenderOrder(t *tes
 	}
 	if len(request.MessageFilter.Senders) != 2 ||
 		request.MessageFilter.Senders[0].Value != "2" || request.MessageFilter.Senders[1].Value != "1" ||
-		request.MessageFilter.Context != chatwork.MessageContextNone {
-		t.Fatalf("message filter = %+v", request.MessageFilter)
+		request.MessageFilter.Context != chatwork.MessageContextNone || !request.ForceRecent {
+		t.Fatalf("message request = %+v", request)
+	}
+}
+
+func TestBuildChatworkMessageWindowDefaultsRecentAndAcceptsExplicitValues(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	for name, test := range map[string]struct {
+		args        []string
+		forceRecent bool
+	}{
+		"omitted":          {args: []string{"--room", "7"}, forceRecent: true},
+		"explicit recent":  {args: []string{"--room", "7", "--window", "recent"}, forceRecent: true},
+		"explicit changes": {args: []string{"--room", "7", "--window", "changes"}, forceRecent: false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			parsed, err := parseChatworkArguments(spec, test.args)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request, err := buildChatworkRequest(spec, parsed)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if request.ForceRecent != test.forceRecent {
+				t.Fatalf("ForceRecent = %t, want %t", request.ForceRecent, test.forceRecent)
+			}
+		})
 	}
 }
 
@@ -220,7 +280,7 @@ func TestBuildChatworkMessageLimitAcceptsInclusiveBoundsAndDefaultsContext(t *te
 			t.Fatalf("limit %s build error = %v", value, err)
 		}
 		want, _ := strconv.Atoi(value)
-		if request.MessageFilter.Limit != want || request.MessageFilter.Context != chatwork.MessageContextNone || request.Limit != 0 {
+		if request.MessageFilter.Limit != want || request.MessageFilter.Context != chatwork.MessageContextNone || request.Limit != 0 || !request.ForceRecent {
 			t.Fatalf("limit %s request = %+v", value, request)
 		}
 	}
@@ -232,8 +292,8 @@ func TestBuildChatworkMessageLimitAcceptsInclusiveBoundsAndDefaultsContext(t *te
 	if err != nil {
 		t.Fatal(err)
 	}
-	if request.MessageFilter.Limit != 10 || request.MessageFilter.Context != chatwork.MessageContextReplies {
-		t.Fatalf("limit-only reply context request = %+v", request.MessageFilter)
+	if request.MessageFilter.Limit != 10 || request.MessageFilter.Context != chatwork.MessageContextReplies || !request.ForceRecent {
+		t.Fatalf("limit-only reply context request = %+v", request)
 	}
 }
 

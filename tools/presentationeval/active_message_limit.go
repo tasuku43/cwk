@@ -78,7 +78,7 @@ func messageLimitScenario() activeMessageLimitScenario {
 			"Report source count, candidate count, selected anchors, added context, and the exact references needed to show the newest primary message. " +
 			"Use one cwk command only; do not use jq, grep, an external parser, source inspection, provider-order assumptions, or extra Chatwork calls.",
 		CommandArgv: []string{
-			"messages", "list", "--room", "3601", "--window", "recent", "--limit", "2", "--context", "replies",
+			"messages", "list", "--room", "3601", "--limit", "2", "--context", "replies",
 		},
 		ProviderCallBudget:       1,
 		ExternalProcessingBudget: 0,

@@ -506,7 +506,9 @@ func TestMessageListHumanHelpPublishesBoundedSelection(t *testing.T) {
 	}
 	for _, want := range []string{
 		"--room     required flag, reference=chatwork-room",
-		"--window   optional flag, values=changes|recent",
+		"--window   optional flag, values=recent|changes",
+		"latest bounded window (recent, default)",
+		"provider differential window (changes)",
 		"--limit    optional flag",
 		"newest",
 		"1",
@@ -524,7 +526,7 @@ func TestMessageListHumanHelpPublishesBoundedSelection(t *testing.T) {
 	}
 }
 
-func TestMessageListScopedAgentHelpPublishesLimitContract(t *testing.T) {
+func TestMessageListScopedAgentHelpPublishesSelectionDefaults(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)
 	if code := runCLI(command, []string{"help", "messages", "list", "--format=agent"}); code != ExitOK {
@@ -537,18 +539,26 @@ func TestMessageListScopedAgentHelpPublishesLimitContract(t *testing.T) {
 	if len(document.Commands) != 1 || document.Commands[0].Path != "messages list" {
 		t.Fatalf("agent commands = %+v", document.Commands)
 	}
-	var limit *CommandInput
+	var limit, window *CommandInput
 	for index := range document.Commands[0].Contract.Inputs {
 		input := &document.Commands[0].Contract.Inputs[index]
-		if input.Name == "--limit" {
+		switch input.Name {
+		case "--limit":
 			limit = input
-			break
+		case "--window":
+			window = input
 		}
 	}
 	if limit == nil || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
 		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
 		!strings.Contains(limit.Description, "newest") || !strings.Contains(limit.Description, "reply context") {
 		t.Fatalf("agent limit contract = %+v", limit)
+	}
+	if window == nil || window.Required || window.Repeatable || window.Source != InputSourceFlag ||
+		!reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
+		!strings.Contains(window.Description, "recent, default") ||
+		!strings.Contains(window.Description, "differential") {
+		t.Fatalf("agent window contract = %+v", window)
 	}
 }
 

@@ -102,7 +102,7 @@ func TestActiveMessageAdjacencyScenarioRequiresNoPostProcessingOrExploration(t *
 		t.Fatalf("active scenario is not a closed one-command readiness probe: %#v", scenario)
 	}
 	operation := scenario.Operations["messages list"]
-	if !reflect.DeepEqual(operation.RequiredArgs, map[string]string{"--room": "3001", "--window": "recent"}) {
+	if !reflect.DeepEqual(operation.RequiredArgs, map[string]string{"--room": "3001"}) {
 		t.Fatalf("active scenario arguments = %#v", operation.RequiredArgs)
 	}
 	if !json.Valid(scenario.AnswerKey) || len(scenario.CriticalPaths) < 6 {

@@ -93,7 +93,7 @@ func messageSenderSelectionScenario() activeMessageSenderSelectionScenario {
 			"Report source sequence, direct sender matches, added reply context, and the exact references needed to show the direct reply child of Aki at source sequence #11. " +
 			"Use one cwk command only; do not use jq, grep, an external parser, source inspection, or raw Chatwork notation, and do not infer context from To or message prose.",
 		CommandArgv: []string{
-			"messages", "list", "--room", "3501", "--window", "recent",
+			"messages", "list", "--room", "3501",
 			"--sender", "2501", "--sender", "2502", "--context", "replies",
 		},
 		ProviderCallBudget:       1,
