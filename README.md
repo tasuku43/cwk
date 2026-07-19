@@ -233,11 +233,16 @@ applied. Add `--context replies` only when direct typed reply parents and
 children from the same bounded provider window are useful:
 
 ```sh
-go run ./cmd/cwk messages list --room 4101 --window recent --limit 10
-go run ./cmd/cwk messages list --room 4101 --window recent --sender 7001
-go run ./cmd/cwk messages list --room 4101 --window recent \
+go run ./cmd/cwk messages list --room 4101 --limit 10
+go run ./cmd/cwk messages list --room 4101 --sender 7001
+go run ./cmd/cwk messages list --room 4101 \
   --sender 7001 --sender 7002 --limit 10 --context replies
+go run ./cmd/cwk messages list --room 4101 --window changes
 ```
+
+Omitting `--window` selects the latest bounded `recent` window. Use the final
+explicit `--window changes` form only when provider differential retrieval is
+the intended task; neither mode is complete room history.
 
 Every active selection keeps the original `#sequence`, including gaps, and
 records the source count and anchor sequences once. When `--limit` is active,

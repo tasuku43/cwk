@@ -76,6 +76,12 @@ After that experiment, the project owner made a separate compatibility decision 
 
 The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. Seven reviewed homogeneous collections declare one fixed schema and trust boundary, then emit provider-order positional records without aliases. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per selected typed item in original provider order. Without sender or count selection, output includes every provider item. An active selection adds one record with source count, optional exact senders, candidate count and requested primary limit when count limiting is active, context unless it is the limit-only default `none`, and primary anchors; gapped `#sequence` values retain the original window positions. The provider ceiling is separately named `source-limit`. Typed send time selects newest-N membership and later provider position breaks equal-time ties, but neither changes physical output order. Direct reply context follows the primary limit and may increase displayed count beyond N. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. No presentation derives semantic records from raw Chatwork notation, and declared external text remains visible untrusted data that cannot inject CLI-authored structure.
 
+The active message probes use the shortest common invocation: omitted
+`--window` means the latest bounded `recent` window. The explicit
+`--window changes` form is reserved for a task that deliberately requests the
+provider differential window. Readiness must prove this default from scoped
+help and runtime behavior without an exploratory command.
+
 The active file-collection probe uses one synthetic `files list` result. An
 agent selects a named file without external processing, passes position one to
 `files show --file` and position two to `files show --room`, preserves provider
@@ -93,7 +99,7 @@ zero external post-processing calls.
 
 The active message-limit probe asks for the newest two primary messages in one
 bounded source whose provider order is not timestamp order. The agent must
-choose `--limit 2`, identify sender-before-limit and
+choose `--limit 2` without a redundant window flag, identify sender-before-limit and
 limit-before-context composition, distinguish the requested limit and candidate
 count from `source-limit=100`, preserve original source sequences and canonical
 references, and understand that explicit direct reply context may make displayed
@@ -272,7 +278,9 @@ The broader message-limit tests prove exact 1..100 validation, deterministic
 equal-time ties, a `force`-only provider request, and no pagination. The active
 scenario proves newest-N selection by typed send time, unchanged provider-order
 output, source/candidate/requested-limit distinction, context beyond N, one
-provider call, canonical-reference reuse, and zero external post-processing.
+provider call, the omitted-window recent default, canonical-reference reuse,
+and zero external post-processing. A separate runtime fixture preserves exact
+`--window changes` differential behavior.
 
 ## Review record
 

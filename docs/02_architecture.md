@@ -320,7 +320,12 @@ Relationship truth has three states:
 
 Filtering, count limiting, and context selection are application outcome
 concerns. Provider pagination and notation parsing remain infrastructure
-concerns. Presentation owns only representation. In particular, `messages list`
+concerns. Presentation owns only representation. CLI request assembly resolves
+an omitted `messages list --window` to recent before the application boundary;
+explicit `recent` preserves that value and explicit `changes` selects the
+differential request. Infrastructure remains a policy-free boolean-to-query
+mapping: recent emits `force=1`, while changes omits `force`. In particular,
+`messages list`
 evaluates exact-sender OR selection once over the bounded typed provider result,
 then applies optional `--limit` 1..100 by typed send time, and only then expands
 direct non-transitive `replies` context. A timestamp selects membership but

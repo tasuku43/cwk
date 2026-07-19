@@ -69,6 +69,9 @@ An agent that knows the user's desired outcome should reach the exact command co
   reconcile saved state.
 - Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
 - Commands do not silently search again, choose a display-name match, or rely on hidden defaults.
+- The documented `messages list` default is the latest bounded `recent`
+  window, matching the common conversation-understanding task. Provider-stateful
+  differential retrieval is an explicit `--window changes` choice.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
 
 ### Enforcement

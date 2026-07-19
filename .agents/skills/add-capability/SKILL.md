@@ -118,6 +118,13 @@ cursor, offset, or page. Reject invalid values before authentication/I/O and
 reject a provider result above declared coverage before local selection can hide
 it.
 
+For the reviewed message-window default, omitted or explicit
+`--window recent` selects the latest bounded provider window; only explicit
+`--window changes` selects differential retrieval. Keep both modes at one
+provider request with the same 100-message source ceiling. Catalog help must
+name the default, and runtime tests must cover omission plus both explicit
+values without moving this default into infrastructure.
+
 ## 3. Declare the operation contract
 
 For every external action, specify:

@@ -5,6 +5,11 @@
 - Target: Current implementation cycle
 - Related ADRs: None
 
+> Historical scope note: this completed packet intentionally preserved the
+> then-current differential default. The later
+> `message-window-default-recent` packet supersedes only that non-goal; the
+> limit design and evidence below remain unchanged.
+
 ## Outcome
 
 An agent or human can ask `messages list` for at most the newest N primary

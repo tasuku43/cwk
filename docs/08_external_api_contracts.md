@@ -99,6 +99,13 @@ The template does not select a backoff formula or universal numeric ceiling beca
 
 Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
 
+CLI task interpretation maps an omitted window or explicit
+`messages list --window recent` to `ForceRecent=true`; explicit
+`--window changes` maps to false.
+Infrastructure therefore sends `force=1` for the normal latest bounded window
+and omits `force` only for the explicitly requested provider differential
+window. Neither mode claims complete room history.
+
 `messages list --sender`, `--limit`, and `--context` are application-owned
 selection inputs over that single bounded message response. The optional limit
 accepts 1 through 100 primary messages. Exact-sender OR matching runs first;

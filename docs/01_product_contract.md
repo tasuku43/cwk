@@ -207,6 +207,13 @@ Candidate worktrees are experimental. Their output is not public merely because 
 
 ## Filtering and task composition
 
+Omitting `messages list --window` selects the latest bounded `recent` window,
+which is the normal conversation-understanding outcome. Explicit
+`--window recent` is equivalent. Provider differential retrieval remains
+available as explicit `--window changes`; it is not the implicit behavior of
+the shortest command. Both modes remain incomplete bounded room context with
+`source-limit=100`, not complete room history.
+
 The product owns deterministic filtering and joining needed by a supported
 outcome. `messages list` establishes the first finite typed selection contract:
 up to 100 repeatable `--sender <account-ref>` inputs match any listed exact
@@ -324,6 +331,12 @@ renames the provider-bound output field from catalog `limit`/text `limit=...`
 to catalog `source_limit`/text `source-limit=...` so the fixed 100-message
 retrieval ceiling cannot be confused with optional `--limit`; message record
 positions and canonical references do not change.
+
+The later recent-window-default decision is an intentional pre-1.0 behavioral
+change for `messages list` invocations that omit `--window`. Omission now sends
+the documented `force=1` query and reports `window=recent`; callers that require
+provider differential semantics must pass exact `--window changes`. Both
+explicit values keep their prior meaning, and no persisted migration is needed.
 
 Persistent command selection is an additive pre-1.0 local workflow. It does
 not remove capabilities from `DefaultCatalog`; it derives the help and routing
