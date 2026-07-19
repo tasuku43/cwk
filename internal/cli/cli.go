@@ -248,9 +248,12 @@ func commandViewControlInvocation(args []string) bool {
 
 func commandSelectionDispatchFault(err error) error {
 	if public, ok := fault.PublicCopy(err); ok {
-		next := fault.NextAction{Command: "config show", Reason: "Restore the local configuration path, then inspect the command selection."}
-		if public.Code == "command_selection_invalid" {
+		next := fault.NextAction{Command: "help", Reason: "Retry the original command when the caller is ready."}
+		switch public.Code {
+		case "command_selection_invalid":
 			next = fault.NextAction{Command: "config edit", Reason: "Inspect and explicitly replace the invalid command selection."}
+		case "command_selection_unsafe", "command_selection_unavailable":
+			next = fault.NextAction{Command: "config show", Reason: "Restore the local configuration path, then inspect the command selection."}
 		}
 		return fault.New(
 			public.Kind,

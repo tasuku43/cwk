@@ -462,6 +462,35 @@ func TestUnavailableProfileRoutesToInspectionAfterExternalRepair(t *testing.T) {
 	}
 }
 
+type canceledCommandSelectionStore struct{}
+
+func (canceledCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
+	return commandselection.Profile{}, false, fault.New(
+		fault.KindCanceled,
+		"operation_canceled",
+		"command selection operation was canceled",
+		true,
+	)
+}
+
+func (canceledCommandSelectionStore) Save(context.Context, commandselection.Profile) error {
+	return errors.New("must not save canceled configuration")
+}
+
+func TestCanceledProfileLoadRetainsNormalRetryRecovery(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader(""), &stdout, &stderr, DefaultCatalog(), passingInspector("unused"))
+	command.commandSelection = configcmd.New(canceledCommandSelectionStore{})
+
+	if code := command.RunContext(context.Background(), []string{"rooms", "list"}); code != ExitCanceled {
+		t.Fatalf("canceled profile load exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+	}
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "code: operation_canceled") ||
+		!strings.Contains(stderr.String(), "cwk help") || strings.Contains(stderr.String(), "cwk config") {
+		t.Fatalf("canceled profile load has configuration-repair guidance: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
 type cancelAfterConfigSaveStore struct {
 	cancel context.CancelFunc
 	saved  []string
