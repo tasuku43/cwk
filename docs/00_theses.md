@@ -6,7 +6,23 @@ This document decides ambiguous product and engineering choices for Chatwork CLI
 
 **An agent can translate a user's Chatwork request into one exact `cwk` task, invoke it without guessing, and understand a bounded, trustworthy result with no routine external reconstruction. Among outputs that meet the required understanding and safety quality, `cwk` minimizes token cost.**
 
-The primary user is a developer or operator who delegates Chatwork work to a coding agent from a shell or automation environment. Human usability remains important, but command certainty, agent understanding quality, and token efficiency are the first optimization targets.
+The primary user is a developer or operator in Japan who delegates Chatwork work to a coding agent from a shell or automation environment. Human usability in Japanese remains important, while command certainty, agent understanding quality, and token efficiency are the first optimization targets.
+
+## Language contract
+
+Japanese is the single default language for user-facing prose. Human help,
+interactive terminal guidance, public fault messages and recovery reasons,
+README and community-facing repository documents use Japanese without a
+runtime locale switch. Stable machine identifiers remain locale-neutral ASCII:
+command paths, flags, environment variables, capability and reference kinds,
+fault kinds and codes, JSON keys, schema versions, allowed values, and the
+reviewed success-output grammar are not translated. Chatwork text remains
+untrusted external data and is preserved rather than translated.
+
+This boundary is a product and compatibility decision, not an implementation
+shortcut. A future additional locale requires a reviewed fallback and message
+catalog contract. Historical work packets and experimental evidence remain in
+their original language so that localization cannot rewrite prior decisions.
 
 The product is not an endpoint mirror and is not measured by the compactness of one syntax. Its first complete implementation nevertheless has a finite coverage obligation: every operation in the official 2026-07-18 Chatwork API snapshot must be reachable through at least one reviewed user-task workflow. A smaller output is worse when it causes command mistakes, hides missing context, weakens identity, or makes an agent infer relationships.
 
@@ -257,6 +273,9 @@ Command certainty, operational closure, semantic fidelity, understanding quality
 - Agent evaluations record discovery calls, external-processing steps, canonical references, semantic answers, recovery, tokens, and latency.
 - Public examples use synthetic Chatwork-like data.
 - `task check` decides implementation completion; higher-risk changes add the named security/public/release profiles.
+- Catalog tests require Japanese user-facing prose while preserving stable
+  machine identifiers, and repository localization checks cover the active
+  Japanese entry documents and contribution templates.
 
 ## First complete implementation
 

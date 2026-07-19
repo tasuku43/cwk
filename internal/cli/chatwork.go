@@ -24,20 +24,20 @@ const maxChatworkOutputBytes = 16 * 1024 * 1024
 func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operation.Intent, args []string) int {
 	arguments, err := parseChatworkArguments(command, args)
 	if err != nil {
-		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; usage: "+command.Usage(), "help "+command.Path, "Correct the declared command inputs.")
+		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
 	request, err := buildChatworkRequest(command, arguments)
 	if err != nil {
-		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; usage: "+command.Usage(), "help "+command.Path, "Correct the declared command inputs.")
+		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
 	if err := request.Validate(); err != nil {
-		return c.failUsage(ctx, "invalid_arguments", "One or more Chatwork inputs are invalid; usage: "+command.Usage(), "help "+command.Path, "Correct the declared command inputs.")
+		return c.failUsage(ctx, "invalid_arguments", "1件以上の Chatwork 入力が無効です。使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
 
 	var result chatwork.Result
 	authenticatedAction := func(actionContext context.Context, session domainauthn.Session) error {
 		if c.chatwork == nil {
-			return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork task adapter is not configured", false)
+			return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
 		}
 		value, executeErr := c.chatwork.Execute(actionContext, session.BindingID, request)
 		if executeErr == nil {
@@ -65,7 +65,7 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	} else {
 		executionRequest, buildErr := buildChatworkExecutionRequest(command, intent, arguments)
 		if buildErr != nil {
-			return c.failUsage(ctx, "invalid_arguments", buildErr.Error()+"; usage: "+command.Usage(), "help "+command.Path, "Correct the declared command inputs.")
+			return c.failUsage(ctx, "invalid_arguments", buildErr.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 		}
 		policy := chatworkcmd.ConfirmationPolicy{
 			Required: command.chatwork.Confirmation,
@@ -89,10 +89,10 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 
 	output, err := capsule.Render(result)
 	if err != nil {
-		return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "The Chatwork task projection could not be encoded.", false))
+		return c.fail(ctx, fault.New(fault.KindContract, "output_encoding_failed", "Chatwork タスクの投影をエンコードできませんでした。", false))
 	}
 	if len(output) > maxChatworkOutputBytes {
-		return c.fail(ctx, fault.New(fault.KindContract, "output_contract_exceeded", "The Chatwork result exceeds the declared output bound.", false))
+		return c.fail(ctx, fault.New(fault.KindContract, "output_contract_exceeded", "Chatwork の結果が宣言済みの出力上限を超えています。", false))
 	}
 	if command.Effect == operation.EffectRead {
 		return c.emit(ctx, []byte(output))
@@ -114,7 +114,7 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 	declared := make(map[string]CommandInput, len(command.Agent.Inputs))
 	for _, input := range command.Agent.Inputs {
 		if input.Source != InputSourceFlag || !strings.HasPrefix(input.Name, "--") {
-			return nil, fmt.Errorf("Chatwork command has an unsupported input contract")
+			return nil, fmt.Errorf("Chatwork コマンドに未対応の入力契約があります")
 		}
 		declared[input.Name] = input
 	}
@@ -123,7 +123,7 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
 		if !strings.HasPrefix(argument, "--") {
-			return nil, fmt.Errorf("Chatwork command accepts values only through declared flags")
+			return nil, fmt.Errorf("Chatwork コマンドの値は宣言済みフラグからのみ指定できます")
 		}
 		name, value, hasValue := argument, "", false
 		if separator := strings.IndexByte(argument, '='); separator >= 0 {
@@ -131,40 +131,40 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 		}
 		input, ok := declared[name]
 		if !ok {
-			return nil, fmt.Errorf("unknown flag %q", name)
+			return nil, fmt.Errorf("フラグ %q は不明です", name)
 		}
 		boolean := chatworkBooleanFlag(name)
 		if boolean {
 			if hasValue {
-				return nil, fmt.Errorf("%s does not accept a value", name)
+				return nil, fmt.Errorf("%s は値を受け付けません", name)
 			}
 			value, hasValue = "true", true
 		} else if !hasValue {
 			if index+1 >= len(args) || strings.HasPrefix(args[index+1], "--") {
-				return nil, fmt.Errorf("%s requires a value", name)
+				return nil, fmt.Errorf("%s には値が必要です", name)
 			}
 			index++
 			value, hasValue = args[index], true
 		}
 		if !hasValue || value == "" {
-			return nil, fmt.Errorf("%s requires a non-empty value", name)
+			return nil, fmt.Errorf("%s には空でない値が必要です", name)
 		}
 		if len(parsed[name]) > 0 && !input.Repeatable {
-			return nil, fmt.Errorf("%s may be specified only once", name)
+			return nil, fmt.Errorf("%s は1回だけ指定できます", name)
 		}
 		if name != "--confirm" && len(input.AllowedValues) > 0 && !containsExact(input.AllowedValues, value) {
-			return nil, fmt.Errorf("%s must be one of %s", name, strings.Join(input.AllowedValues, " or "))
+			return nil, fmt.Errorf("%s は %s のいずれかで指定してください", name, strings.Join(input.AllowedValues, "、"))
 		}
 		if input.ReferenceKind != "" {
 			if _, err := chatwork.NewReference(chatwork.ReferenceKind(input.ReferenceKind), value); err != nil {
-				return nil, fmt.Errorf("%s requires a canonical %s reference", name, input.ReferenceKind)
+				return nil, fmt.Errorf("%s には正規の %s 参照が必要です", name, input.ReferenceKind)
 			}
 		}
 		parsed[name] = append(parsed[name], value)
 	}
 	for _, input := range command.Agent.Inputs {
 		if input.Required && input.Name != "--confirm" && len(parsed[input.Name]) == 0 {
-			return nil, fmt.Errorf("%s is required", input.Name)
+			return nil, fmt.Errorf("%s は必須です", input.Name)
 		}
 	}
 	return parsed, nil
@@ -172,7 +172,7 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 
 func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (chatwork.Request, error) {
 	if command.chatwork == nil || !command.chatwork.Task.Valid() {
-		return chatwork.Request{}, fmt.Errorf("Chatwork task declaration is invalid")
+		return chatwork.Request{}, fmt.Errorf("Chatwork タスク宣言は無効です")
 	}
 	request := chatwork.Request{Task: command.chatwork.Task}
 	if request.Task == chatwork.TaskMessagesList {
@@ -193,7 +193,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			for _, value := range values {
 				ref, err := chatwork.NewReference(chatwork.ReferenceKind(input.ReferenceKind), value)
 				if err != nil {
-					return chatwork.Request{}, fmt.Errorf("%s requires a canonical reference", name)
+					return chatwork.Request{}, fmt.Errorf("%s には正規参照が必要です", name)
 				}
 				refs = append(refs, ref)
 			}
@@ -225,7 +225,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			case "--assignee":
 				request.Assignees = refs
 			default:
-				return chatwork.Request{}, fmt.Errorf("Chatwork reference binding is unsupported")
+				return chatwork.Request{}, fmt.Errorf("Chatwork 参照のバインドには対応していません")
 			}
 			continue
 		}
@@ -247,17 +247,17 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			case chatwork.TaskMessagesList:
 				limit, err := strconv.Atoi(value)
 				if err != nil || limit < 1 || limit > chatwork.MaxMessageSelectionLimit {
-					return chatwork.Request{}, fmt.Errorf("--limit must be an integer from 1 to %d", chatwork.MaxMessageSelectionLimit)
+					return chatwork.Request{}, fmt.Errorf("--limit は 1 から %d までの整数で指定してください", chatwork.MaxMessageSelectionLimit)
 				}
 				request.MessageFilter.Limit = limit
 			case chatwork.TaskRoomTasksCreate:
 				limit, err := strconv.ParseInt(value, 10, 64)
 				if err != nil || limit <= 0 {
-					return chatwork.Request{}, fmt.Errorf("--limit must be a positive Unix time")
+					return chatwork.Request{}, fmt.Errorf("--limit は正の Unix 時刻で指定してください")
 				}
 				request.Limit = limit
 			default:
-				return chatwork.Request{}, fmt.Errorf("--limit is unsupported for this Chatwork task")
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --limit に対応していません")
 			}
 		case "--limit-type":
 			request.LimitType = value
@@ -281,7 +281,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 		case "--confirm":
 			// Confirmation is invocation-local policy input, not provider data.
 		default:
-			return chatwork.Request{}, fmt.Errorf("Chatwork value binding is unsupported")
+			return chatwork.Request{}, fmt.Errorf("Chatwork 値のバインドには対応していません")
 		}
 	}
 	if request.Task == chatwork.TaskRoomsCreate && (arguments.first("--invite-code") != "" || arguments.first("--invite-approval") != "") {
@@ -297,7 +297,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 
 func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, arguments chatworkArguments) (execution.Request, error) {
 	if command.Agent.Mutation == nil || command.chatwork == nil {
-		return execution.Request{}, fmt.Errorf("Chatwork mutation declaration is invalid")
+		return execution.Request{}, fmt.Errorf("Chatwork 変更宣言は無効です")
 	}
 	mutation := *command.Agent.Mutation
 	intent := base
@@ -311,7 +311,7 @@ func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, a
 			intent.Target.ParentID = arguments.first(mutation.ParentInput)
 		}
 	} else {
-		return execution.Request{}, fmt.Errorf("Chatwork mutation effect is invalid")
+		return execution.Request{}, fmt.Errorf("Chatwork 変更の効果は無効です")
 	}
 	request := execution.Request{
 		Intent:          intent,

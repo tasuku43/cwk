@@ -432,10 +432,10 @@ func validConfigurationFile(info fs.FileInfo) bool {
 
 func contextFault(ctx context.Context) error {
 	if ctx == nil {
-		return fault.New(fault.KindContract, "missing_context", "command selection context is not configured", false)
+		return fault.New(fault.KindContract, "missing_context", "コマンド選択コンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return fault.Wrap(fault.KindCanceled, "operation_canceled", "command selection operation was canceled", true, err)
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "コマンド選択処理がキャンセルされました", true, err)
 	}
 	return nil
 }
@@ -453,7 +453,7 @@ func invalidWithCause(reason string, cause error) error {
 	return fault.Wrap(
 		fault.KindInvalidInput,
 		"command_selection_invalid",
-		"command selection is invalid",
+		"コマンド選択は無効です",
 		false,
 		cause,
 	)
@@ -463,7 +463,7 @@ func unsafeStorage(reason string) error {
 	return fault.Wrap(
 		fault.KindUnavailable,
 		"command_selection_unsafe",
-		"command selection storage is unsafe",
+		"コマンド選択の保存先は安全ではありません",
 		false,
 		fmt.Errorf("%w: %s", ErrUnsafe, reason),
 	)
@@ -473,7 +473,7 @@ func unavailable(reason string) error {
 	return fault.Wrap(
 		fault.KindUnavailable,
 		"command_selection_unavailable",
-		"command selection is unavailable",
+		"コマンド選択を利用できません",
 		true,
 		fmt.Errorf("%w: %s", ErrUnavailable, reason),
 	)

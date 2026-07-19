@@ -49,7 +49,7 @@ func New(store StorePort) *Service {
 // Load returns the persisted profile and whether the user has saved one.
 func (s *Service) Load(ctx context.Context) (commandselection.Profile, bool, error) {
 	if ctx == nil {
-		return commandselection.Profile{}, false, fault.New(fault.KindContract, "missing_context", "command selection context is not configured", false)
+		return commandselection.Profile{}, false, fault.New(fault.KindContract, "missing_context", "コマンド選択コンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
 		return commandselection.Profile{}, false, canceled(err)
@@ -72,7 +72,7 @@ func (s *Service) Load(ctx context.Context) (commandselection.Profile, bool, err
 		return commandselection.Profile{}, false, fault.Wrap(
 			fault.KindUnavailable,
 			"command_selection_unavailable",
-			"command selection is unavailable",
+			"コマンド選択を利用できません",
 			true,
 			err,
 		)
@@ -81,7 +81,7 @@ func (s *Service) Load(ctx context.Context) (commandselection.Profile, bool, err
 		return commandselection.Profile{}, false, fault.New(
 			fault.KindInvalidInput,
 			"command_selection_invalid",
-			"command selection is invalid",
+			"コマンド選択は無効です",
 			false,
 		)
 	}
@@ -98,13 +98,13 @@ func (s *Service) Load(ctx context.Context) (commandselection.Profile, bool, err
 // unclassified instead of claiming the previous file is intact.
 func (s *Service) Save(ctx context.Context, profile commandselection.Profile) error {
 	if ctx == nil {
-		return fault.New(fault.KindContract, "missing_context", "command selection context is not configured", false)
+		return fault.New(fault.KindContract, "missing_context", "コマンド選択コンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
 		return canceled(err)
 	}
 	if err := profile.Validate(); err != nil {
-		return fault.Wrap(fault.KindInvalidInput, "command_selection_invalid", "command selection is invalid", false, err)
+		return fault.Wrap(fault.KindInvalidInput, "command_selection_invalid", "コマンド選択は無効です", false, err)
 	}
 	if s == nil || portcheck.IsNil(s.store) {
 		return unavailable(nil)
@@ -166,7 +166,7 @@ func canceled(cause error) error {
 	return fault.Wrap(
 		fault.KindCanceled,
 		"operation_canceled",
-		"command selection operation was canceled",
+		"コマンド選択処理がキャンセルされました",
 		true,
 		cause,
 	)
@@ -176,7 +176,7 @@ func unavailable(cause error) error {
 	return fault.Wrap(
 		fault.KindUnavailable,
 		"command_selection_unavailable",
-		"command selection is unavailable",
+		"コマンド選択を利用できません",
 		true,
 		cause,
 	)

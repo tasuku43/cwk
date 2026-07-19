@@ -96,5 +96,5 @@ func parseNotation(body string) ([]chatwork.Reference, *chatwork.Relation, []cha
 }
 
 func notationFault() error {
-	return fault.New(fault.KindContract, "chatwork_notation_malformed", "Chatwork message notation is malformed or unsupported", false)
+	return fault.New(fault.KindContract, "chatwork_notation_malformed", "Chatwork メッセージ記法が不正か未対応です", false)
 }

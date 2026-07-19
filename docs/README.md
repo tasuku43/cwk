@@ -1,68 +1,74 @@
-# Documentation Map
+# ドキュメント案内
 
-This directory contains the durable reasoning for Chatwork CLI. Read the numbered documents in order when starting a derived project or making a change that crosses product, architecture, security, harness, publication, or release boundaries.
+このディレクトリには Chatwork CLI の継続的な設計判断を収録しています。製品、architecture、security、harness、公開、release の境界をまたぐ変更を行うときは、番号付き文書を順番に読んでください。
 
-In a newly derived repository, Codex starts with [`$bootstrap-derived-cli`](../.agents/skills/bootstrap-derived-cli/SKILL.md). After identity and initial project reasoning are concrete, recurring capability work uses [`$add-capability`](../.agents/skills/add-capability/SKILL.md).
+新しい派生 repository では、Codex は最初に [`$bootstrap-derived-cli`](../.agents/skills/bootstrap-derived-cli/SKILL.md) を使います。identity と初期の製品判断が具体化した後、通常の capability 変更には [`$add-capability`](../.agents/skills/add-capability/SKILL.md) を使います。
 
-| Document | Purpose | Primary readers |
+| 文書 | 目的 | 主な読者 |
 |---|---|---|
-| [00_theses.md](00_theses.md) | North star, thesis-learning lifecycle, and principles used to resolve ambiguous decisions | Everyone |
-| [01_product_contract.md](01_product_contract.md) | Users, supported outcomes, public vocabulary, compatibility, and non-goals | Product owners, contributors, agents |
-| [02_architecture.md](02_architecture.md) | Four layers, catalog, typed effects and intent, and execution flow | Contributors, agents, reviewers |
-| [03_security_model.md](03_security_model.md) | Assets, actors, trust boundaries, abuse cases, and required controls | Everyone changing side effects or data handling |
-| [04_harness.md](04_harness.md) | How written claims become local and CI checks | Contributors, agents, maintainers |
-| [05_public_repository.md](05_public_repository.md) | Clean-room derivation, sanitization, licensing, and public-readiness review | Maintainers and release owners |
-| [06_release.md](06_release.md) | Versioning, artifact construction, provenance decisions, and release procedure | Release owners |
-| [07_authentication.md](07_authentication.md) | PAT-only secret-free boundary and requirements for any future authentication extension | Security owners, adapter authors, agents |
-| [08_external_api_contracts.md](08_external_api_contracts.md) | Pagination, retry/idempotency, schema, capability, and API adapter contracts | Adapter authors, agents, reviewers |
-| [09_agent_readiness_validation.md](09_agent_readiness_validation.md) | Scenario-based discovery, execution, interpretation, and recovery validation | Product owners, agents, reviewers |
+| [00_theses.md](00_theses.md) | North Star、thesis の学習サイクル、曖昧な判断を解く原則 | 全員 |
+| [01_product_contract.md](01_product_contract.md) | 利用者、対応 outcome、公開語彙、互換性、非目標 | Product owner、contributor、agent |
+| [02_architecture.md](02_architecture.md) | 4 layer、catalog、型付き effect/intent、実行 flow | Contributor、agent、reviewer |
+| [03_security_model.md](03_security_model.md) | Asset、actor、trust boundary、abuse case、必須 control | Side effect や data handling を変更する全員 |
+| [04_harness.md](04_harness.md) | 文書上の claim を local/CI check にする方法 | Contributor、agent、maintainer |
+| [05_public_repository.md](05_public_repository.md) | Clean-room derivation、sanitization、license、公開準備 review | Maintainer、release owner |
+| [06_release.md](06_release.md) | Versioning、artifact 構築、provenance 判断、release 手順 | Release owner |
+| [07_authentication.md](07_authentication.md) | PAT-only の secret-free boundary と将来の認証拡張要件 | Security owner、adapter author、agent |
+| [08_external_api_contracts.md](08_external_api_contracts.md) | Pagination、retry/idempotency、schema、capability、API adapter contract | Adapter author、agent、reviewer |
+| [09_agent_readiness_validation.md](09_agent_readiness_validation.md) | Scenario による発見・実行・解釈・復旧の検証 | Product owner、agent、reviewer |
 
-Additional directories serve different lifetimes:
+追加ディレクトリは、異なる寿命の情報を扱います。
 
-- The [decision template](decisions/0000-template.md) starts durable architecture decision records. An ADR is never edited to hide an old decision; a later ADR supersedes it.
-- The [work-packet goal template](work/_template/goal.md) starts bounded work packets. Facts and plans there are temporary unless promoted into a durable document.
-- The [repository design](plans/2026-07-18-cwk-design.md) illustrates the implementation designs stored under `plans/`.
+- [ADR template](decisions/0000-template.md) から永続的な architecture decision record を作成します。過去の判断を隠すために ADR を書き換えず、新しい ADR で supersede します。
+- [work packet の goal template](work/_template/goal.md) から期限付きの作業 packet を作成します。永続文書へ昇格しない限り、そこにある fact と plan は一時的です。
+- [repository design](plans/2026-07-18-cwk-design.md) は `plans/` に保存する実装設計の例です。
 
-Root community documents have stable conventional locations:
+root の community 文書は慣例的な固定場所にあります。
 
-| Document | Purpose |
+| 文書 | 目的 |
 |---|---|
-| [`README.md`](../README.md) | User and template-adopter entry point |
-| [`AGENTS.md`](../AGENTS.md) | Canonical contribution policy for humans and agents |
-| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Contribution workflow and review expectations |
-| [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) | Participation standards and private conduct reporting |
-| [`SUPPORT.md`](../SUPPORT.md) | Support channels, required evidence, and boundaries |
-| [`SECURITY.md`](../SECURITY.md) | Supported versions and private vulnerability reporting |
-| [`LICENSE`](../LICENSE) | Repository license terms |
+| [`README.md`](../README.md) | 利用者向け入口 |
+| [`AGENTS.md`](../AGENTS.md) | 人間と agent 共通の canonical contribution policy |
+| [`CONTRIBUTING.md`](../CONTRIBUTING.md) | Contribution workflow と review 期待値 |
+| [`CODE_OF_CONDUCT.md`](../CODE_OF_CONDUCT.md) | 参加基準と非公開の conduct report |
+| [`SUPPORT.md`](../SUPPORT.md) | Support channel、必要な evidence、対応範囲 |
+| [`SECURITY.md`](../SECURITY.md) | 対応 version と非公開の vulnerability report |
+| [`LICENSE`](../LICENSE) | Repository の license terms |
 
-## Decision precedence
+## 判断の優先順位
 
-When two documents disagree, use this order:
+文書間で矛盾がある場合は、次の順序を使います。
 
 1. Theses
-2. Security and architecture invariants
-3. Accepted ADRs
-4. Active work packet goal and context
+2. Security と architecture の invariant
+3. Accepted ADR
+4. Active work packet の goal と context
 5. Active plan
 6. Task checklist
 
-The root [AGENTS.md](../AGENTS.md) turns this order into contribution policy. A lower-level document cannot grant an exception to a higher-level invariant.
+root の [AGENTS.md](../AGENTS.md) がこの順序を contribution policy として運用します。下位文書は上位 invariant の例外を許可できません。
 
-## Stable reasoning and task-time instructions
+## 永続的な判断と作業時の手順
 
-Durable documentation explains **why the system has its current shape**. Task-time instructions explain **how to perform a recurring change safely**. Keep long procedural checklists out of a thesis or architecture overview; place them in a focused work template, repository tool, or agent skill and link back to the governing invariant.
+永続文書は、system が現在の形である理由を説明します。作業時の instruction は、繰り返し発生する変更を安全に行う方法を説明します。長い手順 checklist を thesis や architecture overview に置かず、focused work template、repository tool、agent skill に置いて governing invariant へ link してください。
 
-Conversely, do not leave a durable product or security decision only in a work plan. Promote it to a numbered document or ADR before closing the work packet.
+反対に、永続的な product/security 判断を work plan だけに残してはいけません。work packet を閉じる前に、番号付き文書または ADR へ昇格してください。
 
-## Derived-project documentation pass
+## 日本語化の境界
 
-Bootstrap changes identity, not intent. Before adding real capabilities, a derived project must:
+対象利用者は日本です。README、community 文書、GitHub template、human help、TUI、公開 fault message と recovery reason は日本語を既定とします。一方、command path、flag、environment variable、JSON key、schema token、fault kind/code、capability/reference kind、opaque reference は automation の安定識別子なので翻訳しません。Chatwork から受け取る外部 text も意味を変えず、そのまま untrusted data として扱います。
 
-1. Rewrite the generic north star and success measures.
-2. Name its primary users, supported tasks, and explicit non-goals.
-3. Document every credential, data store, subprocess, filesystem write, and network destination; complete the authentication and external-API decisions when applicable.
-4. Decide compatibility and release promises.
-5. Bind each important claim to a type, test, lint, or release check.
-6. Run `task check` and `task public:check`.
+番号付きの engineering 文書は、厳密な contract 用語や既存 evidence を保持する必要がある箇所で英語を残せます。ただし、そこで新たに定める利用者向け instruction は日本語の active entry documentation からも到達可能でなければなりません。`docs/work/` の過去の判断証跡と実験 evidence は、後から履歴の意味を変えないため原文を保持します。
 
-All repository documentation is public and written in English by default. A derived project may adopt another language only through an explicit thesis or product-contract decision; public-boundary checks must still be understandable to its maintainers.
+## 派生 project の文書 review
+
+Bootstrap は identity を変更しますが、intent は決めません。実際の capability を追加する前に、派生 project は次を行います。
+
+1. Generic な North Star と成功指標を具体化する。
+2. Primary user、対応 task、明示的な非目標を定める。
+3. Credential、data store、subprocess、filesystem write、network destination を文書化し、必要なら authentication と external API の判断を完了する。
+4. Compatibility と release の約束を決める。
+5. 重要な claim を type、test、lint、release check のいずれかに結び付ける。
+6. `task check` と `task public:check` を実行する。
+
+派生 project が別の対象地域・言語を採用する場合は、thesis と product contract を明示的に変更し、machine identifier と external data を翻訳対象から分離してください。

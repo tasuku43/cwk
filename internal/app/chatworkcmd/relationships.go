@@ -18,13 +18,13 @@ func ResolveMessageRelations(messages []chatwork.Message) ([]chatwork.Message, e
 			!validReference(message.Room, chatwork.ReferenceRoom) {
 			return nil, relationshipContractFault(
 				"invalid_chatwork_message_window",
-				"Chatwork message window contains an invalid canonical reference",
+				"Chatwork メッセージウィンドウに無効な正規参照があります",
 			)
 		}
 		if _, exists := messageIndex[message.Ref.Value]; exists {
 			return nil, relationshipContractFault(
 				"duplicate_chatwork_message_reference",
-				"Chatwork message window contains a duplicate message reference",
+				"Chatwork メッセージウィンドウに重複したメッセージ参照があります",
 			)
 		}
 		messageIndex[message.Ref.Value] = index
@@ -47,7 +47,7 @@ func ResolveMessageRelations(messages []chatwork.Message) ([]chatwork.Message, e
 		if reply.Resolved && !canResolve {
 			return nil, relationshipContractFault(
 				"inconsistent_chatwork_message_relation",
-				"Chatwork message window contains an inconsistent resolved relation",
+				"Chatwork メッセージウィンドウに整合しない解決済み関係があります",
 			)
 		}
 		if canResolve {

@@ -52,6 +52,15 @@ func TestCheckTextDetectsPublicLeaksAndUnsafeSecrets(t *testing.T) {
 	}
 }
 
+func TestCheckTextAllowsJapaneseDocumentation(t *testing.T) {
+	t.Parallel()
+
+	config := projectconfig.Config{Profile: "template"}
+	if issues := checkText("README.md", "日本の利用者向けドキュメントです。", config, nil, "public"); len(issues) != 0 {
+		t.Fatalf("Japanese documentation issues = %#v", issues)
+	}
+}
+
 func TestCheckTextDetectsQuotedJSONSecretsAndMarkerSubstrings(t *testing.T) {
 	config := projectconfig.Config{Profile: "template"}
 	unsafe := jsonSecretAssignment("client_"+"secret", "prod-contest-value")

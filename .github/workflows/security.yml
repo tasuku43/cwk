@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   security:
-    name: Dependency and source security gate
+    name: 依存関係とsourceのsecurity gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -27,5 +27,5 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      - name: Run the canonical security gate
+      - name: canonical security gateを実行
         run: ./scripts/check.sh security

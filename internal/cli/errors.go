@@ -42,7 +42,7 @@ func parseErrorFormat(value string) (errorFormat, error) {
 	case errorFormatJSON:
 		return errorFormatJSON, nil
 	default:
-		return errorFormatText, fmt.Errorf("--error-format must be text or json")
+		return errorFormatText, fmt.Errorf("--error-format は text または json で指定してください")
 	}
 }
 
@@ -168,26 +168,26 @@ func normalizeUnboundFault(ctx context.Context, err error) *fault.Error {
 		return fault.New(
 			fault.KindContract,
 			"invalid_fault_contract",
-			"A failure did not satisfy the structured error contract.",
+			"エラーが構造化エラー契約を満たしていません。",
 			false,
-			fault.NextAction{Command: "help", Reason: "Repair the fault declaration before retrying."},
+			fault.NextAction{Command: "help", Reason: "再試行する前にエラー宣言を修復してください。"},
 		)
 	}
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return fault.Wrap(
 			fault.KindCanceled,
 			"operation_canceled",
-			"The operation was canceled.",
+			"処理はキャンセルされました。",
 			true,
 			err,
-			fault.NextAction{Command: invocationCommandPath(ctx), Reason: "Retry when the caller is ready."},
+			fault.NextAction{Command: invocationCommandPath(ctx), Reason: "呼び出し元の準備ができたら再試行してください。"},
 		)
 	}
 
 	return fault.New(
 		fault.KindInternal,
 		"internal_error",
-		"The command failed unexpectedly.",
+		"コマンドが予期せず失敗しました。",
 		false,
 	)
 }
@@ -196,9 +196,9 @@ func undeclaredFaultContract(path string) *fault.Error {
 	return fault.New(
 		fault.KindContract,
 		"undeclared_fault_contract",
-		"A command emitted a failure that is not declared by its agent contract.",
+		"コマンドが agent 契約に宣言されていないエラーを返しました。",
 		false,
-		fault.NextAction{Command: "help " + path, Reason: "Align the runtime fault with the command catalog before retrying."},
+		fault.NextAction{Command: "help " + path, Reason: "再試行する前に実行時エラーをコマンドカタログと一致させてください。"},
 	)
 }
 

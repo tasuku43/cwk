@@ -7,7 +7,7 @@
     "go_module": "github.com/tasuku43/cwk",
     "github_owner": "tasuku43",
     "github_repository": "cwk",
-    "description": "A task-oriented command-line interface for Chatwork.",
+    "description": "Chatworkをタスク単位で操作するCLI。",
     "formula_class": "Cwk",
     "license_spdx": "MIT",
     "security_contact": "task.teckac@gmail.com"

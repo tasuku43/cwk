@@ -178,7 +178,7 @@ func TestRenderConfigTUIScreenIsBoundedAndKeepsCursorInViewport(t *testing.T) {
 	if !strings.Contains(output, "> [x] \x1b[36m[read]\x1b[0m   command i") {
 		t.Fatalf("cursor is outside viewport:\n%s", output)
 	}
-	if strings.Count(output, "Always on: doctor, help, version, config") != 1 {
+	if strings.Count(output, "常に有効: doctor, help, version, config") != 1 {
 		t.Fatalf("always-on line missing or repeated:\n%s", output)
 	}
 	if strings.Count(output, configTUIFooter) != 1 {
@@ -194,7 +194,7 @@ func TestRenderConfigTUIScreenIsBoundedAndKeepsCursorInViewport(t *testing.T) {
 func TestRenderConfigTUIAlwaysUsesProvidedOrderAndEscapesStructure(t *testing.T) {
 	model := newConfigTUIModel([]configTUIItem{{Path: "rooms list", Effect: operation.EffectRead}}, []string{"version", "doctor\nunsafe", "config"})
 	output := renderConfigTUIScreen(model, 100, 4)
-	if !strings.Contains(output, `Always on: version, doctor\nunsafe, config`) {
+	if !strings.Contains(output, `常に有効: version, doctor\nunsafe, config`) {
 		t.Fatalf("always-on projection did not preserve the supplied catalog order safely:\n%s", output)
 	}
 	if strings.Contains(output, "doctor\nunsafe") {
@@ -276,7 +276,7 @@ func TestRenderConfigTUIScreenNeverTruncatesAnEffectBadge(t *testing.T) {
 			t.Fatalf("narrow screen exposed a partial or unusable item %q:\n%s", forbidden, narrow)
 		}
 	}
-	if !strings.Contains(narrow, "Resize terminal") {
+	if !strings.Contains(narrow, "端末を拡大") {
 		t.Fatalf("narrow screen lacks resize guidance:\n%s", narrow)
 	}
 
@@ -297,7 +297,7 @@ func TestRenderConfigTUIScreenWrapsNoticeWithoutBreakingHeightOrBadges(t *testin
 	if len(lines) != height {
 		t.Fatalf("notice frame lines=%d want=%d:\n%s", len(lines), height, output)
 	}
-	if strings.Count(output, "Notice:") != 1 || !strings.Contains(output, configTUIColorMagenta+"[write]"+configTUIColorReset) {
+	if strings.Count(output, "お知らせ:") != 1 || !strings.Contains(output, configTUIColorMagenta+"[write]"+configTUIColorReset) {
 		t.Fatalf("notice displaced structure or badge:\n%s", output)
 	}
 	for index, line := range lines {
@@ -312,7 +312,7 @@ func TestRenderConfigTUIScreenRequiresTheCompleteNoticeAndExactIdentity(t *testi
 		Path: "messages mark-read", Effect: operation.EffectWrite, Enabled: true,
 	}}, configTUITestAlwaysPaths)
 	model.notice = "Cannot save: enable producer rooms list before retry\nreview"
-	escapedNotice := "Notice: " + safeExternalText(model.notice)
+	escapedNotice := "お知らせ: " + safeExternalText(model.notice)
 	prefix, badge, _ := configTUIItemPrefix(model.items[0], true)
 	identity := prefix + badge + " " + model.items[0].Path
 
@@ -325,7 +325,7 @@ func TestRenderConfigTUIScreenRequiresTheCompleteNoticeAndExactIdentity(t *testi
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			output := renderConfigTUIScreen(model, test.width, test.height)
-			if !strings.Contains(output, "Resize terminal") || strings.Contains(output, "Notice:") || strings.Contains(output, identity) {
+			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "お知らせ:") || strings.Contains(output, identity) {
 				t.Fatalf("incomplete notice or identity did not produce only resize guidance:\n%s", output)
 			}
 		})

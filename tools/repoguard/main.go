@@ -27,7 +27,6 @@ type issue struct {
 
 var (
 	bootstrapPlaceholder  = regexp.MustCompile(`__CLI_[A-Z0-9_]+__|TODO_TEMPLATE|CHANGEME|<your[-_ ][^>]+>`)
-	japaneseText          = regexp.MustCompile(`[\x{3040}-\x{30ff}\x{3400}-\x{9fff}]`)
 	absoluteHome          = regexp.MustCompile(`(?:/Users/[^/\s]+|/home/[^/\s]+|[A-Za-z]:\\Users\\[^\\\s]+)`)
 	privateNetwork        = regexp.MustCompile(`(?i)https?://(?:[^/]*\.(?:internal|corp|local)|10\.[0-9.]+|192\.168\.[0-9.]+|172\.(?:1[6-9]|2[0-9]|3[01])\.[0-9.]+)`)
 	formulaPlaceholder    = regexp.MustCompile(`@@([A-Z0-9_]+)@@`)
@@ -531,9 +530,6 @@ func checkText(path, text string, config projectconfig.Config, denylist []string
 		}
 		if config.Profile == "ready" && !scannerSource && bootstrapPlaceholder.MatchString(line) {
 			issues = append(issues, issue{Path: path, Line: lineNumber, Message: "unresolved bootstrap placeholder"})
-		}
-		if strings.HasSuffix(strings.ToLower(path), ".md") && japaneseText.MatchString(line) {
-			issues = append(issues, issue{Path: path, Line: lineNumber, Message: "documentation must be written in English"})
 		}
 		if !scannerSource && absoluteHome.MatchString(line) {
 			issues = append(issues, issue{Path: path, Line: lineNumber, Message: "machine-specific home directory path"})

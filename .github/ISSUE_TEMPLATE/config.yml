@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Private security report
+  - name: セキュリティ問題を非公開で報告
     url: https://github.com/tasuku43/cwk/security/advisories/new
-    about: Follow SECURITY.md and report suspected vulnerabilities privately.
+    about: SECURITY.md に従い、脆弱性の疑いを非公開で報告してください。

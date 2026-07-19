@@ -29,7 +29,7 @@ type commandSelectionState struct {
 
 func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.Intent, args []string) int {
 	if len(args) != 0 {
-		return c.failUsage(ctx, "invalid_arguments", "usage: "+command.Usage(), "help config", "Run the selector without command arguments.")
+		return c.failUsage(ctx, "invalid_arguments", "使い方: "+command.Usage(), "help config", "コマンド引数を付けずにセレクターを実行してください。")
 	}
 
 	state, repairWarning, err := c.loadCommandSelectionForConfig(ctx)
@@ -54,14 +54,14 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 	}
 	model := newConfigTUIModel(items, alwaysPaths)
 	if repairWarning {
-		model.notice = "The saved selection is invalid; nothing changes until Enter replaces it"
+		model.notice = "保存済みの選択は無効です。Enter で置き換えるまで変更されません"
 	} else if state.viewErr != nil {
-		model.notice = "The current selection is incomplete: " + state.viewErr.Error()
+		model.notice = "現在の選択は不完全です。必要なコマンド間の依存関係を有効にしてください"
 	}
 	original := cloneSelectionMap(state.enabled)
 
 	if c == nil || c.terminal == nil {
-		return c.fail(ctx, fault.New(fault.KindInternal, "terminal_setup_failed", "The interactive terminal adapter is unavailable.", true))
+		return c.fail(ctx, fault.New(fault.KindInternal, "terminal_setup_failed", "対話端末アダプターを利用できません。", true))
 	}
 	session, err := c.terminal.Open(c.In, c.Out)
 	if err != nil {
@@ -69,14 +69,14 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 			return c.fail(ctx, fault.New(
 				fault.KindUnavailable,
 				"interactive_terminal_required",
-				"Command selection requires interactive stdin and stdout terminals.",
+				"コマンド選択には対話可能な stdin と stdout の端末が必要です。",
 				false,
 			))
 		}
 		if errors.Is(err, terminalui.ErrRestoreFailed) {
-			return c.fail(ctx, fault.Wrap(fault.KindInternal, "terminal_restore_failed", "The terminal could not be fully restored after setup failed.", false, err))
+			return c.fail(ctx, fault.Wrap(fault.KindInternal, "terminal_restore_failed", "セットアップ失敗後に端末を完全には復元できませんでした。", false, err))
 		}
-		return c.fail(ctx, fault.Wrap(fault.KindInternal, "terminal_setup_failed", "The interactive terminal could not be prepared.", true, err))
+		return c.fail(ctx, fault.Wrap(fault.KindInternal, "terminal_setup_failed", "対話端末を準備できませんでした。", true, err))
 	}
 	restored := false
 	restore := func() error {
@@ -85,7 +85,7 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 		}
 		restored = true
 		if err := session.Close(); err != nil {
-			return fault.Wrap(fault.KindInternal, "terminal_restore_failed", "The terminal could not be fully restored.", false, err)
+			return fault.Wrap(fault.KindInternal, "terminal_restore_failed", "端末を完全には復元できませんでした。", false, err)
 		}
 		return nil
 	}
@@ -113,7 +113,7 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 			return c.finishConfigFault(ctx, restore, fault.Wrap(
 				fault.KindInternal,
 				"configuration_input_failed",
-				"Command selection input could not be read.",
+				"コマンド選択の入力を読み取れませんでした。",
 				false,
 				io.ErrNoProgress,
 			))
@@ -136,7 +136,7 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 			return c.finishConfigFault(ctx, restore, fault.Wrap(
 				fault.KindInternal,
 				"configuration_input_failed",
-				"Command selection input could not be read.",
+				"コマンド選択の入力を読み取れませんでした。",
 				false,
 				readErr,
 			))
@@ -145,7 +145,7 @@ func runConfig(ctx context.Context, c *CLI, command CommandSpec, base operation.
 			return c.finishConfigFault(ctx, restore, fault.Wrap(
 				fault.KindInternal,
 				"configuration_input_failed",
-				"Command selection input could not be read.",
+				"コマンド選択の入力を読み取れませんでした。",
 				false,
 				io.ErrNoProgress,
 			))
@@ -194,7 +194,7 @@ func (c *CLI) applyConfigTUIKeys(
 			}
 			width, height, err := session.Size()
 			if err != nil {
-				return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindInternal, "terminal_setup_failed", "The terminal size could not be read.", true, err)), true
+				return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindInternal, "terminal_setup_failed", "端末サイズを取得できませんでした。", true, err)), true
 			}
 			if !configTUISelectionVisible(*model, width, height) {
 				if err := c.renderConfigTUI(ctx, session, model); err != nil {
@@ -211,7 +211,7 @@ func (c *CLI) applyConfigTUIKeys(
 			return c.finishConfigFault(ctx, restore, fault.New(
 				fault.KindCanceled,
 				"operation_canceled",
-				"Command selection was canceled before saving.",
+				"保存前にコマンド選択がキャンセルされました。",
 				true,
 			)), true
 		case configTUISave:
@@ -260,16 +260,16 @@ func (c *CLI) saveConfigSelection(
 ) (int, bool) {
 	enabled := model.enabledPaths()
 	if _, _, err := baseCatalog.ActiveView(enabled); err != nil {
-		model.notice = "Cannot save: " + err.Error()
+		model.notice = "保存できません。必要なコマンド間の依存関係を有効にしてください"
 		return ExitOK, false
 	}
 	profile, err := commandselection.New(enabled)
 	if err != nil {
-		return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindInvalidInput, "command_selection_invalid", "The selected command paths are invalid.", false, err)), true
+		return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindInvalidInput, "command_selection_invalid", "選択したコマンドパスは無効です。", false, err)), true
 	}
 	request, err := buildConfigExecutionRequest(command, base)
 	if err != nil {
-		return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindContract, "invalid_mutation_contract", "The command-selection mutation contract is invalid.", false, err)), true
+		return c.finishConfigFault(ctx, restore, fault.Wrap(fault.KindContract, "invalid_mutation_contract", "コマンド選択の変更契約は無効です。", false, err)), true
 	}
 	if err := restore(); err != nil {
 		return c.fail(ctx, err), true
@@ -279,7 +279,7 @@ func (c *CLI) saveConfigSelection(
 		request,
 		func(actionContext context.Context, _ operation.Intent) error {
 			if c == nil || c.commandSelection == nil {
-				return fault.New(fault.KindUnavailable, "command_selection_unavailable", "Command selection configuration is unavailable.", true)
+				return fault.New(fault.KindUnavailable, "command_selection_unavailable", "コマンド選択設定を利用できません。", true)
 			}
 			return c.commandSelection.Save(actionContext, profile)
 		},
@@ -300,7 +300,7 @@ func (c *CLI) saveConfigSelection(
 		selected[path] = true
 	}
 	output := fmt.Sprintf(
-		"config saved enabled=%d disabled=%d changed=%d stale-removed=%d legacy-removed=%d fingerprint=%s\n",
+		"config を保存しました enabled=%d disabled=%d changed=%d stale-removed=%d legacy-removed=%d fingerprint=%s\n",
 		len(enabled), len(choices)-len(enabled), selectionChangeCount(choices, original, selected), len(state.stale), len(state.legacy), commandSelectionFingerprint(enabled),
 	)
 	return c.emitMutationResult(ctx, []byte(output)), true
@@ -330,13 +330,13 @@ func (c *CLI) renderConfigTUI(ctx context.Context, session terminalui.Session, m
 	}
 	width, height, err := session.Size()
 	if err != nil {
-		return fault.Wrap(fault.KindInternal, "terminal_setup_failed", "The terminal size could not be read.", true, err)
+		return fault.Wrap(fault.KindInternal, "terminal_setup_failed", "端末サイズを取得できませんでした。", true, err)
 	}
 	selectionVisible := configTUISelectionVisible(*model, width, height)
 	frame := renderConfigTUIScreen(*model, width, height)
 	frame = "\x1b[H\x1b[2J" + strings.ReplaceAll(frame, "\n", "\r\n")
 	if _, err := writeOnce(c.Out, []byte(frame)); err != nil {
-		return fault.Wrap(fault.KindInternal, "terminal_setup_failed", "The command-selection screen could not be written.", true, err)
+		return fault.Wrap(fault.KindInternal, "terminal_setup_failed", "コマンド選択画面を書き込めませんでした。", true, err)
 	}
 	model.selectionVisibleLastFrame = selectionVisible
 	return nil
@@ -346,7 +346,7 @@ func (c *CLI) finishConfigUnchanged(ctx context.Context, restore func() error) i
 	if err := restore(); err != nil {
 		return c.fail(ctx, err)
 	}
-	return c.emit(ctx, []byte("config unchanged\n"))
+	return c.emit(ctx, []byte("config は変更されませんでした\n"))
 }
 
 func (c *CLI) finishConfigFault(ctx context.Context, restore func() error, original error) int {
@@ -362,7 +362,7 @@ func (c *CLI) loadCommandSelectionState(ctx context.Context) (commandSelectionSt
 		base = c.catalog
 	}
 	if c == nil || c.commandSelection == nil {
-		return commandSelectionState{}, fault.New(fault.KindUnavailable, "command_selection_unavailable", "Command selection configuration is unavailable.", true)
+		return commandSelectionState{}, fault.New(fault.KindUnavailable, "command_selection_unavailable", "コマンド選択設定を利用できません。", true)
 	}
 	profile, configured, err := c.commandSelection.Load(ctx)
 	if err != nil {

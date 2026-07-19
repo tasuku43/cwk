@@ -297,7 +297,7 @@ func mapResponse(input chatwork.Request, body []byte) (chatwork.Result, error) {
 			return chatwork.Result{}, err
 		}
 	default:
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_response_unmapped", "Chatwork response task has no semantic mapping", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_response_unmapped", "Chatwork レスポンスタスクに意味マッピングがありません", false)
 	}
 	return result, nil
 }
@@ -548,5 +548,5 @@ func reference(kind chatwork.ReferenceKind, id wireID) (chatwork.Reference, erro
 }
 
 func malformedResponse() error {
-	return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork response does not match the reviewed wire contract", false)
+	return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork レスポンスがレビュー済みの通信契約と一致しません", false)
 }

@@ -27,10 +27,10 @@ func (c *CLI) emitComplete(ctx context.Context, output []byte) int {
 		return c.fail(ctx, fault.Wrap(
 			fault.KindInternal,
 			"output_write_failed",
-			"The command output could not be written completely.",
+			"コマンド出力を完全に書き込めませんでした。",
 			true,
 			err,
-			fault.NextAction{Command: invocationCommandPath(ctx), Reason: "Retry with a writable output stream."},
+			fault.NextAction{Command: invocationCommandPath(ctx), Reason: "書き込み可能な出力ストリームで再試行してください。"},
 		))
 	}
 	return ExitOK

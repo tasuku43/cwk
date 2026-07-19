@@ -292,7 +292,7 @@ func TestConfigTUITogglesInCatalogOrderShowsEffectsAndSavesAfterRestore(t *testi
 		t.Fatalf("terminal was not restored exactly once: %+v", h.terminal.last)
 	}
 	output := h.stdout.String()
-	for _, want := range []string{"[read]", "[create]", "[write]", "config saved enabled=", "fingerprint=sha256:"} {
+	for _, want := range []string{"[read]", "[create]", "[write]", "config を保存しました enabled=", "fingerprint=sha256:"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output lacks %q:\n%s", want, output)
 		}
@@ -345,7 +345,7 @@ func TestBatchedMoveToggleAndSaveRepaintsEachActionableSelection(t *testing.T) {
 	output := h.stdout.String()
 	identity := choices[1].Path
 	identityIndex := strings.Index(output, identity)
-	savedIndex := strings.Index(output, "config saved")
+	savedIndex := strings.Index(output, "config を保存しました")
 	if identityIndex < 0 || savedIndex < 0 || identityIndex >= savedIndex {
 		t.Fatalf("batched target %q was not displayed before save:\n%s", identity, output)
 	}
@@ -359,9 +359,9 @@ func TestConfigQuitEOFAndInterruptPreserveTheLastSavedProfile(t *testing.T) {
 		wantCode int
 		wantText string
 	}{
-		{name: "q", input: "q", wantCode: ExitOK, wantText: "config unchanged"},
-		{name: "escape", input: "\x1b", wantCode: ExitOK, wantText: "config unchanged"},
-		{name: "EOF", input: "", wantCode: ExitOK, wantText: "config unchanged"},
+		{name: "q", input: "q", wantCode: ExitOK, wantText: "config は変更されませんでした"},
+		{name: "escape", input: "\x1b", wantCode: ExitOK, wantText: "config は変更されませんでした"},
+		{name: "EOF", input: "", wantCode: ExitOK, wantText: "config は変更されませんでした"},
 		{name: "Ctrl-C", input: string([]byte{0x03}), wantCode: ExitCanceled, wantText: "code: operation_canceled"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
@@ -404,7 +404,7 @@ func TestConfigProcessesTerminalBytesReturnedWithEOF(t *testing.T) {
 	if _, configured, err := h.store.Load(context.Background()); err != nil || !configured {
 		t.Fatalf("Enter returned with EOF was not saved: configured=%v err=%v", configured, err)
 	}
-	if !strings.Contains(h.stdout.String(), "config saved") {
+	if !strings.Contains(h.stdout.String(), "config を保存しました") {
 		t.Fatalf("result=%q", h.stdout.String())
 	}
 }
@@ -667,7 +667,7 @@ func TestConfigRestoresBeforeSaveAndDoesNotOverwriteSuccessWithLateCancellation(
 	if code := command.RunContext(ctx, []string{"config"}); code != ExitOK {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "config saved enabled=") || stderr.Len() != 0 {
+	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "config を保存しました enabled=") || stderr.Len() != 0 {
 		t.Fatalf("save result: canceled=%v saves=%d saved=%d stdout=%q stderr=%q", ctx.Err(), store.saves, len(store.saved), stdout.String(), stderr.String())
 	}
 }
@@ -746,7 +746,7 @@ func TestHiddenSelectionCannotBeToggledOrSavedInAnUnusableTerminal(t *testing.T)
 			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
 				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 			}
-			if !strings.Contains(h.stdout.String(), "Resize terminal") || !strings.Contains(h.stdout.String(), "config unchanged") || strings.Contains(h.stdout.String(), "config saved") {
+			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), "config は変更されませんでした") || strings.Contains(h.stdout.String(), "config を保存しました") {
 				t.Fatalf("unusable terminal result:\n%s", h.stdout.String())
 			}
 			if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
@@ -788,7 +788,7 @@ func TestFirstActionAfterResizeOnlyFrameOnlyRedrawsTheSelection(t *testing.T) {
 			if configured && !reflect.DeepEqual(profile.EnabledCommands(), test.wantPaths) {
 				t.Fatalf("saved paths=%v want=%v", profile.EnabledCommands(), test.wantPaths)
 			}
-			if !strings.Contains(h.stdout.String(), "Resize terminal") || !strings.Contains(h.stdout.String(), all[0]) {
+			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), all[0]) {
 				t.Fatalf("resize transition did not repaint the exact current identity:\n%s", h.stdout.String())
 			}
 		})
@@ -819,7 +819,7 @@ func TestInvalidViewNoticeMustFitCompletelyBeforeFurtherMutation(t *testing.T) {
 				t.Fatalf("incomplete notice permitted a save: got=%v want=%v", got, before)
 			}
 			output := h.stdout.String()
-			if !strings.Contains(output, "Resize terminal") || strings.Contains(output, "config saved") {
+			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "config を保存しました") {
 				t.Fatalf("incomplete notice did not fail closed:\n%s", output)
 			}
 		})
@@ -939,8 +939,8 @@ func TestInvalidDependencyOrRecoverySelectionStaysInTUIAndDoesNotOverwrite(t *te
 		target []string
 		want   string
 	}{
-		{name: "missing producer", target: []string{"messages mark-read"}, want: "enable one producer:"},
-		{name: "hidden recovery", target: []string{"rooms list", "messages send"}, want: "messages list"},
+		{name: "missing producer", target: []string{"messages mark-read"}, want: "必要なコマンド間の依存関係を有効にしてください"},
+		{name: "hidden recovery", target: []string{"rooms list", "messages send"}, want: "必要なコマンド間の依存関係を有効にしてください"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			catalog := DefaultCatalog()

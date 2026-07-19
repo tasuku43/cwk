@@ -152,5 +152,12 @@ Do not weaken a check merely to make a change pass. If a check encodes the wrong
 - Do not rewrite Git history, delete data, publish, or create releases unless the task explicitly requires it.
 - Do not fetch or embed external content without verifying its license and integrity.
 - Use synthetic fixtures such as `example.com`, deterministic timestamps, and non-secret tokens.
-- Keep repository documentation in English unless the derived project's theses explicitly establish another language policy.
+- The project thesis selects Japanese for user-facing prose. Keep README,
+  community documents, GitHub contribution templates, human help, TUI text,
+  public fault messages, and recovery reasons in Japanese. Stable machine
+  identifiers and historical work/experiment evidence remain in their original
+  locale-neutral or source language. Durable engineering documents may retain
+  English where exact contract terminology is materially clearer, but every
+  user-facing instruction they introduce must also be available from the
+  active Japanese entry documentation.
 - Security reports follow [SECURITY.md](SECURITY.md), never public issues containing sensitive details.

@@ -20,7 +20,7 @@ const (
 func runDoctor(ctx context.Context, c *CLI, command CommandSpec, intent operation.Intent, args []string) int {
 	format, err := parseFormatOnlyArgs(args)
 	if err != nil {
-		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; usage: "+command.Usage(), "help doctor", "Correct the command arguments.")
+		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help doctor", "コマンド引数を修正してください。")
 	}
 	report, err := c.doctor.Run(ctx, intent)
 	if err != nil {
@@ -31,7 +31,7 @@ func runDoctor(ctx context.Context, c *CLI, command CommandSpec, intent operatio
 	} else if present {
 		report.Checks = append(report.Checks, check)
 		if err := report.Validate(); err != nil {
-			return c.fail(ctx, fault.Wrap(fault.KindInternal, "internal_error", "The combined diagnostic report is invalid.", false, err))
+			return c.fail(ctx, fault.Wrap(fault.KindInternal, "internal_error", "統合した診断レポートは無効です。", false, err))
 		}
 	}
 	if err := validateDoctorProjection(report); err != nil {
@@ -48,9 +48,9 @@ func runDoctor(ctx context.Context, c *CLI, command CommandSpec, intent operatio
 		return c.fail(ctx, fault.New(
 			fault.KindRejected,
 			"diagnostic_failed",
-			"One or more diagnostics failed.",
+			"1件以上の診断が失敗しました。",
 			false,
-			fault.NextAction{Command: "doctor", Reason: "Review the report, correct the failed prerequisite, and rerun diagnostics."},
+			fault.NextAction{Command: "doctor", Reason: "レポートを確認して失敗した前提条件を修正し、診断を再実行してください。"},
 		))
 	}
 	return ExitOK
@@ -58,11 +58,11 @@ func runDoctor(ctx context.Context, c *CLI, command CommandSpec, intent operatio
 
 func validateDoctorProjection(report doctor.Report) error {
 	if len(report.Checks) > maxDoctorChecks {
-		return outputContractExceeded("The diagnostic report exceeds the declared check limit.", "doctor")
+		return outputContractExceeded("診断レポートが宣言済みのチェック数上限を超えています。", "doctor")
 	}
 	for _, check := range report.Checks {
 		if len(check.Name) > maxDoctorNameBytes || len(check.Detail) > maxDoctorDetailBytes {
-			return outputContractExceeded("A diagnostic field exceeds the declared byte limit.", "doctor")
+			return outputContractExceeded("診断フィールドが宣言済みのバイト数上限を超えています。", "doctor")
 		}
 	}
 	return nil
@@ -91,13 +91,13 @@ func renderDoctorReport(report doctor.Report, format successFormat) ([]byte, err
 		}
 		output, err := json.Marshal(document)
 		if err != nil {
-			return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "The diagnostic JSON could not be encoded.", false, err)
+			return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "診断 JSON をエンコードできませんでした。", false, err)
 		}
 		return append(output, '\n'), nil
 	}
 
 	var output bytes.Buffer
-	fmt.Fprintln(&output, "CHECK\tSTATUS\tDETAIL")
+	fmt.Fprintln(&output, "チェック\t状態\t詳細")
 	for _, check := range report.Checks {
 		fmt.Fprintf(&output, "%s\t%s\t%s\n", escapeTSVCell(check.Name), check.Status, escapeTSVCell(check.Detail))
 	}
@@ -110,6 +110,6 @@ func outputContractExceeded(message, command string) *fault.Error {
 		"output_contract_exceeded",
 		message,
 		false,
-		fault.NextAction{Command: command, Reason: "Review the bounded output contract and upstream response."},
+		fault.NextAction{Command: command, Reason: "上限付き出力契約と上流レスポンスを確認してください。"},
 	)
 }

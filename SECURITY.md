@@ -1,71 +1,80 @@
-# Security Policy
+# セキュリティポリシー
 
-Chatwork CLI treats security statements as contracts that must identify both a trust boundary and an enforcement mechanism. A derived project must replace the generic model with the concrete assets, actors, side effects, storage, network destinations, and release guarantees of that tool.
+Chatwork CLI では、セキュリティ上の主張を、信頼境界と検証機構の両方を明示する契約として扱います。具体的な資産、主体、副作用、保存先、ネットワーク送信先、リリース保証は [セキュリティモデル](docs/03_security_model.md) で定義しています。
 
-## Supported versions
+## サポート対象バージョン
 
-| Version | Security support |
+| バージョン | セキュリティサポート |
 |---|---|
-| Latest release | Supported |
-| `main` | Supported for fixes before the next release |
-| Older releases | Not supported unless a derived project documents otherwise |
+| 最新リリース | サポート対象 |
+| `main` | 次のリリースに向けた修正の対象 |
+| 過去のリリース | 原則としてサポート対象外 |
 
-Until this template publishes a release, `main` is the only supported version.
+最初のリリースが公開されるまでは、`main` のみがサポート対象です。
 
-## Report a vulnerability
+## 脆弱性の報告
 
-Use GitHub's private vulnerability reporting flow from the repository's **Security** tab. Do not include vulnerability details, credentials, private URLs, or personal data in a public issue.
+リポジトリの **Security** タブにある GitHub の Private vulnerability reporting を利用してください。公開 Issue に、脆弱性の詳細、認証情報、非公開URL、個人データを記載しないでください。
 
-If private reporting is unavailable in a derived repository, its maintainers must publish an alternative private security contact before the first public release. A public issue may be used only to ask how to contact maintainers and must contain no sensitive details.
+非公開報告機能を利用できない場合は、`task.teckac@gmail.com` へ連絡してください。公開 Issue はメンテナーへの連絡方法を尋ねる目的に限って利用でき、機微な情報を含めてはいけません。
 
-Include, when possible:
+可能であれば次を含めてください。
 
-- affected version and platform;
-- preconditions and impact;
-- minimal reproduction steps;
-- whether secrets or user data may have been exposed;
-- any suggested mitigation.
+- 影響を受けるバージョンとプラットフォーム
+- 前提条件と影響
+- 最小の再現手順
+- シークレットまたはユーザーデータが漏えいした可能性
+- 提案する緩和策（ある場合）
 
-Maintainers should acknowledge a complete report within three business days, coordinate disclosure with the reporter, and avoid promising a release date before the impact is understood.
+メンテナーは、必要な情報がそろった報告を3営業日以内に受領確認することを目標とし、報告者と公開時期を調整します。影響が明らかになる前にリリース日を約束することはありません。
 
-## Template security invariants
+## セキュリティ上の主要な不変条件
 
-| Claim | Primary enforcement |
+| 主張 | 主な検証機構 |
 |---|---|
-| Layer boundaries cannot be bypassed accidentally | `tools/archlint`, architecture tests, `task check` |
-| Every public operation has a declared effect | `operation.Effect`, catalog validation, negative tests |
-| Mutation declarations cannot omit their required target shape | `operation.Intent`, `operation.TargetRef`, domain validation and negative tests |
-| Unknown or inconsistent effects fail closed | domain validation and mutation-path tests |
-| Public commands come from one catalog | `cli.Catalog` contract tests |
-| Discovery references reach actions without reinterpretation | catalog producer/consumer graph, canonical ID validation, exact round-trip tests |
-| Credentials and private identifiers are not committed | `tools/repoguard`, synthetic fixtures, `task security` |
-| A release is built from reviewed source and checked artifacts | release profile and release workflow contracts |
-| Public readiness is an explicit gate | `task public:check` |
+| レイヤー境界を誤って迂回できない | `tools/archlint`、アーキテクチャテスト、`task check` |
+| すべての公開操作が効果を宣言する | `operation.Effect`、カタログ検証、ネガティブテスト |
+| ミューテーションが必要な対象形状を省略できない | `operation.Intent`、`operation.TargetRef`、ドメイン検証とネガティブテスト |
+| 未知または不整合な効果は fail closed になる | ドメイン検証とミューテーション経路テスト |
+| 公開コマンドは1つのカタログから導出される | `cli.Catalog` 契約テスト |
+| 発見された参照を再解釈せずアクションへ渡せる | producer/consumer グラフ、canonical ID 検証、完全一致の往復テスト |
+| Chatwork APIトークンが公開物や出力へ漏れない | infrastructure-only binding、secret canary、`tools/repoguard`、`task security` |
+| 外部テキストが端末・TSV・JSON構造を壊さない | visible projection と hostile-output テスト |
+| 変更操作が対象、影響、確認要件を満たす前に実行されない | mutation contract、ポリシーテスト、ゼロ呼び出しテスト |
+| リリースがレビュー済みソースから作られ、成果物が検査される | release profile と release workflow 契約 |
+| 公開可能性を明示的なゲートで判定する | `task public:check` |
 
-The default catalog contains read-only commands. The template also supplies a policy-neutral mutation execution boundary that validates and snapshots intent, applies one injected policy, and executes one logical mutation. A derived project must supply and test its concrete policy before exposing create or write commands; approval, confirmation, dry-run, operating-system authentication, and authorization reuse are deliberately not selected here. These mechanisms do not prove that an arbitrary derived project is secure. New adapters, protocols, credential stores, file writes, subprocesses, and network destinations require project-specific threat analysis and tests.
+## Chatwork固有の境界
 
-## Trust boundaries
+- `CWK_API_TOKEN` が唯一の認証情報入力です。argv、設定ファイル、標準出力、標準エラーへトークンを渡したり保存したりしません。
+- 認証情報を送る本番宛先は `https://api.chatwork.com/v2` に固定し、リダイレクトを無効にします。
+- すべての外部呼び出しに、タイムアウト、試行回数、応答サイズ、集約件数、アップロードサイズの上限があります。
+- discovery が返す canonical reference は完全一致のまま action へ渡します。表示名、行位置、URL、表示用エイリアスは操作対象のIDではありません。
+- 通常の作成・更新は、検証済みの正確な呼び出しを意図として扱います。アクセス変更には `--confirm=access-change`、破壊的操作には `--confirm=destructive` が必要です。
+- 変更結果が不確実な場合は自動再試行せず、カタログで宣言された読み取り専用コマンドで照合します。
+- Chatworkから得た本文や名前は、構造的にエスケープしても信頼済み命令にはなりません。常に untrusted data として扱います。
+- `cwk config` によるコマンド表示選択は注意範囲を減らす設定であり、認可、アクセス制御、sandbox、セキュリティ境界ではありません。
 
-The base template assumes:
+詳しい資産、攻撃者モデル、信頼境界、負のテスト要件は [セキュリティモデル](docs/03_security_model.md)、認証設計は [認証](docs/07_authentication.md)、外部呼び出しの契約は [外部API契約](docs/08_external_api_contracts.md) を参照してください。
 
-- CLI arguments and environment values are untrusted input.
-- Filesystem, process, network, and credential operations are side effects.
-- Infrastructure responses are untrusted until validated.
-- A successful process launch or interactive terminal is not proof of human authorization.
-- Build dependencies and release automation are part of the supply chain.
-- Repository content and Git history are public once pushed to a public remote.
+## 信頼境界
 
-See [the security model](docs/03_security_model.md) for the required derived-project analysis.
+- CLI引数、環境変数、ファイルは信頼できない入力です。
+- ファイルシステム、プロセス、ネットワーク、認証情報へのアクセスは副作用です。
+- インフラストラクチャからの応答は、検証後も外部由来の信頼できないデータです。
+- プロセスが起動したことや対話端末があることは、人間による認可の証明ではありません。
+- ビルド依存関係とリリース自動化はサプライチェーンの一部です。
+- 公開リモートへ push したリポジトリ内容と Git 履歴は公開情報として扱います。
 
-## Out of scope for the base template
+## 対象外
 
-The template does not, by itself:
+このプロジェクトだけでは、次を保証しません。
 
-- choose an authentication or authorization system;
-- protect a compromised operating system or developer account;
-- guarantee the security of project-specific adapters;
-- provide code signing, notarization, or artifact attestation unless a derived release model enables them;
-- authorize publication of code copied from another repository;
-- replace independent review for high-impact or regulated systems.
+- 侵害されたOS、開発者アカウント、メンテナーアカウント、CI基盤、Chatworkサービスの保護
+- Chatwork側の権限設定を超える認可
+- OAuth、複数アカウント、トークン永続化、認証情報プロファイル
+- コード署名、公証、成果物のattestation（リリース方針で明示的に有効化されていない場合）
+- 別のリポジトリからコピーしたコードを公開する権利の確認
+- 高い影響を持つシステムや規制対象システムに対する独立レビューの代替
 
-When a derived project makes a stronger claim, its documentation must name the added mechanism and its verification path.
+より強い保証を追加する場合は、追加する機構と検証経路を文書化し、同じ変更内でテストまたはゲートを追加してください。

@@ -148,7 +148,7 @@ printf '%s\n' "$build_job" | grep -A4 -F "$release_revision_ref" | grep -qF 'per
 for required in \
   "$release_revision_ref" \
   './scripts/render-formula.sh' 'ruby -c' './scripts/audit-formula.sh' \
-  "$formula_temp_ref" 'ref: main' 'Stage audited Formula on main'; do
+  "$formula_temp_ref" 'ref: main' 'audit済みFormulaをmainへ配置'; do
   if ! printf '%s\n' "$formula_job" | grep -qF "$required"; then
     echo "Formula job is missing its host-specific check: $required" >&2
     exit 1
@@ -166,7 +166,7 @@ release_checkout_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F "$release_
 render_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F './scripts/render-formula.sh' | cut -d: -f1)
 audit_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F './scripts/audit-formula.sh' | cut -d: -f1)
 main_checkout_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F 'ref: main' | cut -d: -f1)
-stage_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F 'Stage audited Formula on main' | cut -d: -f1)
+stage_line=$(printf '%s\n' "$formula_job" | grep -n -m1 -F 'audit済みFormulaをmainへ配置' | cut -d: -f1)
 if ((release_checkout_line >= render_line || render_line >= audit_line || audit_line >= main_checkout_line || main_checkout_line >= stage_line)); then
   echo "Formula must be rendered and audited at the release revision before its output is staged on main" >&2
   exit 1

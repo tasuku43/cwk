@@ -283,6 +283,13 @@ Machine-readable policy belongs in `.harness/project.json` or a project-specific
 
 ## Output and terminal safety
 
+Trusted CLI-authored human prose is Japanese. This does not relax structural
+validation: Japanese catalog and TUI strings are validated and rendered as CLI
+structure, while stable machine tokens remain ASCII. Localization must never
+rewrite an opaque reference, credential, URL, provider response field, or
+external Chatwork text. Translation is not sanitization and does not make
+external text trustworthy.
+
 Remote or file-derived text may contain terminal controls, format characters, Unicode line/paragraph separators, existing backslash escape-looking sequences, JSON-looking fragments, prompt-like prose, or excessive data. The template's visible projection escapes backslash first, then control/format runes and U+2028/U+2029. Therefore an actual newline remains distinguishable from the two input characters `\n`; JSON encoding applies its own structural escaping afterward. TSV delimiters and record newlines are added only by the renderer.
 
 This projection protects terminal and TSV/JSON structure. It does **not** detect intent in printable text, remove prompt-like content, or prove that a language model will ignore it. Printable text such as `SYSTEM ...` or JSON-looking content remains semantically untrusted data. Agent consumers must keep data fields separate from instructions and apply their own trust policy; the CLI cannot claim semantic prompt-injection prevention.

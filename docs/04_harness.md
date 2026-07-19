@@ -197,6 +197,10 @@ The test suite has complementary levels:
   format controls, line separators, and whitespace in non-argv input names
   before exact help can render them.
 - Agent-help shape and size-growth tests keep root discovery index-only while scoped help retains the complete invocation and recovery contract.
+- Localization contract tests require Japanese summaries, outcomes, input and
+  output descriptions, prerequisites, and recovery reasons for every public
+  catalog command while separately proving that command paths, flags, allowed
+  values, fault kinds/codes, JSON keys, and opaque references remain unchanged.
 - JSON-output contract tests compare each built-in renderer's schema version, envelope, and item keys with its catalog `CommandOutput` declaration, and enforce the always-present string cursor for any paged probe.
 - Adversarial output tests keep TSV/JSON records and stdout/stderr ownership intact across controls, Unicode format/line separators, existing backslashes, and printable prompt-like data while preserving opaque IDs exactly.
 - Catalog tests scan every public command for completeness and unique paths.
@@ -268,6 +272,7 @@ Every strong statement should identify its enforcement path.
 | Reproducible generation | Regenerate and require a clean diff |
 | Artifact integrity | Build, inspect, checksum, and install tests |
 | Documentation command | Execute or parse the canonical snippet where practical |
+| Japanese default user experience | Whole-catalog natural-language validation, human help/TUI/error snapshots, stable-identifier regression tests, and repository checks for the active Japanese entry documents and GitHub templates |
 
 If no practical mechanical check exists, state the manual review step and why automation is not reliable. Do not describe a manual convention as mechanically guaranteed.
 

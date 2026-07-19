@@ -1,39 +1,39 @@
-# Support
+# サポート
 
-Chatwork CLI is maintained on a best-effort basis. This file explains where to ask for help and what information maintainers need. A derived project must replace this generic policy with support promises appropriate to its users and release maturity.
+Chatwork CLI はベストエフォートで保守されています。この文書では、質問先と、調査のためにメンテナーが必要とする情報を説明します。
 
-## Where to ask
+## 問い合わせ先
 
-- Use a GitHub issue for a reproducible bug or a focused template improvement.
-- Use the repository's discussion channel, when enabled, for usage and design questions.
-- Use a pull request for a reviewed implementation tied to a clear outcome.
-- Use the private process in [SECURITY.md](SECURITY.md) for vulnerabilities or sensitive security details.
-- Use the private maintainer contact described in [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for conduct concerns.
+- 再現可能な不具合は GitHub Issue で報告してください。
+- 利用方法や設計に関する質問は、リポジトリで Discussions が有効な場合はそちらを利用してください。
+- 明確な成果に結び付くレビュー可能な実装は Pull Request で提案してください。
+- 脆弱性または機微なセキュリティ情報は [SECURITY.md](SECURITY.md) の非公開手順で報告してください。
+- 行動規範に関する懸念は [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) に記載された非公開連絡先へ報告してください。
 
-Do not put credentials, private URLs, personal data, confidential logs, or embargoed details in an issue or discussion.
+Issue や Discussion に、認証情報、非公開URL、個人データ、機密ログ、公開猶予中の情報を含めないでください。
 
-## Information to include
+## 記載してほしい情報
 
-- Template or derived-project version and commit.
-- Operating system and architecture.
-- Go and Task versions when the problem concerns development.
-- Exact command, expected result, actual result, and exit status.
-- A minimal reproduction using synthetic data.
-- Relevant bounded output with secrets and personal data removed.
-- Whether `task check:fast` or another profile fails.
+- `cwk` のバージョンとコミット
+- OS とアーキテクチャ
+- 開発上の問題であれば Go と Task のバージョン
+- 実行した正確なコマンド、期待した結果、実際の結果、終了ステータス
+- 合成データを使った最小の再現手順
+- シークレットと個人データを除去した、必要最小限の出力
+- `task check:fast` または他の検証プロファイルが失敗するかどうか
 
-## Support boundary
+## サポート範囲
 
-The template supports its documented runnable defaults, bootstrap behavior, architecture contracts, and repository gates. It does not provide support for an arbitrary derived project's private integrations, credentials, deployments, external services, or modified release process.
+サポート対象は、公開されている `cwk` のコマンド契約、Chatwork API 連携、文書化された認証・出力・エラー仕様、アーキテクチャ契約、リポジトリの検証ゲートです。利用者固有の非公開連携、認証情報、デプロイ環境、外部サービスの障害、改変されたリリース工程は対象外です。
 
-Maintainers do not guarantee a response time, long-term support for old releases, or private implementation consulting. Security-report acknowledgement targets are stated separately in `SECURITY.md`.
+回答時間、古いリリースの長期サポート、非公開の実装コンサルティングは保証しません。セキュリティ報告の受領目標は `SECURITY.md` に別途記載します。
 
-## Before requesting help
+## 問い合わせ前の確認
 
-1. Read [README.md](README.md) and the [documentation map](docs/README.md).
-2. Check existing issues and accepted decisions.
-3. Run the smallest relevant verification profile.
-4. Reduce the problem to a public, synthetic reproduction.
-5. Confirm the behavior belongs to this template rather than a derived integration.
+1. [README.md](README.md) と [文書マップ](docs/README.md) を読んでください。
+2. 既存の Issue と採択済みの意思決定を確認してください。
+3. 関連する最小の検証プロファイルを実行してください。
+4. 問題を公開可能な合成データによる再現手順に縮小してください。
+5. 問題が Chatwork CLI の契約範囲に含まれることを確認してください。
 
-Clear evidence makes support faster and helps turn one report into a lasting test or documentation improvement.
+明確な証拠があると、調査が速くなり、個別の報告を恒久的なテストや文書改善につなげられます。

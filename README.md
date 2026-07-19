@@ -1,68 +1,31 @@
 # Chatwork CLI
 
-Chatwork CLI is a runnable, public-ready foundation for building task-oriented Go command-line tools with coding agents. It starts as a small `cwk` binary and gives a derived project an explicit product thesis, a four-layer architecture, a machine-readable agent contract, typed side-effect and external-API boundaries, one verification gate, and a documented path to a public release.
-
-The default repository is intentionally real and buildable:
+Chatwork CLI（`cwk`）は、開発者、運用担当者、コーディングエージェントがChatworkの作業を正確なコマンドとして実行するための、タスク指向CLIです。APIエンドポイントをそのまま公開するのではなく、「ルームを探す」「会話を読む」「メッセージを送る」といったユーザー成果を公開語彙にしています。
 
 - Go module: `github.com/tasuku43/cwk`
 - Binary: `cwk`
 - Display name: `Chatwork CLI`
+- 認証: `CWK_API_TOKEN` によるプロセス単位のPAT認証
 
-The bootstrap tool replaces those exact defaults with validated project values. The defaults are not placeholder syntax, so the template can be built and tested before it is customized.
+2026-07-18時点で固定したChatwork APIの公開REST操作32件を、レビュー済みのタスクワークフローでカバーします。コマンド、入出力、効果、失敗、復旧、canonical referenceの契約は1つの `cli.Catalog` から導出され、`task check` で機械的に検証されます。
 
-## What this template optimizes for
+## 設計上の特徴
 
-- A project-specific thesis that lets contributors and agents resolve ambiguous design choices.
-- User tasks as the public vocabulary, instead of leaking transport or vendor APIs into the CLI.
-- Explicit utility, discover, and act roles with opaque IDs passed unchanged between tasks.
-- Pure domain rules, application use cases, infrastructure adapters, and a thin CLI composition root.
-- Explicit `read`, `create`, and `write` effects with typed intent, target, and impact information.
-- Structured command prerequisites, inputs, outputs, completeness, failures, and recovery actions for agents.
-- A secret-free PAT authentication boundary plus policy-neutral foundations for pagination, timeout, retry/idempotency, and mutations.
-- A single command catalog as the source of truth for routing and help.
-- Executable architectural, security, release, and public-repository claims.
-- A clean public boundary: no inherited organization names, private URLs, credentials, or internal history.
+- 公開コマンドは、プロバイダーのAPI操作ではなくユーザーのタスクを表します。
+- コマンドを `utility`、`discover`、`act` に分類し、発見されたopaque IDを変更せず次の操作へ渡します。
+- ドメイン、アプリケーション、インフラストラクチャ、CLIの4レイヤーで責務を分離します。
+- すべての操作は `read`、`create`、`write` の効果と、型付けされた意図、対象、影響を宣言します。
+- エージェント向けhelpは、前提条件、入力、出力、完全性、失敗、復旧アクションを機械可読な形で返します。
+- Chatwork APIトークンをドメインやアプリケーション層へ渡さず、インフラストラクチャ内の一時的なbindingに閉じ込めます。
+- ページング、タイムアウト、試行回数、応答サイズ、ミューテーション結果を有限の契約として扱います。
+- 外部テキストを信頼できないデータとして構造的に分離し、canonical referenceは検証済みの完全一致値として保持します。
+- アーキテクチャ、セキュリティ、公開可能性、リリースに関する主張を実行可能なチェックで検証します。
 
-The repository fixes reusable vocabulary and enforcement points without turning transport details into public tasks. For authentication, it uses PAT-only secret-free requirements and sessions, a fail-closed application gate, an ephemeral infrastructure-issued binding passed unchanged through task ports, and exact credential-record revalidation before I/O. OAuth is not supplied by the current core; adding it later requires a new product, domain, security, dependency, and migration decision. [Authentication](docs/07_authentication.md) and [External API Contracts](docs/08_external_api_contracts.md) define the current boundary in detail.
+製品判断の詳細は [プロジェクトのテーゼ](docs/00_theses.md) と [製品契約](docs/01_product_contract.md)、認証と外部呼び出しの境界は [認証](docs/07_authentication.md) と [外部API契約](docs/08_external_api_contracts.md) を参照してください。
 
-## Start a derived project
+## 実行する
 
-Create a new repository from this template, then work from the new repository. Do not copy this repository's `.git` directory into an unrelated project.
-
-For Codex, invoke [`$bootstrap-derived-cli`](.agents/skills/bootstrap-derived-cli/SKILL.md) first. It gathers the project identity, uses the same transactional tool described below, verifies imports and gates, and hands off to project-specific thesis work. The manual equivalent is:
-
-1. Edit [`.harness/project.json`](.harness/project.json) with the new project identity and policy.
-2. Preview the exact replacements:
-
-   ```sh
-   go run ./tools/bootstrap --dry-run
-   ```
-
-3. Apply the validated bootstrap:
-
-   ```sh
-   go run ./tools/bootstrap
-   ```
-
-4. Replace the generic project reasoning with concrete decisions, in this order:
-
-   - [theses](docs/00_theses.md)
-   - [product contract](docs/01_product_contract.md)
-   - [security model](docs/03_security_model.md)
-   - [authentication decision](docs/07_authentication.md)
-   - [external API contracts](docs/08_external_api_contracts.md)
-   - [release model](docs/06_release.md)
-
-5. Run the canonical gates:
-
-   ```sh
-   task check
-   task public:check
-   ```
-
-The bootstrap changes repository identity; it does not invent the product. A derived project is not ready merely because all names were replaced. Its north star, supported tasks, trust boundaries, and release promises must be made specific before implementation expands.
-
-## Run the default CLI
+必要なGoのバージョンは `go.mod` を参照してください。リポジトリから直接、次のように実行できます。
 
 ```sh
 go run ./cmd/cwk --help
@@ -75,97 +38,13 @@ go run ./cmd/cwk config
 go run ./cmd/cwk doctor
 ```
 
-Human help is hierarchical: root help shows direct local commands and one entry
-per task namespace, `<namespace> --help` lists that namespace's exact commands,
-and `<exact-command> --help` shows one command's usage and catalog-derived input
-facts, including repeatable flags and opaque-reference kinds. Machine-readable
-agent help keeps its compact exact-outcome root index so a known path can request
-its complete contract directly. All of these views are derived from the same
-active view of the complete catalog.
+人間向けhelpは階層化されています。ルートhelpはローカルコマンドとタスクのトップレベル名前空間を1回ずつ表示し、`<namespace> --help` はその名前空間のコマンド、`<exact-command> --help` はそのコマンドの使用法と入力契約を表示します。エージェント向けhelpは、ルートでは簡潔な成果索引を返し、スコープ指定時に完全な契約を返します。すべての表示とルーティングは、完全なカタログから導出した同じ有効コマンドビューを使用します。
 
-### Curate the command view
+## 認証する
 
-Use the local command selector when an agent does not need every supported
-workflow:
+`CWK_API_TOKEN` を、シェルまたはシークレットマネージャーからコマンドプロセスへ渡してください。トークンをargv、コマンド文字列、プロジェクトファイルへ含めないでください。`CWK_API_TOKEN` はChatwork認証情報の唯一の入力であり、認証方式の選択やloginコマンドはありません。
 
-```sh
-cwk config
-```
-
-`config` requires interactive stdin and stdout terminals. Use Up and Down to
-move, Space to toggle the selected Chatwork task, Enter to validate and save,
-or `q` to leave the last saved profile unchanged. ASCII Space and the U+3000
-full-width space emitted by some Japanese input methods are equivalent. Each
-row keeps its literal `read`, `create`, or `write` effect badge. Cyan, yellow,
-and magenta are only supplemental cues for those badges; color is never the
-sole meaning, and red is not used to imply that every write is destructive.
-The badge field is padded to the longest label so every command path begins in
-the same column. Redirected or otherwise
-non-terminal invocation fails with a typed error instead of falling back to a
-second input grammar. If the terminal cannot show the current exact command
-path and effect together, movement, toggle, and save are disabled until it is
-resized; `q` still exits without saving.
-
-Before Enter, `q`, input closure, Ctrl-C, or context cancellation performs no
-save. Enter validates reference and recovery closure, restores the terminal,
-and only then starts one profile replacement; restoration failure also saves
-nothing.
-If that replacement has an uncertain outcome, run the always-on read-only
-`doctor` task before another mutation. Its `command-selection` diagnostic
-reports source, state, enabled and disabled counts, and a deterministic
-`sha256:` fingerprint of the catalog-ordered enabled selection. `help` is
-command discovery, not saved-state reconciliation. Scoped agent help publishes
-the exact uncertain-error grammar used by both text and JSON output.
-
-`help`, `doctor`, `version`, and `config` are catalog-declared always on; only
-Chatwork task leaves are selectable. When the active profile cannot be loaded,
-`doctor`, `version`, `config`, and scoped help for those local commands remain
-reachable. Bare root help returns the typed load fault instead of presenting
-the failed profile as a valid empty Chatwork view. Malformed serialized content
-can enter the explicit `config` repair flow, while unsafe or inaccessible
-storage must be repaired locally and inspected with `doctor`. Profiles written
-by the retired selector may contain `doctor` or `version`; only those two
-legacy entries are tolerated and removed by the next successful Enter save.
-
-After saving, an off command disappears from human and agent help, recovery and
-reference-workflow projections, and command routing. Invoking it produces the
-same `unknown_command` result as an unknown path before PAT resolution or a
-Chatwork request. A saved exact-path allowlist is authoritative, so commands
-introduced by a later release remain off until selected. With no preference
-file, all current configurable commands are on for backward compatibility.
-
-The file is
-`${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json` on macOS and
-Linux, and `%AppData%\\cwk\\command-selection.json` on Windows. It contains no
-PAT or provider data and is separate from the retired OAuth `config.json`.
-Writes use a restricted same-directory temporary file. Unix replacement uses
-rename plus directory sync; Windows requests replace-existing through the
-portable filesystem API, which does not promise cross-platform atomicity or
-durability.
-
-This feature reduces an agent's attention surface; it is not authorization,
-sandboxing, or a security control. A local actor can re-enable commands through
-`config`, edit the file, or delete it to restore the all-enabled default.
-Enabling a command does not bypass PAT authentication, Chatwork permissions,
-canonical references, or access-change/destructive confirmation.
-
-The `doctor` task is a local, read-only utility slice through the domain,
-application, infrastructure, and CLI layers. It reports runtime diagnostics and
-the command-selection reconciliation fingerprint without reading a Chatwork
-credential or calling Chatwork. Chatwork task commands own the public
-discover-to-act workflows: for example, pass the canonical `room_ref` emitted
-by `rooms list` unchanged to `messages list --room`. Supply the Chatwork API
-token from the command environment before invoking an API task. The former
-synthetic sample pair remains only as an offline test fixture and is not
-returned by public help.
-
-### Authenticate
-
-Inject `CWK_API_TOKEN` into the command process through your shell or secret
-manager, without putting the token in argv, a command literal, or a project
-file. It is the sole Chatwork credential input; there is no authentication
-method selector or login command. For example, a non-echoing shell prompt can
-populate a shell value and export only that variable to child commands:
+たとえば、入力を表示しないシェルプロンプトから値を受け取り、子プロセスへ渡す環境変数だけをexportできます。
 
 ```sh
 read -r -s CWK_API_TOKEN
@@ -174,21 +53,41 @@ cwk rooms list
 unset CWK_API_TOKEN
 ```
 
-The token remains process-local: `cwk` does not persist it in XDG/AppData
-configuration, an operating-system credential store, or a project file. Unset
-the variable when the shell no longer needs it. Missing or malformed token
-input fails before a Chatwork request and scoped help identifies
-`CWK_API_TOKEN` as the required environment input.
+トークンはプロセス内にのみ保持されます。`cwk` はXDG/AppData設定、OSの認証情報ストア、プロジェクトファイルへトークンを保存しません。不要になったら環境変数をunsetしてください。未設定または形式が不正な場合は、Chatworkへのリクエスト前に失敗し、スコープ指定のhelpが必要な環境変数として `CWK_API_TOKEN` を示します。
 
-### Read agent output
+## コマンド表示を絞り込む
 
-Chatwork success output starts directly with the task result. Its text contract
-is versioned by the `cwk` release and enforced by catalog fields and goldens. It
-prints canonical references directly and keeps only the facts declared for that
-task, plus applicable bounds/completeness and explicit trust framing. Reviewed
-homogeneous collections declare their trust boundary and fixed schema once,
-then emit one provider-order positional record per item. For example, a
-synthetic room collection is shaped as:
+エージェントがすべてのワークフローを必要としない場合は、ローカルのコマンドセレクターを利用できます。
+
+```sh
+cwk config
+```
+
+`config` は対話可能なstdinとstdout端末を必要とします。Up/Downで移動し、Spaceで選択中のChatworkタスクを切り替え、Enterで検証して保存します。`q` は以前保存した設定を変更せず終了します。ASCII Spaceと、日本語入力システムなどが送るU+3000全角スペースは同じ操作です。
+
+各行には `read`、`create`、`write` の文字による効果バッジが残ります。cyan、yellow、magentaは補助的な表示にすぎず、色だけで意味を示しません。画面に現在の正確なコマンドパスと効果を同時に表示できない場合は、端末を広げるまで移動、切り替え、保存を無効にします。この状態でも `q` なら保存せず終了できます。非対話環境では別の入力文法へ切り替えず、型付けされたエラーで失敗します。
+
+Enterより前に `q`、入力終了、Ctrl-C、context cancellationが発生した場合、保存は行われません。Enterはreferenceとrecoveryの閉包性を検証し、端末状態を復元してから、設定を1回だけ置換します。端末復元に失敗した場合も保存しません。
+
+置換結果が不確実な場合は、別の変更を実行する前に、常時利用可能な読み取り専用の `doctor` を実行してください。`command-selection` 診断は、source、state、有効・無効件数、カタログ順の選択から得た決定的な `sha256:` fingerprintを報告します。`help` はコマンド発見用であり、保存状態の照合には使いません。
+
+`help`、`doctor`、`version`、`config` は常に有効で、Chatworkタスクだけを選択できます。有効なプロファイルを読み込めない場合も、これらのローカルコマンドとそのスコープ指定helpは利用できます。bare root helpは、壊れたプロファイルを正常な空ビューに見せず、型付けされた読み込みエラーを返します。シリアライズ形式だけが壊れている場合は明示的な `config` 修復フローを利用できますが、安全でない、またはアクセス不能なストレージはファイルシステム上で修復し、`doctor` で確認する必要があります。
+
+保存後、無効にしたコマンドは、人間・エージェント向けhelp、recovery、reference workflow、ルーティングから消えます。呼び出すと、PATの解決やChatworkリクエストより前に、未知のパスと同じ `unknown_command` を返します。保存済みの正確なパスのallowlistが優先されるため、後のリリースで追加されたコマンドは、明示的に選択するまで無効です。設定ファイルがない場合は、後方互換性のため現在の設定可能コマンドをすべて有効にします。
+
+設定ファイルは、macOS/Linuxでは `${XDG_CONFIG_HOME:-$HOME/.config}/cwk/command-selection.json`、Windowsでは `%AppData%\\cwk\\command-selection.json` です。PATやChatworkデータは含まず、廃止されたOAuth用 `config.json` とは別です。
+
+この機能はエージェントの注意範囲を減らすためのものであり、認可、sandbox、セキュリティ制御ではありません。ローカルユーザーは `config`、ファイル編集、ファイル削除によりコマンドを再度有効にできます。コマンドを有効にしても、PAT認証、Chatwork上の権限、canonical reference、アクセス変更・破壊的操作の確認を迂回できません。
+
+`doctor` はローカルの読み取り専用ユーティリティです。Chatworkの認証情報を読んだり、Chatworkへアクセスしたりせず、実行環境とコマンド選択の照合情報を報告します。
+
+## canonical referenceを使う
+
+Chatworkタスクはdiscoverからactへの公開ワークフローを提供します。たとえば、`rooms list` が返したcanonical `room_ref` を変更せず、`messages list --room` へ渡します。表示名、行位置、URL、出力内のエイリアスはコマンドIDではありません。
+
+Chatworkの正常出力はタスク結果から直接始まります。テキスト契約は `cwk` のリリースでバージョン管理され、カタログフィールドとgolden testで検証されます。宣言されたタスク情報、canonical reference、該当する範囲・完全性、外部テキストの明示的な信頼境界だけを出力します。
+
+たとえば、合成データのルーム一覧は次の形です。
 
 ```text
 rooms count=2 complete=true
@@ -198,15 +97,11 @@ schema: room-ref "name" type role unread mentions tasks
 4102 "Synthetic Archive" "group" "member" 0 0 0
 ```
 
-Pass a value such as `4101` unchanged to a declared `--room` input. Provider
-organization IDs, icon URLs, empty descriptions, empty download URLs, zero
-coverage limits, provider coverage kinds, and other non-contract fields are not
-emitted. A bounded message window declares `window=recent|changes`,
-`complete=false`, its positive provider `source-limit`, unresolved relationship count, typed
-To/reply/quote facts, and message bodies under one `untrusted escaped` framing.
-It factors repeated sender data into a document-local actor dictionary, but
-keeps every canonical message reference directly reusable by the next command.
-For example, a two-message synthetic window is shaped as:
+`4101` のような値を、宣言された `--room` 入力へそのまま渡します。provider organization ID、icon URL、空のdescription、空のdownload URL、0のcoverage limit、provider coverage kindなど、契約外のフィールドは出力しません。
+
+## メッセージ結果を読む
+
+有限のメッセージウィンドウは、`window=recent|changes`、`complete=false`、正のprovider `source-limit`、未解決の関係件数、型付けされたTo/reply/quote、`untrusted escaped` として扱う本文を宣言します。繰り返される送信者情報は文書ローカルのactor dictionaryにまとめますが、すべてのcanonical message referenceは次のコマンドでそのまま利用できます。
 
 ```text
 messages room-ref=4101 count=2 window=recent source-limit=100 complete=false unresolved-relations=0
@@ -219,18 +114,9 @@ actors
 #2 9002 a2 1700000010 reply=#1 to=a1 "15:00 works."
 ```
 
-The fixed schema gives meaning to the positional values without repeating
-`message-ref=`, `sent=`, or `body=` on every record. `reply=#1` is a
-document-local edge. Use the second field (`9001` or `9002`), not `#1` or an
-actor alias, when a later command requires `--message`.
+固定スキーマが位置の意味を示すため、各レコードで `message-ref=`、`sent=`、`body=` を繰り返しません。`reply=#1` は文書内だけの関係です。後のコマンドが `--message` を必要とする場合、`#1` やactor aliasではなく、2番目のフィールド（`9001` または `9002`）を使います。
 
-To reduce a message result without post-processing, add `--limit` with a count
-from 1 through 100. It selects the newest primary messages by their typed send
-time; equal timestamps prefer the later provider position, while rendered
-records retain their original provider order and `#sequence` values. Repeat
-`--sender` up to 100 times to form an OR candidate set before that limit is
-applied. Add `--context replies` only when direct typed reply parents and
-children from the same bounded provider window are useful:
+外部の後処理なしで結果を絞るには、1から100の `--limit` を指定します。型付けされた送信時刻から新しいprimary messageを選び、同じ時刻ではprovider上の後の位置を優先しますが、表示順と `#sequence` は元のprovider順を保ちます。`--sender` は最大100回指定でき、limitより前にOR条件の候補集合を作ります。同じ有限ウィンドウ内にある直接のreply parent/childも必要なときだけ `--context replies` を追加します。
 
 ```sh
 go run ./cmd/cwk messages list --room 4101 --limit 10
@@ -240,24 +126,15 @@ go run ./cmd/cwk messages list --room 4101 \
 go run ./cmd/cwk messages list --room 4101 --window changes
 ```
 
-Omitting `--window` selects the latest bounded `recent` window. Use the final
-explicit `--window changes` form only when provider differential retrieval is
-the intended task; neither mode is complete room history.
+`--window` を省略すると、最新の有限な `recent` ウィンドウを選びます。providerの差分取得を意図する場合だけ、明示的に `--window changes` を指定してください。どちらもルームの完全な履歴ではありません。
 
-Every active selection keeps the original `#sequence`, including gaps, and
-records the source count and anchor sequences once. When `--limit` is active,
-that record also includes the pre-limit candidate count and requested primary
-limit. Added records are one-hop reply context, so explicit `--context replies`
-may make the header `count` exceed `--limit`; the default context is `none`.
-The provider `source-limit=100` remains a separate retrieval bound. The command
-makes one Chatwork request using only the documented `force` query, does not
-paginate, and does not infer relations from
-`[To]`/`[rp]` body text, walk whole threads, fetch an omitted parent, or claim
-that two speakers form an exclusive conversation. Account and message
-references remain canonical values accepted unchanged by later commands.
+選択後も元の `#sequence` を保持するため、番号に欠番が生じることがあります。`--limit` を指定した場合は、limit適用前のcandidate countとrequested primary limitも1回だけ記録します。`--context replies` により追加されるレコードは1-hopのreply contextであるため、headerの `count` が `--limit` を超える場合があります。default contextは `none` です。
 
-File discovery follows the same rule and keeps an absent source-message
-position explicit:
+providerの `source-limit=100` は別の取得上限です。このコマンドは、文書化された `force` queryだけを使ってChatworkへ1回リクエストし、paginationを行いません。`[To]`/`[rp]` の本文から関係を推測したり、thread全体をたどったり、欠けたparentを取得したり、2人だけの会話だと断定したりしません。
+
+## ファイル結果を読む
+
+ファイル発見も同じ規則に従い、元メッセージがない状態を明示します。
 
 ```text
 files count=2 limit=100 complete=false
@@ -267,52 +144,71 @@ schema: file-ref room-ref account-ref message-ref "name" size
 6301 4101 7002 absent "notes.txt" 4096
 ```
 
-To inspect the first file, pass position one and position two unchanged:
-`cwk files show --room 4101 --file 6302`. The literal `absent` is state, not a
-canonical reference, and must not be passed to a command input.
+最初のファイルを確認するには、1番目と2番目の位置を変更せず渡します。
 
-Success data is written to stdout only after the complete bounded result has been rendered. Failures go to stderr as stable text or schema-versioned JSON and distinguish invalid input, authentication, permission, missing or ambiguous targets, rate limits, temporary failures, policy rejection, cancellation, unsupported work, contract violations, and internal faults with dedicated exit statuses. Schema-v3 root agent help is a compact outcome/capability index whose machine-readable `scope_request` points to exact-command or namespace help. Only that scoped response returns the complete I/O, output, error, role, prerequisite, authentication, mutation, and reference-flow contracts, so catalog growth does not duplicate them at the root.
-
-## Repository map
-
-```text
-cmd/cwk/                 thin executable entry point
-internal/domain/             pure types, faults, effects, API envelopes
-internal/app/                task use cases, auth/pagination/execution gates
-internal/infra/              concrete adapters for external systems
-internal/cli/                catalog, routing, rendering, composition root
-
-docs/                        durable product and engineering reasoning
-docs/decisions/              accepted and superseded architecture decisions
-docs/work/                   bounded work packets for active changes
-tools/                       repository-aware linters and bootstrap tooling
-scripts/                     canonical checks and release helpers
-.harness/project.json        project identity and machine-readable policy
-.agents/skills/              first-run bootstrap and capability workflows
+```sh
+cwk files show --room 4101 --file 6302
 ```
 
-Read [the documentation map](docs/README.md) for the intended order and ownership of each document. Contributors and coding agents must also read [AGENTS.md](AGENTS.md).
+`absent` は状態を表すリテラルであり、canonical referenceではないため、コマンド入力へ渡してはいけません。
 
-For community participation and help, see the [Code of Conduct](CODE_OF_CONDUCT.md), [Contributing Guide](CONTRIBUTING.md), [Support Policy](SUPPORT.md), and [Security Policy](SECURITY.md).
+## 出力とエラーの契約
 
-## Verification profiles
+正常データは、有限の結果全体をレンダリングできた後にstdoutへ書き込みます。失敗は安定したテキストまたはスキーマバージョン付きJSONとしてstderrへ出力し、invalid input、authentication、permission、not found、ambiguous、rate limited、unavailable、policy rejection、cancellation、unsupported、contract violation、internal faultを終了ステータスで区別します。
 
-All entry points delegate to `./scripts/check.sh`:
+schema-v3のroot agent helpは、簡潔なoutcome/capability indexです。機械可読な `scope_request` が、正確なコマンドまたは名前空間のhelpを示します。完全なI/O、output、error、role、prerequisite、authentication、mutation、reference flow契約は、スコープ指定の応答だけが返します。
 
-| Command | Purpose |
+## リポジトリ構成
+
+```text
+cmd/cwk/                     薄い実行エントリーポイント
+internal/domain/             純粋な型、fault、effect、API envelope
+internal/app/                task use case、auth/pagination/execution gate
+internal/infra/              外部システムの具体的なadapter
+internal/cli/                catalog、routing、rendering、composition root
+
+docs/                        長期的な製品・エンジニアリング判断
+docs/decisions/              採択済み・置換済みのarchitecture decision
+docs/work/                   進行中の変更を扱う有限のwork packet
+tools/                       repository-aware lintと補助ツール
+scripts/                     canonical checkとrelease helper
+.harness/project.json        製品identityと機械可読policy
+.agents/skills/              Codex向けの開発・capability workflow
+```
+
+文書の読む順序と責務は [文書マップ](docs/README.md) を参照してください。コントリビューターとコーディングエージェントは [AGENTS.md](AGENTS.md) も読む必要があります。
+
+コミュニティ参加とサポートについては、[行動規範](CODE_OF_CONDUCT.md)、[コントリビューションガイド](CONTRIBUTING.md)、[サポートポリシー](SUPPORT.md)、[セキュリティポリシー](SECURITY.md) を参照してください。
+
+主要な設計・運用文書は次のとおりです。
+
+- [プロジェクトのテーゼ](docs/00_theses.md)
+- [製品契約](docs/01_product_contract.md)
+- [アーキテクチャ](docs/02_architecture.md)
+- [セキュリティモデル](docs/03_security_model.md)
+- [検証ハーネス](docs/04_harness.md)
+- [公開リポジトリ方針](docs/05_public_repository.md)
+- [リリース方針](docs/06_release.md)
+- [認証](docs/07_authentication.md)
+- [外部API契約](docs/08_external_api_contracts.md)
+- [エージェント準備検証](docs/09_agent_readiness_validation.md)
+
+## 検証プロファイル
+
+すべてのエントリーポイントは `./scripts/check.sh` に委譲します。
+
+| コマンド | 目的 |
 |---|---|
-| `task check:fast` | Formatting, architecture, and focused tests for short feedback loops |
-| `task check` | The full pre-merge gate |
-| `task security` | Credential, dependency, egress, and public-boundary checks |
-| `task release:check` | Packaging and release-contract checks |
-| `task public:check` | Public-readiness and template-sanitization checks |
+| `task check:fast` | 短いフィードバックループ向けのformat、architecture、focused test |
+| `task check` | merge前に必須のfull gate |
+| `task security` | credential、dependency、egress、public-boundary check |
+| `task release:check` | packagingとrelease-contract check |
+| `task public:check` | public readinessと公開境界check |
 
-CI is the authority. Local hooks may run a faster profile, but they must call the same script rather than reimplementing policy.
+CIが完了判定の基準です。ローカルhookは高速なプロファイルを実行できますが、ポリシーを再実装せず、同じスクリプトを呼び出す必要があります。
 
-## Public template policy
+このリポジトリでは、例とフィクスチャに公開可能な合成データを使用します。機密情報をソース、文書、生成ファイル、ビルドログ、Git履歴へ含めないでください。公開リポジトリの方針は [公開リポジトリガイド](docs/05_public_repository.md) を参照してください。
 
-This repository uses public-safe runnable defaults and synthetic examples. A derived project must keep confidential material out of source, fixtures, documentation, generated files, build logs, and Git history. Review [the public repository guide](docs/05_public_repository.md) before the first push to a public remote.
+## ライセンス
 
-## License
-
-Chatwork CLI is available under the [MIT License](LICENSE). Derived projects must make an explicit license choice; keeping MIT is allowed, but it must not happen accidentally.
+Chatwork CLI は [MIT License](LICENSE) の下で提供されています。

@@ -117,6 +117,10 @@ which catalog paths may be selected or attach CLI recovery commands.
 - the pure command-selector model, fragmented key-sequence parser, bounded
   viewport, effect badges, and terminal frame rendered over the infrastructure
   terminal session.
+- the single Japanese human locale for help, trusted CLI-authored TUI prose,
+  public fault messages, recovery reasons, and descriptive agent-contract
+  metadata. Stable machine identifiers remain in their existing ASCII forms;
+  locale handling never crosses into opaque-reference or provider-text values.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
@@ -424,6 +428,12 @@ The Chatwork policy implementation derives one of three confirmation requirement
 - Application errors explain task failure or ambiguity.
 - Infrastructure errors map unstable upstream details into a stable `fault.Error` without leaking secrets.
 - CLI maps fault kind, code, retryability, retry-after, and next actions to stable human and machine presentation and exit statuses.
+
+Public fault messages and next-action reasons are Japanese, while kind, code,
+retryability, retry-after representation, next command, JSON keys, and exit
+status remain locale-neutral contracts. Internal validation strings may remain
+English when they are not rendered directly; the CLI must not expose a raw
+internal cause as a substitute for a localized public fault.
 
 The stable exit mapping is `0` success; `2` invalid input; `3` internal; `4` authentication; `5` permission; `6` not found; `7` ambiguous; `8` rate limited; `9` unavailable; `10` rejected; `11` canceled; `12` unsupported; and `13` contract violation. Success output is written to stdout, while text or schema-versioned JSON failures are written to stderr. A zero status requires a complete successful write. A failing `doctor` report may be rendered in full before its structured `rejected` failure so callers receive evidence without treating an incomplete result as success.
 

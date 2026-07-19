@@ -22,7 +22,7 @@ func (b Budget) Validate() error {
 		return fault.New(
 			fault.KindContract,
 			"invalid_pagination_budget",
-			"page size, maximum pages, and maximum items must be positive",
+			"ページサイズ、最大ページ数、最大項目数は正の値である必要があります",
 			false,
 		)
 	}
@@ -40,13 +40,13 @@ func Drain[T any](ctx context.Context, budget Budget, fetch Fetch[T]) ([]T, erro
 		return nil, err
 	}
 	if ctx == nil {
-		return nil, fault.New(fault.KindContract, "missing_context", "pagination context is not configured", false)
+		return nil, fault.New(fault.KindContract, "missing_context", "ページ処理コンテキストが設定されていません", false)
 	}
 	if fetch == nil {
-		return nil, fault.New(fault.KindContract, "missing_page_fetcher", "page fetcher is not configured", false)
+		return nil, fault.New(fault.KindContract, "missing_page_fetcher", "ページ取得処理が設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "pagination was canceled", true, err)
+		return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "ページ処理がキャンセルされました", true, err)
 	}
 
 	items := make([]T, 0)
@@ -57,17 +57,17 @@ func Drain[T any](ctx context.Context, budget Budget, fetch Fetch[T]) ([]T, erro
 			return nil, fault.New(
 				fault.KindContract,
 				"pagination_page_limit",
-				"pagination did not complete within the declared page limit",
+				"ページ処理が宣言済みのページ数上限内に完了しませんでした",
 				false,
 			)
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "pagination was canceled", true, err)
+			return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "ページ処理がキャンセルされました", true, err)
 		}
 		request := page.Request{Token: token, Size: budget.PageSize}
 		result, err := fetch(ctx, request)
 		if contextErr := ctx.Err(); contextErr != nil {
-			return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "pagination was canceled", true, contextErr)
+			return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "ページ処理がキャンセルされました", true, contextErr)
 		}
 		if err != nil {
 			if structured, ok := fault.PublicCopy(err); ok {
@@ -76,19 +76,19 @@ func Drain[T any](ctx context.Context, budget Budget, fetch Fetch[T]) ([]T, erro
 			return nil, fault.Wrap(
 				fault.KindUnavailable,
 				"page_fetch_failed",
-				"a page could not be fetched; no partial result was emitted",
+				"ページを取得できなかったため、部分的な結果は出力されませんでした",
 				true,
 				err,
 			)
 		}
 		if err := result.Validate(); err != nil {
-			return nil, fault.Wrap(fault.KindContract, "invalid_page_contract", "the page response contract is invalid", false, err)
+			return nil, fault.Wrap(fault.KindContract, "invalid_page_contract", "ページレスポンス契約は無効です", false, err)
 		}
 		if len(result.Items) > request.Size {
 			return nil, fault.New(
 				fault.KindContract,
 				"invalid_page_contract",
-				"the page response exceeded the requested page size; no partial result was emitted",
+				"ページレスポンスが要求したページサイズを超えたため、部分的な結果は出力されませんでした",
 				false,
 			)
 		}
@@ -96,14 +96,14 @@ func Drain[T any](ctx context.Context, budget Budget, fetch Fetch[T]) ([]T, erro
 			return nil, fault.New(
 				fault.KindContract,
 				"pagination_item_limit",
-				"pagination did not complete within the declared item limit",
+				"ページ処理が宣言済みの項目数上限内に完了しませんでした",
 				false,
 			)
 		}
 		items = append(items, result.Items...)
 		if result.NextToken == "" {
 			if contextErr := ctx.Err(); contextErr != nil {
-				return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "pagination was canceled before completion", true, contextErr)
+				return nil, fault.Wrap(fault.KindCanceled, "operation_canceled", "完了前にページ処理がキャンセルされました", true, contextErr)
 			}
 			return items, nil
 		}
@@ -111,7 +111,7 @@ func Drain[T any](ctx context.Context, budget Budget, fetch Fetch[T]) ([]T, erro
 			return nil, fault.New(
 				fault.KindContract,
 				"pagination_cursor_loop",
-				"pagination returned a repeated cursor; no partial result was emitted",
+				"ページ処理が同じカーソルを再度返したため、部分的な結果は出力されませんでした",
 				false,
 			)
 		}

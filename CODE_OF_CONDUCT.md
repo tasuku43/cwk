@@ -1,37 +1,35 @@
-# Code of Conduct
+# 行動規範
 
-Chatwork CLI is a technical community where contributors should be able to propose, question, review, and learn without harassment or intimidation.
+Chatwork CLI は、コントリビューターが嫌がらせや威圧を受けることなく、提案、質問、レビュー、学習を行える技術コミュニティを目指します。
 
-## Expected behavior
+## 期待される行動
 
-- Treat people with respect across differences in experience, identity, language, and viewpoint.
-- Critique ideas and evidence, not a person's motives or ability.
-- Give actionable feedback and accept correction without retaliation.
-- Keep discussions focused on the project's theses, user outcomes, and documented constraints.
-- Respect privacy, security embargoes, and requests to move sensitive material out of public discussion.
-- Make room for less experienced contributors and explain repository-specific assumptions.
+- 経験、アイデンティティ、言語、見解の違いを尊重してください。
+- 人の動機や能力ではなく、考えと証拠を批評してください。
+- 実行可能なフィードバックを提供し、報復することなく訂正を受け入れてください。
+- 議論は、プロジェクトのテーゼ、ユーザー成果、文書化された制約に集中させてください。
+- プライバシー、セキュリティ上の公開猶予、機微な情報を公開議論から移す要請を尊重してください。
+- 経験の浅いコントリビューターも参加できるよう配慮し、リポジトリ固有の前提を説明してください。
 
-## Unacceptable behavior
+## 許容されない行動
 
-- Harassment, discrimination, threats, stalking, or unwanted sexual attention.
-- Insults, demeaning language, or repeated personal attacks.
-- Publishing another person's private information without permission.
-- Sharing confidential reports, credentials, or embargoed vulnerability details.
-- Sustained disruption after a maintainer asks that behavior to stop.
-- Retaliation against someone who raises a good-faith concern.
+- 嫌がらせ、差別、脅迫、ストーキング、望まれない性的な言動
+- 侮辱、品位を傷つける言葉、繰り返される個人攻撃
+- 本人の許可なく個人情報を公開すること
+- 機密報告、認証情報、公開猶予中の脆弱性情報を共有すること
+- メンテナーが停止を求めた後も混乱を継続すること
+- 誠実に懸念を提起した人への報復
 
-## Scope
+## 適用範囲
 
-This policy applies in repository issues, pull requests, reviews, discussions, release spaces, and other project-managed channels. It also applies when someone represents the project in a public community setting.
+この方針は、リポジトリの Issue、Pull Request、レビュー、Discussion、リリース関連の場、およびプロジェクトが管理するその他のチャンネルに適用されます。公開のコミュニティでプロジェクトを代表する場合にも適用されます。
 
-## Reporting
+## 報告
 
-Report conduct concerns privately to the maintainer contact published by the repository. Do not open a public issue containing personal or sensitive details. If a report concerns one maintainer, direct it to another maintainer when possible.
+行動規範に関する懸念は `task.teckac@gmail.com` へ非公開で報告してください。個人情報や機微な情報を含む公開 Issue は作成しないでください。報告がそのメンテナー自身に関する場合は、可能であれば別のメンテナーへ連絡してください。
 
-A derived project must replace generic contact metadata with a working private channel before inviting external participation.
+## 対応
 
-## Response
+メンテナーは、可能な限り報告者のプライバシーを守り、関係者から事情を確認し、判断を記録したうえで、行動に応じた対応を選択します。対応には、非公開での是正依頼、警告、一時的な参加制限、コンテンツの削除、恒久的な参加禁止が含まれる場合があります。
 
-Maintainers will protect the reporter's privacy as far as practical, hear relevant parties, document the decision, and choose a response proportionate to the behavior. Responses may include a private correction, warning, temporary participation restriction, removal of content, or permanent exclusion.
-
-Good-faith disagreement is not misconduct. Enforcement focuses on behavior and community safety, and retaliation is not tolerated.
+誠実な意見の相違は違反ではありません。措置は行動とコミュニティの安全性に基づいて行い、報復は容認しません。

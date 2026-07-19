@@ -50,25 +50,25 @@ func New(policy Policy) *Invoker {
 func (i *Invoker) Invoke(ctx context.Context, request Request, action Action) error {
 	snapshot := request
 	if err := validateRequest(snapshot); err != nil {
-		return fault.Wrap(fault.KindContract, "invalid_mutation_contract", "mutation contract is invalid", false, err)
+		return fault.Wrap(fault.KindContract, "invalid_mutation_contract", "変更契約は無効です", false, err)
 	}
 	if action == nil {
-		return fault.New(fault.KindContract, "missing_mutation_action", "mutation action is not configured", false)
+		return fault.New(fault.KindContract, "missing_mutation_action", "変更アクションが設定されていません", false)
 	}
 	if ctx == nil {
-		return fault.New(fault.KindContract, "missing_context", "mutation context is not configured", false)
+		return fault.New(fault.KindContract, "missing_context", "変更コンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return fault.Wrap(fault.KindCanceled, "operation_canceled", "mutation was canceled before policy evaluation", true, err)
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "ポリシー評価前に変更がキャンセルされました", true, err)
 	}
 	if i == nil || portcheck.IsNil(i.policy) {
-		return fault.New(fault.KindRejected, "missing_mutation_policy", "mutation policy is not configured", false)
+		return fault.New(fault.KindRejected, "missing_mutation_policy", "変更ポリシーが設定されていません", false)
 	}
 	if err := i.policy.Check(ctx, snapshot.Intent); err != nil {
-		return fault.Wrap(fault.KindRejected, "mutation_rejected", "mutation policy rejected the operation", false, err)
+		return fault.Wrap(fault.KindRejected, "mutation_rejected", "変更ポリシーが処理を拒否しました", false, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return fault.Wrap(fault.KindCanceled, "operation_canceled", "mutation was canceled before execution", true, err)
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行前に変更がキャンセルされました", true, err)
 	}
 	if err := action(ctx, snapshot.Intent); err != nil {
 		return sanitizeMutationOutcomeError(err)
@@ -87,7 +87,7 @@ func sanitizeMutationOutcomeError(err error) error {
 	return fault.New(
 		fault.KindContract,
 		"unclassified_mutation_outcome",
-		"mutation action returned an unclassified outcome",
+		"変更アクションが分類不能な結果を返しました",
 		false,
 	)
 }

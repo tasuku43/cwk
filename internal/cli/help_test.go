@@ -25,29 +25,29 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 	}
 	output := stdout.String()
 	want := "Chatwork CLI\n\n" +
-		"Usage:\n" +
+		"使い方:\n" +
 		"  cwk [--error-format text|json] <command> [arguments]\n\n" +
-		"Global options:\n" +
-		"  --error-format text|json  Select structured failure presentation (default: text)\n\n" +
-		"Commands:\n" +
-		"  doctor   Run local, read-only diagnostics\n" +
-		"  help     Show human help or the agent command specification\n" +
-		"  version  Print version information\n" +
-		"  config   Select the commands visible to agents\n\n" +
-		"Namespaces:\n" +
-		"  account           2 commands\n" +
-		"  personal-tasks    1 command\n" +
-		"  contacts          1 command\n" +
-		"  rooms             6 commands\n" +
-		"  members           2 commands\n" +
-		"  messages          7 commands\n" +
-		"  room-tasks        4 commands\n" +
-		"  files             3 commands\n" +
-		"  invite-link       4 commands\n" +
-		"  contact-requests  3 commands\n\n" +
-		"Run 'cwk <namespace> --help' to choose a command.\n" +
-		"Append '--help' to any exact command for details.\n" +
-		"Run 'cwk help <command-or-namespace> --format agent' for a scoped machine contract.\n"
+		"グローバルオプション:\n" +
+		"  --error-format text|json  構造化エラーの表示形式を選択します（既定: text）\n\n" +
+		"コマンド:\n" +
+		"  doctor   ローカル環境を読み取り専用で診断する\n" +
+		"  help     人向けヘルプまたはエージェント向けコマンド仕様を表示する\n" +
+		"  version  バージョン情報を表示する\n" +
+		"  config   エージェントに表示するコマンドを選択する\n\n" +
+		"名前空間:\n" +
+		"  account           2 コマンド\n" +
+		"  personal-tasks    1 コマンド\n" +
+		"  contacts          1 コマンド\n" +
+		"  rooms             6 コマンド\n" +
+		"  members           2 コマンド\n" +
+		"  messages          7 コマンド\n" +
+		"  room-tasks        4 コマンド\n" +
+		"  files             3 コマンド\n" +
+		"  invite-link       4 コマンド\n" +
+		"  contact-requests  3 コマンド\n\n" +
+		"コマンドを選ぶには 'cwk <namespace> --help' を実行してください。\n" +
+		"詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。\n" +
+		"範囲を限定した機械可読契約を確認するには 'cwk help <command-or-namespace> --format agent' を実行してください。\n"
 	if output != want {
 		t.Fatalf("root text help = %q, want %q", output, want)
 	}
@@ -92,11 +92,7 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		}
 	}
 	for _, namespace := range namespaceOrder {
-		unit := "commands"
-		if namespaceCounts[namespace] == 1 {
-			unit = "command"
-		}
-		line := fmt.Sprintf("  %-*s  %d %s\n", namespaceWidth, namespace, namespaceCounts[namespace], unit)
+		line := fmt.Sprintf("  %-*s  %d コマンド\n", namespaceWidth, namespace, namespaceCounts[namespace])
 		offset := strings.Index(output, line)
 		if offset <= lastOffset || strings.Count(output, line) != 1 {
 			t.Errorf("namespace line %q is missing, duplicated, or out of catalog order\n%s", line, output)
@@ -108,9 +104,9 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		lastOffset = offset
 	}
 	for _, want := range []string{
-		"Run 'cwk <namespace> --help' to choose a command.",
-		"Append '--help' to any exact command for details.",
-		"Run 'cwk help <command-or-namespace> --format agent' for a scoped machine contract.",
+		"コマンドを選ぶには 'cwk <namespace> --help' を実行してください。",
+		"詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。",
+		"範囲を限定した機械可読契約を確認するには 'cwk help <command-or-namespace> --format agent' を実行してください。",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("root help lacks navigation %q\n%s", want, output)
@@ -126,17 +122,17 @@ func TestCommandHelpUsesCatalogMetadataAndDerivedReferences(t *testing.T) {
 	}
 	output := stdout.String()
 	for _, want := range []string{
-		"Usage:\n  cwk sample read --id <sample-id> [--format tsv|json]",
+		"使い方:\n  cwk sample read --id <sample-id> [--format tsv|json]",
 		"Read exactly one offline sample by opaque ID.",
-		"Inputs:\n  --id      required flag, reference=sample",
+		"入力:\n  --id      必須 flag, reference=sample",
 		"Pass an id from sample list byte-for-byte without parsing or transformation.",
-		"  --format  optional flag, values=tsv|json",
+		"  --format  任意 flag, values=tsv|json",
 		"Select the single sample representation.",
-		"Effect: read",
-		"Role: act",
-		"Consumes reference: sample from input --id",
-		"Run 'cwk sample --help' for other commands in this namespace.",
-		"Run 'cwk help sample read --format agent' for the machine contract.",
+		"効果: read",
+		"役割: act",
+		"使用する参照: sample（入力 --id）",
+		"この名前空間の他のコマンドには 'cwk sample --help' を実行してください。",
+		"機械可読契約には 'cwk help sample read --format agent' を実行してください。",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("command help lacks %q\n%s", want, output)
@@ -249,7 +245,7 @@ func TestDoctorAgentHelpDeclaresCommandSelectionGrammarAndRuntimeRecovery(t *tes
 		}
 	}
 	if !strings.Contains(detailDescription, commandSelectionDoctorDetailGrammar) ||
-		!strings.Contains(detailDescription, "count is a non-negative base-10 integer") {
+		!strings.Contains(detailDescription, "count は負でない10進整数") {
 		t.Fatalf("doctor detail contract does not publish the fixed grammar: %q", detailDescription)
 	}
 
@@ -459,15 +455,15 @@ func TestTextHelpCanSelectNamespace(t *testing.T) {
 		t.Fatalf("Run(namespace help) code = %d, stderr = %q", code, stderr.String())
 	}
 	want := "Chatwork CLI\n\n" +
-		"Usage:\n" +
+		"使い方:\n" +
 		"  cwk sample <command> [arguments]\n\n" +
-		"Commands:\n" +
+		"コマンド:\n" +
 		"  list  Discover offline samples and their opaque IDs\n" +
 		"  read  Read exactly one offline sample by opaque ID\n\n" +
-		"Run 'cwk sample <command> --help' for exact command details.\n" +
-		"Run 'cwk help sample <command> --format agent' for one command's machine contract.\n" +
-		"Run 'cwk help sample --format agent' for all machine contracts in this namespace.\n" +
-		"Run 'cwk --help' for all commands and namespaces.\n"
+		"正確なコマンドの詳細には 'cwk sample <command> --help' を実行してください。\n" +
+		"1コマンドの機械可読契約には 'cwk help sample <command> --format agent' を実行してください。\n" +
+		"この名前空間にある全機械可読契約には 'cwk help sample --format agent' を実行してください。\n" +
+		"全コマンドと名前空間には 'cwk --help' を実行してください。\n"
 	if stdout.String() != want {
 		t.Fatalf("namespace text = %q, want %q", stdout.String(), want)
 	}
@@ -480,19 +476,19 @@ func TestProductionRoomsNamespaceTextHelpGolden(t *testing.T) {
 		t.Fatalf("Run(rooms --help) code = %d, stderr = %q", code, stderr.String())
 	}
 	want := "Chatwork CLI\n\n" +
-		"Usage:\n" +
+		"使い方:\n" +
 		"  cwk rooms <command> [arguments]\n\n" +
-		"Commands:\n" +
-		"  list    Discover joined Chatwork rooms\n" +
-		"  create  Create a group room with exact members\n" +
-		"  show    Show one exact room\n" +
-		"  update  Update one exact room's descriptive facts\n" +
-		"  leave   Leave one exact group room\n" +
-		"  delete  Permanently delete one exact group room\n\n" +
-		"Run 'cwk rooms <command> --help' for exact command details.\n" +
-		"Run 'cwk help rooms <command> --format agent' for one command's machine contract.\n" +
-		"Run 'cwk help rooms --format agent' for all machine contracts in this namespace.\n" +
-		"Run 'cwk --help' for all commands and namespaces.\n"
+		"コマンド:\n" +
+		"  list    参加中のChatworkルームを検索する\n" +
+		"  create  メンバーを正確に指定してグループチャットを作成する\n" +
+		"  show    完全一致するルームを一つ表示する\n" +
+		"  update  完全一致するルームの説明情報を更新する\n" +
+		"  leave   完全一致するグループチャットから退席する\n" +
+		"  delete  完全一致するグループチャットを完全に削除する\n\n" +
+		"正確なコマンドの詳細には 'cwk rooms <command> --help' を実行してください。\n" +
+		"1コマンドの機械可読契約には 'cwk help rooms <command> --format agent' を実行してください。\n" +
+		"この名前空間にある全機械可読契約には 'cwk help rooms --format agent' を実行してください。\n" +
+		"全コマンドと名前空間には 'cwk --help' を実行してください。\n"
 	if stdout.String() != want || stderr.Len() != 0 {
 		t.Fatalf("stdout = %q, stderr = %q, want stdout %q", stdout.String(), stderr.String(), want)
 	}
@@ -505,20 +501,20 @@ func TestMessageListHumanHelpPublishesBoundedSelection(t *testing.T) {
 		t.Fatalf("Run(messages list --help) code = %d, stderr = %q", code, stderr.String())
 	}
 	for _, want := range []string{
-		"--room     required flag, reference=chatwork-room",
-		"--window   optional flag, values=recent|changes",
-		"latest bounded window (recent, default)",
-		"provider differential window (changes)",
-		"--limit    optional flag",
-		"newest",
+		"--room     必須 flag, reference=chatwork-room",
+		"--window   任意 flag, values=recent|changes",
+		"最新の上限付き範囲（recent、既定値）",
+		"プロバイダーの差分範囲（changes）",
+		"--limit    任意 flag",
+		"新しい",
 		"1",
 		"100",
-		"direct reply context may add records beyond this count",
-		"--sender   optional repeatable flag, reference=chatwork-account",
-		"repeat to match any listed sender (OR), up to 100 exact references.",
-		"--context  optional flag, values=none|replies",
-		"one-hop explicit reply parents and children from the bounded provider window (replies).",
-		"Run 'cwk help messages list --format agent' for the machine contract.",
+		"直接の返信コンテキストにより、この件数を超えるレコードが追加される",
+		"--sender   任意・繰り返し可 flag, reference=chatwork-account",
+		"列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件",
+		"--context  任意 flag, values=none|replies",
+		"上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）",
+		"機械可読契約には 'cwk help messages list --format agent' を実行してください。",
 	} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("messages list help lacks %q\n%s", want, stdout.String())
@@ -551,13 +547,13 @@ func TestMessageListScopedAgentHelpPublishesSelectionDefaults(t *testing.T) {
 	}
 	if limit == nil || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
 		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
-		!strings.Contains(limit.Description, "newest") || !strings.Contains(limit.Description, "reply context") {
+		!strings.Contains(limit.Description, "新しい") || !strings.Contains(limit.Description, "返信コンテキスト") {
 		t.Fatalf("agent limit contract = %+v", limit)
 	}
 	if window == nil || window.Required || window.Repeatable || window.Source != InputSourceFlag ||
 		!reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
-		!strings.Contains(window.Description, "recent, default") ||
-		!strings.Contains(window.Description, "differential") {
+		!strings.Contains(window.Description, "recent、既定値") ||
+		!strings.Contains(window.Description, "差分") {
 		t.Fatalf("agent window contract = %+v", window)
 	}
 }
@@ -566,12 +562,12 @@ func TestEveryCatalogInputIsProjectedIntoExactHumanHelp(t *testing.T) {
 	for _, command := range DefaultCatalog().Commands() {
 		output := string(renderCommandHelp(command))
 		if len(command.Agent.Inputs) == 0 {
-			if strings.Contains(output, "\nInputs:\n") {
+			if strings.Contains(output, "\n入力:\n") {
 				t.Errorf("input-free command %q rendered an Inputs section\n%s", command.Path, output)
 			}
 			continue
 		}
-		if !strings.Contains(output, "\nInputs:\n") {
+		if !strings.Contains(output, "\n入力:\n") {
 			t.Errorf("command %q lacks Inputs section\n%s", command.Path, output)
 			continue
 		}
@@ -582,12 +578,12 @@ func TestEveryCatalogInputIsProjectedIntoExactHumanHelp(t *testing.T) {
 			}
 		}
 		for _, input := range command.Agent.Inputs {
-			requirement := "optional"
+			requirement := "任意"
 			if input.Required {
-				requirement = "required"
+				requirement = "必須"
 			}
 			if input.Repeatable {
-				requirement += " repeatable"
+				requirement += "・繰り返し可"
 			}
 			attributes := []string{requirement + " " + string(input.Source)}
 			if len(input.AllowedValues) > 0 {
@@ -664,7 +660,7 @@ func TestHumanRootHelpGrowthDependsOnNamespacesNotLeafCommands(t *testing.T) {
 		commands = append(commands, spec)
 	}
 	output := string((&CLI{catalog: NewCatalog(commands...)}).renderRootHelp())
-	if strings.Count(output, "area") != 1 || !strings.Contains(output, "  area  100 commands\n") {
+	if strings.Count(output, "area") != 1 || !strings.Contains(output, "  area  100 コマンド\n") {
 		t.Fatalf("one namespace with 100 leaves was not collapsed\n%s", output)
 	}
 	for _, command := range commands {
@@ -687,8 +683,8 @@ func TestHumanRootHelpGroupsKindsAndPreservesSectionRelativeCatalogOrder(t *test
 	positions := []int{
 		strings.Index(output, "  local  Summary for local\n"),
 		strings.Index(output, "  other  Summary for other\n"),
-		strings.Index(output, "  area  2 commands\n"),
-		strings.Index(output, "  zone  1 command\n"),
+		strings.Index(output, "  area  2 コマンド\n"),
+		strings.Index(output, "  zone  1 コマンド\n"),
 	}
 	for index, position := range positions {
 		if position < 0 || index > 0 && position <= positions[index-1] {
@@ -836,7 +832,7 @@ func TestUnknownHelpSelectorRecoveryNamesPathsAndNamespaces(t *testing.T) {
 	if code := runCLI(command, []string{"help", "does-not-exist"}); code != ExitUsage {
 		t.Fatalf("Run(help does-not-exist) code = %d, want %d", code, ExitUsage)
 	}
-	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "next_action: cwk help — Use text or agent format and a command path or namespace from root help.") {
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "next_action: cwk help — text または agent 形式と、ルートヘルプにあるコマンドパスまたは名前空間を指定してください。") {
 		t.Fatalf("stdout = %q, stderr = %q", stdout.String(), stderr.String())
 	}
 }

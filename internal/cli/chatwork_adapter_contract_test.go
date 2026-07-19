@@ -161,7 +161,7 @@ func TestFilesListCatalogExplainsPositionalRoundTripAndAbsentMessage(t *testing.
 	if files.Path == "" {
 		t.Fatal("files list catalog entry is missing")
 	}
-	if !strings.Contains(files.Agent.Outcome, "positions one and two unchanged to files show") {
+	if !strings.Contains(files.Agent.Outcome, "1番目と2番目の値は変更せず files show に渡す") {
 		t.Fatalf("files list outcome does not explain its direct next action: %q", files.Agent.Outcome)
 	}
 	descriptions := map[string]string{}
@@ -169,9 +169,9 @@ func TestFilesListCatalogExplainsPositionalRoundTripAndAbsentMessage(t *testing.
 		descriptions[field.Name] = field.Description
 	}
 	for field, want := range map[string]string{
-		"file_ref":    "position one; pass it unchanged to files show --file",
-		"room_ref":    "position two; pass it unchanged to files show --room",
-		"message_ref": "literal absent; never pass absent as a reference",
+		"file_ref":    "1番目にある正規のファイル参照。変更せず files show --file に渡します",
+		"room_ref":    "2番目にある親ルームの正規参照。変更せず files show --room に渡します",
+		"message_ref": "リテラル absent です。absent を参照として渡してはいけません",
 	} {
 		if !strings.Contains(descriptions[field], want) {
 			t.Errorf("files list %s description = %q, want phrase %q", field, descriptions[field], want)

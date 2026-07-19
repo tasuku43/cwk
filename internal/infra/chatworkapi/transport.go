@@ -29,7 +29,7 @@ import (
 // mutations are conservatively unsafe and every operation has one attempt.
 func CallPolicy(task chatwork.Task) (apicall.Policy, error) {
 	if !task.Valid() {
-		return apicall.Policy{}, invalidRequest("Chatwork task is not mapped to a call policy")
+		return apicall.Policy{}, invalidRequest("Chatwork タスクが呼び出しポリシーにマッピングされていません")
 	}
 	timeout := RequestTimeout
 	idempotency := apicall.IdempotencySafe
@@ -81,13 +81,13 @@ func productionHTTPClient() *http.Client {
 // official API operation. It never retries or follows a redirect.
 func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input chatwork.Request) (chatwork.Result, error) {
 	if ctx == nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "missing_context", "Chatwork task context is not configured", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "missing_context", "Chatwork タスクコンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled before execution", true, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行前に Chatwork タスクがキャンセルされました", true, err)
 	}
 	if err := input.Validate(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_request", "Chatwork task input is invalid", false, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_request", "Chatwork タスク入力は無効です", false, err)
 	}
 	record, err := c.resolve(binding)
 	if err != nil {
@@ -106,7 +106,7 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 
 	request, err := http.NewRequestWithContext(callCtx, spec.method, c.baseURL+spec.path, spec.body)
 	if err != nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_request_contract_invalid", "Chatwork request could not be constructed", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_request_contract_invalid", "Chatwork リクエストを構築できませんでした", false)
 	}
 	request.Header.Set("Accept", "application/json")
 	if err := record.credential.authorize(request); err != nil {
@@ -116,25 +116,25 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		request.Header.Set("Content-Type", spec.contentType)
 	}
 	if c.http == nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_transport_missing", "Chatwork transport is not configured", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_transport_missing", "Chatwork トランスポートが設定されていません", false)
 	}
 	response, err := c.http.Do(request)
 	if err != nil {
 		return chatwork.Result{}, transportFault(input.Task, callCtx, err)
 	}
 	if response == nil || response.Body == nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_response_invalid", "Chatwork returned an invalid response", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_response_invalid", "Chatwork が無効なレスポンスを返しました", false)
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return chatwork.Result{}, providerFault(input.Task, response)
 	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusNoContent {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork returned an undocumented success status", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない成功ステータスを返しました", false)
 	}
 	if response.StatusCode == http.StatusNoContent {
 		if !allowsNoContent(input.Task) {
-			return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork returned an undocumented empty response", false)
+			return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない空レスポンスを返しました", false)
 		}
 		return emptyResult(input), nil
 	}
@@ -186,31 +186,31 @@ func (c *Client) multipartRequest(path string, input chatwork.Request) (requestS
 	}
 	data, err := c.readFile(input.FilePath)
 	if err != nil {
-		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_unreadable", "Chatwork upload file could not be read", false)
+		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_unreadable", "Chatwork へアップロードするファイルを読み取れませんでした", false)
 	}
 	if len(data) > MaxUploadBytes {
-		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_too_large", "Chatwork upload file exceeds the 5 MiB limit", false)
+		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_too_large", "Chatwork へアップロードするファイルが 5 MiB の上限を超えています", false)
 	}
 	var body bytes.Buffer
 	writer := multipart.NewWriter(&body)
 	filename := filepath.Base(input.FilePath)
 	if !validUploadFilename(filename) {
-		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_name_invalid", "Chatwork upload file name is invalid", false)
+		return requestSpec{}, fault.New(fault.KindInvalidInput, "chatwork_file_name_invalid", "Chatwork へアップロードするファイル名は無効です", false)
 	}
 	part, err := writer.CreateFormFile("file", filename)
 	if err != nil {
-		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork upload request could not be constructed", false)
+		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork アップロードリクエストを構築できませんでした", false)
 	}
 	if _, err := part.Write(data); err != nil {
-		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork upload request could not be constructed", false)
+		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork アップロードリクエストを構築できませんでした", false)
 	}
 	if input.FileMessage != "" {
 		if err := writer.WriteField("message", input.FileMessage); err != nil {
-			return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork upload request could not be constructed", false)
+			return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork アップロードリクエストを構築できませんでした", false)
 		}
 	}
 	if err := writer.Close(); err != nil {
-		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork upload request could not be constructed", false)
+		return requestSpec{}, fault.New(fault.KindContract, "chatwork_upload_contract_invalid", "Chatwork アップロードリクエストを構築できませんでした", false)
 	}
 	return requestSpec{method: http.MethodPost, path: path, body: bytes.NewReader(body.Bytes()), contentType: writer.FormDataContentType()}, nil
 }
@@ -239,10 +239,10 @@ func boundedReadFile(path string) ([]byte, error) {
 func readBounded(reader io.Reader, limit int64) ([]byte, error) {
 	body, err := io.ReadAll(io.LimitReader(reader, limit+1))
 	if err != nil {
-		return nil, fault.New(fault.KindUnavailable, "chatwork_response_unavailable", "Chatwork response could not be read", true)
+		return nil, fault.New(fault.KindUnavailable, "chatwork_response_unavailable", "Chatwork レスポンスを読み取れませんでした", true)
 	}
 	if int64(len(body)) > limit {
-		return nil, fault.New(fault.KindContract, "chatwork_response_too_large", "Chatwork response exceeded the configured byte limit", false)
+		return nil, fault.New(fault.KindContract, "chatwork_response_too_large", "Chatwork レスポンスが設定済みのバイト数上限を超えました", false)
 	}
 	return body, nil
 }
@@ -253,36 +253,36 @@ func providerFault(task chatwork.Task, response *http.Response) error {
 	_, _ = io.Copy(io.Discard, io.LimitReader(response.Body, MaxErrorResponseBytes+1))
 	switch response.StatusCode {
 	case http.StatusBadRequest, http.StatusUnprocessableEntity:
-		return fault.New(fault.KindInvalidInput, "chatwork_invalid_request", "Chatwork rejected the task input", false)
+		return fault.New(fault.KindInvalidInput, "chatwork_invalid_request", "Chatwork がタスク入力を拒否しました", false)
 	case http.StatusUnauthorized:
-		return fault.New(fault.KindAuthentication, "chatwork_authentication_failed", "Chatwork rejected the configured API token", false)
+		return fault.New(fault.KindAuthentication, "chatwork_authentication_failed", "Chatwork が設定済みの API トークンを拒否しました", false)
 	case http.StatusForbidden:
-		return fault.New(fault.KindPermission, "chatwork_permission_denied", "Chatwork denied permission for this task", false)
+		return fault.New(fault.KindPermission, "chatwork_permission_denied", "Chatwork がこのタスクの権限を拒否しました", false)
 	case http.StatusNotFound:
-		return fault.New(fault.KindNotFound, "chatwork_not_found", "The requested Chatwork resource was not found", false)
+		return fault.New(fault.KindNotFound, "chatwork_not_found", "要求した Chatwork リソースが見つかりませんでした", false)
 	case http.StatusTooManyRequests:
-		err := fault.New(fault.KindRateLimited, "chatwork_rate_limited", "Chatwork rate limit was reached", true)
+		err := fault.New(fault.KindRateLimited, "chatwork_rate_limited", "Chatwork のレート上限に達しました", true)
 		err.RetryAfter = retryAfter(response.Header.Get("Retry-After"))
 		return err
 	default:
 		if mutating(task) && response.StatusCode >= 500 {
-			return fault.New(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork did not confirm the mutation outcome; reconcile before retrying", false)
+			return fault.New(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork が変更結果を確認できませんでした。再試行前に状態を照合してください", false)
 		}
 		if response.StatusCode >= 500 {
-			return fault.New(fault.KindUnavailable, "chatwork_unavailable", "Chatwork is temporarily unavailable", true)
+			return fault.New(fault.KindUnavailable, "chatwork_unavailable", "Chatwork は一時的に利用できません", true)
 		}
-		return fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork returned an unexpected response status", false)
+		return fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が予期しないレスポンスステータスを返しました", false)
 	}
 }
 
 func transportFault(task chatwork.Task, ctx context.Context, err error) error {
 	if mutating(task) {
-		return fault.Wrap(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork did not confirm the mutation outcome; reconcile before retrying", false, err)
+		return fault.Wrap(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork が変更結果を確認できませんでした。再試行前に状態を照合してください", false, err)
 	}
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled during execution", true, ctx.Err())
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true, ctx.Err())
 	}
-	return fault.Wrap(fault.KindUnavailable, "chatwork_unavailable", "Chatwork is temporarily unavailable", true, err)
+	return fault.Wrap(fault.KindUnavailable, "chatwork_unavailable", "Chatwork は一時的に利用できません", true, err)
 }
 
 func retryAfter(value string) time.Duration {
@@ -295,14 +295,14 @@ func retryAfter(value string) time.Duration {
 
 func decodeJSON(body []byte, target any) error {
 	if len(body) == 0 {
-		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork response body is missing", false)
+		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork レスポンス本文がありません", false)
 	}
 	decoder := json.NewDecoder(bytes.NewReader(body))
 	if err := decoder.Decode(target); err != nil {
-		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork response JSON is malformed", false)
+		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork レスポンス JSON は不正です", false)
 	}
 	if decoder.Decode(&struct{}{}) != io.EOF {
-		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork response contains trailing data", false)
+		return fault.New(fault.KindContract, "chatwork_response_malformed", "Chatwork レスポンスに後続データがあります", false)
 	}
 	return nil
 }
@@ -313,7 +313,7 @@ func invalidRequest(message string) error {
 
 func decimal(ref chatwork.Reference, kind chatwork.ReferenceKind) (string, error) {
 	if ref.Kind != kind || chatwork.ValidateReference(kind, ref.Value) != nil {
-		return "", invalidRequest(fmt.Sprintf("task requires an exact %s reference", kind))
+		return "", invalidRequest(fmt.Sprintf("タスクには正確な %s 参照が必要です", kind))
 	}
 	return ref.Value, nil
 }

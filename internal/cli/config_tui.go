@@ -234,10 +234,10 @@ func appendConfigTUIKey(keys *[]configTUIKey, key configTUIKey) {
 }
 
 const (
-	configTUITitle        = "Command selection"
-	configTUIFooter       = "Up/Down move  Space toggle  Enter save  q quit"
-	configTUIResizeNotice = "Resize terminal to review the exact command"
-	configTUIQuitFooter   = "q quit"
+	configTUITitle        = "コマンド選択"
+	configTUIFooter       = "↑/↓ 移動  Space 切替  Enter 保存  q 終了"
+	configTUIResizeNotice = "端末を拡大"
+	configTUIQuitFooter   = "q 終了"
 
 	configTUIColorCyan    = "\x1b[36m"
 	configTUIColorYellow  = "\x1b[33m"
@@ -320,18 +320,18 @@ func configTUINoticeLines(model configTUIModel, width, height int) ([]string, bo
 		return nil, true
 	}
 	maximum := height - 4 // Reserve title, always-on facts, one item, and footer.
-	return wrapConfigTUILines("Notice: "+safeExternalText(model.notice), width, maximum)
+	return wrapConfigTUILines("お知らせ: "+safeExternalText(model.notice), width, maximum)
 }
 
 func renderConfigTUIAlways(paths []string) string {
 	if len(paths) == 0 {
-		return "Always on: (none)"
+		return "常に有効: (なし)"
 	}
 	escaped := make([]string, len(paths))
 	for index, path := range paths {
 		escaped[index] = safeExternalText(path)
 	}
-	return "Always on: " + strings.Join(escaped, ", ")
+	return "常に有効: " + strings.Join(escaped, ", ")
 }
 
 // wrapConfigTUILines returns only a complete, structure-safe wrapping. A

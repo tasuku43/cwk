@@ -10,10 +10,25 @@ It is not an API explorer or a one-to-one endpoint wrapper. Its first complete i
 
 ## Primary users
 
-- A developer or operator delegating Chatwork work to a coding agent.
+- A developer or operator in Japan delegating Chatwork work to a coding agent.
 - An automation author relying on stable command, reference, failure, and semantic-output contracts.
 - A human supervising what an agent will read or change.
 - A contributor testing presentation ideas without changing product semantics.
+
+## Language and locale contract
+
+The product has one default human locale: Japanese. Human-oriented help,
+interactive prompts, fault explanations, recovery reasons, and active public
+guides are Japanese. The executable does not infer a locale from the operating
+system and does not currently expose a language flag.
+
+Automation remains locale-stable. Exact command paths and flags,
+`CWK_API_TOKEN`, allowed-value tokens, effect and role values, fault kind/code,
+exit status, JSON keys, schema versions, output field names, capability IDs,
+reference kinds, and opaque references remain unchanged ASCII values. The
+reviewed success projection also retains its fixed schema tokens and positions;
+Japanese documentation explains those tokens instead of translating them.
+Provider text is external data and is never translated by `cwk`.
 
 ## Supported-outcome promise
 
@@ -314,6 +329,11 @@ Every provider operation has one transport attempt. An uncertain mutation result
 ## Compatibility boundary
 
 Before `1.0.0`, contracts may evolve intentionally with tests and migration notes. Once stabilized, compatibility includes command paths, typed inputs, roles, effects, reference kinds, semantic field meanings, bounds/completeness, failures, authentication configuration, and release artifacts.
+
+Selecting Japanese as the default human language is an intentional pre-1.0
+text-contract change. Human prose is not retained in English as an alias.
+Machine classification and automation remain compatible through the unchanged
+identifiers listed in the language contract.
 
 Candidate C's versioned grammar, schemas, defaults, and ordering were the compatibility promises of the first complete implementation. The P-derived `cwk-task-projection/1` deliberately broke that contract; the headerless projection made a second pre-1.0 break by removing its repeated schema/task preamble and standalone coverage record. The flat chronological `messages list` adjacency contract is a third explicit pre-1.0 refinement and superseded an unimplemented indented-tree proposal. Applying fixed positional records to the seven reviewed homogeneous collections is a fourth explicit refinement. Clients must not expect historical headers, reference dictionaries, aliases, field ordering, or grammar. Current compatibility is identified out of band by the release and enforced by catalog fields, documentation, all-route tests, and goldens. Semantic field meanings, exact canonical references, bounds/completeness, failures, and trust classifications remain governed independently of a text migration. A future replacement changes the current promises only through reviewed evidence and an explicit compatibility decision. Experimental worktree output carries no compatibility promise.
 

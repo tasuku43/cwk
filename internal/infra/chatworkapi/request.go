@@ -282,7 +282,7 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		}
 		return noBodyRequest(method, "/incoming_requests/"+requestID, nil), nil
 	default:
-		return requestSpec{}, invalidRequest("Chatwork task is not mapped to an official operation")
+		return requestSpec{}, invalidRequest("Chatwork タスクが公式の処理にマッピングされていません")
 	}
 }
 

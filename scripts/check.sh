@@ -29,6 +29,7 @@ run_fast() {
   go run ./tools/repoguard --scope hygiene
   go run ./tools/archlint
   go run ./tools/contractlint
+  go run ./tools/localizationlint
   go test ./...
 }
 

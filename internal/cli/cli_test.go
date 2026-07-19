@@ -102,7 +102,7 @@ func TestDoctorOutputContract(t *testing.T) {
 	if code := runCLI(command, []string{"doctor"}); code != ExitOK {
 		t.Fatalf("Run(doctor) code = %d, stderr = %q", code, stderr.String())
 	}
-	want := "CHECK\tSTATUS\tDETAIL\n" +
+	want := "チェック\t状態\t詳細\n" +
 		"runtime\tpass\truntime-version\\ttest/test\\nlocal\n" +
 		"configuration\twarn\tpath\\\\value\\u001B\n"
 	if got := stdout.String(); got != want {
@@ -367,7 +367,7 @@ func TestDoctorRejectsArgumentsBeforeInspection(t *testing.T) {
 	if code := runCLI(command, []string{"doctor", "extra"}); code != ExitUsage {
 		t.Fatalf("Run(doctor extra) code = %d, want %d", code, ExitUsage)
 	}
-	if inspector.calls != 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "usage: cwk doctor") {
+	if inspector.calls != 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "使い方: cwk doctor") {
 		t.Fatalf("calls = %d, stdout = %q, stderr = %q", inspector.calls, stdout.String(), stderr.String())
 	}
 }
@@ -379,7 +379,7 @@ func TestE2EDoctorUsesProductionOfflineAdapter(t *testing.T) {
 		t.Fatalf("Run(doctor) code = %d, stderr = %q", code, stderr.String())
 	}
 	output := stdout.String()
-	if !strings.HasPrefix(output, "CHECK\tSTATUS\tDETAIL\nruntime\tpass\t") {
+	if !strings.HasPrefix(output, "チェック\t状態\t詳細\nruntime\tpass\t") {
 		t.Fatalf("doctor output = %q", output)
 	}
 	if !strings.Contains(output, runtime.Version()) || !strings.Contains(output, runtime.GOOS+"/"+runtime.GOARCH) {

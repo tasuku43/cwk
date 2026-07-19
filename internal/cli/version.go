@@ -9,7 +9,7 @@ import (
 
 func runVersion(ctx context.Context, c *CLI, command CommandSpec, _ operation.Intent, args []string) int {
 	if len(args) != 0 {
-		return c.failUsage(ctx, "invalid_arguments", "usage: "+command.Usage(), "help version", "Run version without command arguments.")
+		return c.failUsage(ctx, "invalid_arguments", "使い方: "+command.Usage(), "help version", "コマンド引数を付けずに version を実行してください。")
 	}
 	if c.Commit == "" {
 		return c.emit(ctx, []byte(fmt.Sprintf("%s %s\n", ProgramName, c.Version)))

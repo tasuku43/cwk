@@ -59,7 +59,7 @@ func New(in io.Reader, out, errOut io.Writer) *CLI {
 
 func (c *CLI) ensureChatwork(ctx context.Context) error {
 	if c == nil {
-		return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork task adapter is not configured", false)
+		return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
 	}
 	if c.chatwork != nil && c.chatworkAuth != nil {
 		return nil
@@ -68,7 +68,7 @@ func (c *CLI) ensureChatwork(ctx context.Context) error {
 		return c.chatworkInitErr
 	}
 	if c.chatworkFactory == nil {
-		return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork task adapter is not configured", false)
+		return fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
 	}
 	service, gate, err := c.chatworkFactory(ctx)
 	if err != nil {
@@ -121,15 +121,15 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 		return c.fail(nil, fault.New(
 			fault.KindContract,
 			"missing_context",
-			"The command context is not configured.",
+			"コマンドコンテキストが設定されていません。",
 			false,
-			fault.NextAction{Command: "help", Reason: "Retry through a context-aware CLI entry point."},
+			fault.NextAction{Command: "help", Reason: "コンテキスト対応の CLI エントリーポイントから再試行してください。"},
 		))
 	}
 	options, commandArgs, err := parseRootOptions(args)
 	ctx = withErrorFormat(ctx, options.ErrorFormat)
 	if err != nil {
-		return c.failUsage(ctx, "invalid_root_options", err.Error(), "help", "Correct the global options.")
+		return c.failUsage(ctx, "invalid_root_options", err.Error(), "help", "グローバルオプションを修正してください。")
 	}
 	if err := ctx.Err(); err != nil {
 		return c.fail(ctx, err)
@@ -142,14 +142,14 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 		return c.fail(ctx, fault.Wrap(
 			fault.KindContract,
 			"invalid_catalog",
-			"The command catalog is invalid.",
+			"コマンドカタログは無効です。",
 			false,
 			err,
-			fault.NextAction{Command: "help", Reason: "Repair the catalog before dispatch."},
+			fault.NextAction{Command: "help", Reason: "ディスパッチ前にカタログを修復してください。"},
 		))
 	}
 	if len(commandArgs) == 0 {
-		return c.failUsage(ctx, "missing_command", "A command is required.", "help", "Discover available command outcomes.")
+		return c.failUsage(ctx, "missing_command", "コマンドが必要です。", "help", "利用できるコマンドの結果を確認してください。")
 	}
 
 	commandArgs = normalizeRootAlias(commandArgs)
@@ -163,10 +163,10 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 			return c.fail(ctx, fault.Wrap(
 				fault.KindContract,
 				"invalid_catalog",
-				"The command catalog control plane is invalid.",
+				"コマンドカタログの制御領域は無効です。",
 				false,
 				err,
-				fault.NextAction{Command: "help", Reason: "Repair the catalog before dispatch."},
+				fault.NextAction{Command: "help", Reason: "ディスパッチ前にカタログを修復してください。"},
 			))
 		}
 	}
@@ -177,9 +177,9 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 		return c.failUsage(
 			ctx,
 			"unknown_command",
-			fmt.Sprintf("Unknown command %q.", strings.Join(commandArgs, " ")),
+			fmt.Sprintf("コマンド %q は不明です。", strings.Join(commandArgs, " ")),
 			"help",
-			"Discover an exact command path or namespace.",
+			"正確なコマンドパスまたは名前空間を確認してください。",
 		)
 	}
 	ctx = withCommandPath(ctx, command.Path)
@@ -196,10 +196,10 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 			return c.fail(ctx, fault.Wrap(
 				fault.KindContract,
 				"invalid_intent",
-				"The command intent is invalid.",
+				"コマンドの意図は無効です。",
 				false,
 				err,
-				fault.NextAction{Command: "help " + command.Path, Reason: "Repair the command declaration."},
+				fault.NextAction{Command: "help " + command.Path, Reason: "コマンド宣言を修復してください。"},
 			))
 		}
 	}
@@ -227,7 +227,7 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 		return Catalog{}, fault.Wrap(
 			fault.KindInvalidInput,
 			"command_selection_invalid",
-			"The saved command selection is invalid.",
+			"保存済みのコマンド選択は無効です。",
 			false,
 			err,
 		)
@@ -257,12 +257,12 @@ func commandViewAlwaysInvocation(base Catalog, args []string) bool {
 
 func commandSelectionDispatchFault(err error) error {
 	if public, ok := fault.PublicCopy(err); ok {
-		next := fault.NextAction{Command: "help", Reason: "Retry the original command when the caller is ready."}
+		next := fault.NextAction{Command: "help", Reason: "呼び出し元の準備ができたら元のコマンドを再試行してください。"}
 		switch public.Code {
 		case "command_selection_invalid":
-			next = fault.NextAction{Command: "config", Reason: "Explicitly replace the invalid command selection."}
+			next = fault.NextAction{Command: "config", Reason: "無効なコマンド選択を明示的に置き換えてください。"}
 		case "command_selection_unsafe", "command_selection_unavailable":
-			next = fault.NextAction{Command: "doctor", Reason: "Restore the local configuration path, then inspect command-selection diagnostics."}
+			next = fault.NextAction{Command: "doctor", Reason: "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"}
 		}
 		return fault.New(
 			public.Kind,
@@ -323,7 +323,7 @@ func parseRootOptions(args []string) (rootOptions, []string, error) {
 		switch {
 		case argument == "--error-format":
 			if index+1 >= len(args) {
-				return options, nil, fmt.Errorf("--error-format requires text or json")
+				return options, nil, fmt.Errorf("--error-format には text または json が必要です")
 			}
 			index++
 			value = args[index]
@@ -333,7 +333,7 @@ func parseRootOptions(args []string) (rootOptions, []string, error) {
 			return options, args[index:], nil
 		}
 		if seenErrorFormat {
-			return options, nil, fmt.Errorf("--error-format may be specified only once")
+			return options, nil, fmt.Errorf("--error-format は1回だけ指定できます")
 		}
 		parsed, err := parseErrorFormat(value)
 		if err != nil {

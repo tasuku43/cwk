@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
@@ -133,7 +134,7 @@ type agentNextAction struct {
 func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, args []string) int {
 	format, selector, err := parseHelpArgs(args)
 	if err != nil {
-		return c.failUsage(ctx, "invalid_arguments", err.Error(), "help", "Use a supported format and canonical selector.")
+		return c.failUsage(ctx, "invalid_arguments", err.Error(), "help", "対応している形式と正規セレクターを指定してください。")
 	}
 
 	commands := c.catalog.Commands()
@@ -141,7 +142,7 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 	if selector != "" {
 		commands, exact = c.catalog.Select(selector)
 		if len(commands) == 0 {
-			return c.failUsage(ctx, "invalid_arguments", fmt.Sprintf("Unknown help selector %q.", selector), "help", "Use an exact command path or namespace from the root help.")
+			return c.failUsage(ctx, "invalid_arguments", fmt.Sprintf("help セレクター %q は不明です。", selector), "help", "ルート help にある正確なコマンドパスまたは名前空間を指定してください。")
 		}
 	}
 
@@ -175,10 +176,10 @@ func parseHelpArgs(args []string) (helpFormat, string, error) {
 		switch {
 		case arg == "--format":
 			if seenFormat {
-				return format, "", fmt.Errorf("--format may be specified only once")
+				return format, "", fmt.Errorf("--format は1回だけ指定できます")
 			}
 			if index+1 >= len(args) {
-				return format, "", fmt.Errorf("--format requires text or agent")
+				return format, "", fmt.Errorf("--format には text または agent が必要です")
 			}
 			index++
 			parsed, err := parseHelpFormat(args[index])
@@ -189,7 +190,7 @@ func parseHelpArgs(args []string) (helpFormat, string, error) {
 			seenFormat = true
 		case strings.HasPrefix(arg, "--format="):
 			if seenFormat {
-				return format, "", fmt.Errorf("--format may be specified only once")
+				return format, "", fmt.Errorf("--format は1回だけ指定できます")
 			}
 			parsed, err := parseHelpFormat(strings.TrimPrefix(arg, "--format="))
 			if err != nil {
@@ -198,7 +199,7 @@ func parseHelpArgs(args []string) (helpFormat, string, error) {
 			format = parsed
 			seenFormat = true
 		case strings.HasPrefix(arg, "-"):
-			return format, "", fmt.Errorf("unknown help flag %q", arg)
+			return format, "", fmt.Errorf("help フラグ %q は不明です", arg)
 		default:
 			selectorWords = append(selectorWords, arg)
 		}
@@ -213,7 +214,7 @@ func parseHelpFormat(value string) (helpFormat, error) {
 	case "agent":
 		return helpFormatAgent, nil
 	default:
-		return helpFormatText, fmt.Errorf("--format must be text or agent")
+		return helpFormatText, fmt.Errorf("--format は text または agent で指定してください")
 	}
 }
 
@@ -240,23 +241,23 @@ func (c *CLI) renderRootHelp() []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "Usage:")
+	fmt.Fprintln(&output, "使い方:")
 	fmt.Fprintf(&output, "  %s [--error-format text|json] <command> [arguments]\n", ProgramName)
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "Global options:")
-	fmt.Fprintln(&output, "  --error-format text|json  Select structured failure presentation (default: text)")
+	fmt.Fprintln(&output, "グローバルオプション:")
+	fmt.Fprintln(&output, "  --error-format text|json  構造化エラーの表示形式を選択します（既定: text）")
 	if len(directCommands) > 0 {
 		fmt.Fprintln(&output)
-		output.Write(renderTextHelpIndex("Commands:", directCommands))
+		output.Write(renderTextHelpIndex("コマンド:", directCommands))
 	}
 	if len(namespaces) > 0 {
 		fmt.Fprintln(&output)
-		output.Write(renderNamespaceIndex("Namespaces:", namespaces))
+		output.Write(renderNamespaceIndex("名前空間:", namespaces))
 	}
 	fmt.Fprintln(&output)
-	fmt.Fprintf(&output, "Run '%s <namespace> --help' to choose a command.\n", ProgramName)
-	fmt.Fprintln(&output, "Append '--help' to any exact command for details.")
-	fmt.Fprintf(&output, "Run '%s help <command-or-namespace> --format agent' for a scoped machine contract.\n", ProgramName)
+	fmt.Fprintf(&output, "コマンドを選ぶには '%s <namespace> --help' を実行してください。\n", ProgramName)
+	fmt.Fprintln(&output, "詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。")
+	fmt.Fprintf(&output, "範囲を限定した機械可読契約を確認するには '%s help <command-or-namespace> --format agent' を実行してください。\n", ProgramName)
 	return output.Bytes()
 }
 
@@ -309,13 +310,9 @@ func renderTextHelpIndex(title string, entries []textHelpEntry) []byte {
 func renderNamespaceIndex(title string, namespaces []textHelpNamespace) []byte {
 	entries := make([]textHelpEntry, 0, len(namespaces))
 	for _, namespace := range namespaces {
-		unit := "commands"
-		if namespace.CommandCount == 1 {
-			unit = "command"
-		}
 		entries = append(entries, textHelpEntry{
 			Name:    namespace.Name,
-			Summary: fmt.Sprintf("%d %s", namespace.CommandCount, unit),
+			Summary: fmt.Sprintf("%d コマンド", namespace.CommandCount),
 		})
 	}
 	return renderTextHelpIndex(title, entries)
@@ -334,53 +331,62 @@ func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "Usage:")
+	fmt.Fprintln(&output, "使い方:")
 	fmt.Fprintf(&output, "  %s %s <command> [arguments]\n", ProgramName, selector)
 	fmt.Fprintln(&output)
-	output.Write(renderTextHelpIndex("Commands:", entries))
+	output.Write(renderTextHelpIndex("コマンド:", entries))
 	fmt.Fprintln(&output)
-	fmt.Fprintf(&output, "Run '%s %s <command> --help' for exact command details.\n", ProgramName, selector)
-	fmt.Fprintf(&output, "Run '%s help %s <command> --format agent' for one command's machine contract.\n", ProgramName, selector)
-	fmt.Fprintf(&output, "Run '%s help %s --format agent' for all machine contracts in this namespace.\n", ProgramName, selector)
-	fmt.Fprintf(&output, "Run '%s --help' for all commands and namespaces.\n", ProgramName)
+	fmt.Fprintf(&output, "正確なコマンドの詳細には '%s %s <command> --help' を実行してください。\n", ProgramName, selector)
+	fmt.Fprintf(&output, "1コマンドの機械可読契約には '%s help %s <command> --format agent' を実行してください。\n", ProgramName, selector)
+	fmt.Fprintf(&output, "この名前空間にある全機械可読契約には '%s help %s --format agent' を実行してください。\n", ProgramName, selector)
+	fmt.Fprintf(&output, "全コマンドと名前空間には '%s --help' を実行してください。\n", ProgramName)
 	return output.Bytes()
 }
 
 func renderCommandHelp(command CommandSpec) []byte {
 	var output bytes.Buffer
-	fmt.Fprintln(&output, "Usage:")
+	fmt.Fprintln(&output, "使い方:")
 	fmt.Fprintln(&output, "  "+command.Usage())
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, command.Summary+".")
+	fmt.Fprintln(&output, localizedSentence(command.Summary))
 	if len(command.Agent.Inputs) > 0 {
 		fmt.Fprintln(&output)
 		output.Write(renderCommandInputs(command.Agent.Inputs))
 	}
 	fmt.Fprintln(&output)
-	fmt.Fprintln(&output, "Capability: "+command.Agent.CapabilityID)
-	fmt.Fprintln(&output, "Outcome: "+command.Agent.Outcome)
-	fmt.Fprintln(&output, "Effect: "+command.Effect.String())
-	fmt.Fprintln(&output, "Role: "+command.Role.String())
+	fmt.Fprintln(&output, "機能ID: "+command.Agent.CapabilityID)
+	fmt.Fprintln(&output, "結果: "+command.Agent.Outcome)
+	fmt.Fprintln(&output, "効果: "+command.Effect.String())
+	fmt.Fprintln(&output, "役割: "+command.Role.String())
 	for _, reference := range command.ProducedRefs() {
-		fmt.Fprintf(&output, "Produces reference: %s in field %s\n", reference.Kind, reference.Field)
+		fmt.Fprintf(&output, "生成する参照: %s（フィールド %s）\n", reference.Kind, reference.Field)
 	}
 	for _, reference := range command.ConsumedRefs() {
-		fmt.Fprintf(&output, "Consumes reference: %s from input %s\n", reference.Kind, reference.Argument)
+		fmt.Fprintf(&output, "使用する参照: %s（入力 %s）\n", reference.Kind, reference.Argument)
 	}
 	fmt.Fprintln(&output)
 	namespace := commandNamespace(command.Path)
 	if namespace == command.Path {
-		fmt.Fprintf(&output, "Run '%s --help' for all commands and namespaces.\n", ProgramName)
+		fmt.Fprintf(&output, "全コマンドと名前空間には '%s --help' を実行してください。\n", ProgramName)
 	} else {
-		fmt.Fprintf(&output, "Run '%s %s --help' for other commands in this namespace.\n", ProgramName, namespace)
+		fmt.Fprintf(&output, "この名前空間の他のコマンドには '%s %s --help' を実行してください。\n", ProgramName, namespace)
 	}
-	fmt.Fprintf(&output, "Run '%s help %s --format agent' for the machine contract.\n", ProgramName, command.Path)
+	fmt.Fprintf(&output, "機械可読契約には '%s help %s --format agent' を実行してください。\n", ProgramName, command.Path)
 	return output.Bytes()
+}
+
+func localizedSentence(value string) string {
+	for _, r := range value {
+		if unicode.In(r, unicode.Hiragana, unicode.Katakana, unicode.Han) {
+			return value + "。"
+		}
+	}
+	return value + "."
 }
 
 func renderCommandInputs(inputs []CommandInput) []byte {
 	var output bytes.Buffer
-	fmt.Fprintln(&output, "Inputs:")
+	fmt.Fprintln(&output, "入力:")
 	width := 0
 	for _, input := range inputs {
 		if len(input.Name) > width {
@@ -388,12 +394,12 @@ func renderCommandInputs(inputs []CommandInput) []byte {
 		}
 	}
 	for _, input := range inputs {
-		requirement := "optional"
+		requirement := "任意"
 		if input.Required {
-			requirement = "required"
+			requirement = "必須"
 		}
 		if input.Repeatable {
-			requirement += " repeatable"
+			requirement += "・繰り返し可"
 		}
 		attributes := []string{requirement + " " + string(input.Source)}
 		if len(input.AllowedValues) > 0 {
@@ -426,7 +432,7 @@ func (c *CLI) renderAgentIndex(commands []CommandSpec) ([]byte, error) {
 	}
 	output, err := json.Marshal(document)
 	if err != nil {
-		return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "The agent help index could not be encoded.", false, err)
+		return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "agent help の索引をエンコードできませんでした。", false, err)
 	}
 	return append(output, '\n'), nil
 }
@@ -463,7 +469,7 @@ func (c *CLI) renderAgentHelp(selector string, exact bool, commands []CommandSpe
 		Scope:         agentScope{Selector: selector, Kind: scopeKind},
 		GlobalInputs: []CommandInput{{
 			Name: "--error-format", Source: InputSourceFlag, Required: false,
-			Description:   "Select text or stable JSON stderr; place this global option before the command.",
+			Description:   "stderr を text または安定した JSON で表示します。このグローバルオプションはコマンドより前に置いてください。",
 			AllowedValues: []string{"text", "json"},
 		}},
 		ErrorContract: defaultAgentErrorContract(),
@@ -494,7 +500,7 @@ func (c *CLI) renderAgentHelp(selector string, exact bool, commands []CommandSpe
 	}
 	output, err := json.Marshal(document)
 	if err != nil {
-		return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "The agent help document could not be encoded.", false, err)
+		return nil, fault.Wrap(fault.KindContract, "output_encoding_failed", "agent help 文書をエンコードできませんでした。", false, err)
 	}
 	return append(output, '\n'), nil
 }
@@ -505,12 +511,12 @@ func defaultAgentErrorContract() agentErrorContract {
 		DefaultFormat:     "text",
 		JSONSchemaVersion: 1,
 		Fields: []agentErrorField{
-			{Name: "kind", Description: "Cross-command recovery class."},
-			{Name: "code", Description: "Stable command-specific failure code."},
-			{Name: "message", Description: "Safe human explanation that excludes upstream causes."},
-			{Name: "retryable", Description: "Whether retrying without changing command intent can succeed."},
-			{Name: "retry_after", Description: "Optional stable duration or null."},
-			{Name: "next_actions", Description: "Structured commands and reasons for recovery."},
+			{Name: "kind", Description: "コマンド間で共通の復旧分類。"},
+			{Name: "code", Description: "安定したコマンド固有のエラーコード。"},
+			{Name: "message", Description: "上流の原因を含まない、安全な人向け説明。"},
+			{Name: "retryable", Description: "コマンドの意図を変えずに再試行して成功し得るか。"},
+			{Name: "retry_after", Description: "任意の安定した待機時間、または null。"},
+			{Name: "next_actions", Description: "復旧用の構造化されたコマンドと理由。"},
 		},
 		ExitCodes: []agentExitCode{
 			{Kind: fault.KindInvalidInput, Code: ExitUsage},
@@ -527,15 +533,15 @@ func defaultAgentErrorContract() agentErrorContract {
 			{Kind: fault.KindInternal, Code: ExitInternal},
 		},
 		GlobalErrors: []CommandError{
-			declaredCommandError(fault.KindInvalidInput, "invalid_root_options", false, "help", "Correct the global options."),
-			declaredCommandError(fault.KindInvalidInput, "missing_command", false, "help", "Discover available command outcomes."),
-			declaredCommandError(fault.KindInvalidInput, "unknown_command", false, "help", "Discover an exact command path or namespace."),
-			declaredCommandError(fault.KindInvalidInput, "command_selection_invalid", false, "config", "Explicitly replace the invalid command selection."),
-			declaredCommandError(fault.KindUnavailable, "command_selection_unsafe", false, "doctor", "Restore the local configuration path, then inspect command-selection diagnostics."),
-			declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "doctor", "Restore the local configuration path, then inspect command-selection diagnostics."),
-			declaredCommandError(fault.KindContract, "missing_context", false, "help", "Retry through a context-aware CLI entry point."),
-			declaredCommandError(fault.KindContract, "invalid_catalog", false, "help", "Repair the catalog before dispatch."),
-			declaredCommandError(fault.KindCanceled, "operation_canceled", true, "help", "Retry when the caller is ready."),
+			declaredCommandError(fault.KindInvalidInput, "invalid_root_options", false, "help", "グローバルオプションを修正してください。"),
+			declaredCommandError(fault.KindInvalidInput, "missing_command", false, "help", "利用できるコマンドの結果を確認してください。"),
+			declaredCommandError(fault.KindInvalidInput, "unknown_command", false, "help", "正確なコマンドパスまたは名前空間を確認してください。"),
+			declaredCommandError(fault.KindInvalidInput, "command_selection_invalid", false, "config", "無効なコマンド選択を明示的に置き換えてください。"),
+			declaredCommandError(fault.KindUnavailable, "command_selection_unsafe", false, "doctor", "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"),
+			declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "doctor", "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"),
+			declaredCommandError(fault.KindContract, "missing_context", false, "help", "コンテキスト対応の CLI エントリーポイントから再試行してください。"),
+			declaredCommandError(fault.KindContract, "invalid_catalog", false, "help", "ディスパッチ前にカタログを修復してください。"),
+			declaredCommandError(fault.KindCanceled, "operation_canceled", true, "help", "呼び出し元の準備ができたら再試行してください。"),
 		},
 		CommandErrorsField: "commands[].contract.errors",
 	}

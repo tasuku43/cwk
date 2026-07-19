@@ -29,10 +29,10 @@ type requestCredential struct {
 
 func (credential requestCredential) authorize(request *http.Request) error {
 	if request == nil {
-		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork authentication session is invalid", false)
+		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証セッションは無効です", false)
 	}
 	if credential.secret == "" {
-		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork authentication session is invalid", false)
+		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証セッションは無効です", false)
 	}
 	request.Header.Del("Authorization")
 	request.Header.Set("x-chatworktoken", credential.secret)
@@ -57,10 +57,10 @@ type Client struct {
 func NewFromEnvironment() (*Client, error) {
 	token := os.Getenv(TokenEnvironment)
 	if token == "" {
-		return nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API token is not configured", false)
+		return nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
 	}
 	if err := validateToken(token); err != nil {
-		return nil, fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API token is invalid", false)
+		return nil, fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
 	}
 	return newClient(ProductionBaseURL, token, productionHTTPClient(), randomBindingID, boundedReadFile), nil
 }
@@ -69,41 +69,41 @@ func NewFromEnvironment() (*Client, error) {
 // token. The returned session contains metadata only.
 func (c *Client) Authenticate(ctx context.Context, requirement authn.Requirement) (authn.Session, error) {
 	if ctx == nil {
-		return authn.Session{}, fault.New(fault.KindContract, "missing_authentication_context", "authentication context is not configured", false)
+		return authn.Session{}, fault.New(fault.KindContract, "missing_authentication_context", "認証コンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return authn.Session{}, fault.Wrap(fault.KindCanceled, "authentication_canceled", "authentication was canceled", false, err)
+		return authn.Session{}, fault.Wrap(fault.KindCanceled, "authentication_canceled", "認証がキャンセルされました", false, err)
 	}
 	if err := requirement.Validate(); err != nil {
-		return authn.Session{}, fault.New(fault.KindContract, "invalid_authentication_requirement", "authentication requirement is invalid", false)
+		return authn.Session{}, fault.New(fault.KindContract, "invalid_authentication_requirement", "認証要件は無効です", false)
 	}
 	if c == nil || c.records == nil || c.newID == nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "missing_authenticator", "Chatwork authentication is not configured", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "missing_authenticator", "Chatwork 認証が設定されていません", false)
 	}
 	if !allowsMethod(requirement.Methods, c.source.method) || requirement.Authority != chatwork.AuthenticationAuthority || requirement.Audience != chatwork.AuthenticationAudience {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "authentication does not match the Chatwork API context", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が Chatwork API コンテキストと一致しません", false)
 	}
 	for _, capability := range requirement.RequiredCapabilities {
 		if capability != chatwork.AuthenticationCapability {
-			return authn.Session{}, fault.New(fault.KindPermission, "insufficient_authentication_capability", "authentication does not grant a required Chatwork capability", false)
+			return authn.Session{}, fault.New(fault.KindPermission, "insufficient_authentication_capability", "認証に必要な Chatwork 権限がありません", false)
 		}
 	}
 
 	credential := c.source
 	if credential.method.Validate() != nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API token is not configured", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
 	}
 	if credential.secret == "" {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API token is not configured", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
 	}
 
 	value, err := c.newID()
 	if err != nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "authentication_failed", "Chatwork authentication binding could not be created", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "authentication_failed", "Chatwork 認証バインドを作成できませんでした", false)
 	}
 	binding, err := authn.NewBindingID(value)
 	if err != nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork authentication binding is invalid", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証バインドは無効です", false)
 	}
 	session := authn.Session{
 		Method:              credential.method,
@@ -114,7 +114,7 @@ func (c *Client) Authenticate(ctx context.Context, requirement authn.Requirement
 		GrantedCapabilities: append([]string(nil), requirement.RequiredCapabilities...),
 	}
 	if err := session.Validate(); err != nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork authentication session is invalid", false)
+		return authn.Session{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証セッションは無効です", false)
 	}
 	c.mu.Lock()
 	c.records[binding] = credentialRecord{credential: credential, session: session.Clone()}
@@ -140,25 +140,25 @@ func newClientWithCredential(baseURL string, credential requestCredential, httpC
 
 func (c *Client) resolve(binding authn.BindingID) (credentialRecord, error) {
 	if err := binding.Validate(); err != nil {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork authentication binding is invalid", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork 認証バインドは無効です", false)
 	}
 	if c == nil {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork authentication binding is unavailable", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork 認証バインドを利用できません", false)
 	}
 	c.mu.RLock()
 	record, ok := c.records[binding]
 	c.mu.RUnlock()
 	if !ok || record.session.BindingID != binding || record.credential.secret == "" {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork authentication binding is unavailable", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork 認証バインドを利用できません", false)
 	}
 	if err := record.session.Validate(); err != nil {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork authentication session is invalid", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "invalid_authentication_session", "Chatwork 認証セッションは無効です", false)
 	}
 	if record.session.Authority != chatwork.AuthenticationAuthority || record.session.Audience != chatwork.AuthenticationAudience {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "authentication does not match the Chatwork API context", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が Chatwork API コンテキストと一致しません", false)
 	}
 	if record.credential.method != record.session.Method {
-		return credentialRecord{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "authentication does not match the Chatwork API context", false)
+		return credentialRecord{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が Chatwork API コンテキストと一致しません", false)
 	}
 	return record, nil
 }
@@ -182,11 +182,11 @@ func randomBindingID() (string, error) {
 
 func validateToken(token string) error {
 	if len(token) < 8 || len(token) > 4096 {
-		return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API token is invalid", false)
+		return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
 	}
 	for _, r := range token {
 		if r < 0x21 || r > 0x7e {
-			return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API token is invalid", false)
+			return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
 		}
 	}
 	return nil

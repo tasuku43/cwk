@@ -71,26 +71,26 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if limit.Name == "" || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
 		len(limit.AllowedValues) != 0 || limit.ReferenceKind != "" ||
 		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
-		!strings.Contains(limit.Description, "newest") ||
-		!strings.Contains(limit.Description, "reply context") {
+		!strings.Contains(limit.Description, "新しい") ||
+		!strings.Contains(limit.Description, "返信コンテキスト") {
 		t.Fatalf("limit input contract = %+v", limit)
 	}
 	sender := inputs["--sender"]
 	if sender.Required || !sender.Repeatable || sender.ReferenceKind != "chatwork-account" ||
-		!strings.Contains(sender.Description, "repeat") || !strings.Contains(sender.Description, "OR") ||
-		!strings.Contains(sender.Description, "bounded provider window") || !strings.Contains(sender.Description, "100") {
+		!strings.Contains(sender.Description, "繰り返し") || !strings.Contains(sender.Description, "OR") ||
+		!strings.Contains(sender.Description, "プロバイダーの上限付き範囲") || !strings.Contains(sender.Description, "100") {
 		t.Fatalf("sender input contract = %+v", sender)
 	}
 	context := inputs["--context"]
 	if context.Required || !reflect.DeepEqual(context.AllowedValues, []string{"none", "replies"}) ||
-		!strings.Contains(context.Description, "one-hop") || !strings.Contains(context.Description, "default") ||
-		!strings.Contains(context.Description, "parents and children") || !strings.Contains(context.Description, "limit") {
+		!strings.Contains(context.Description, "1ホップ") || !strings.Contains(context.Description, "既定値") ||
+		!strings.Contains(context.Description, "返信元・返信先") || !strings.Contains(context.Description, "上限付き範囲") {
 		t.Fatalf("context input contract = %+v", context)
 	}
 	window := inputs["--window"]
 	if !reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
-		!strings.Contains(window.Description, "recent") || !strings.Contains(window.Description, "default") ||
-		!strings.Contains(window.Description, "differential") {
+		!strings.Contains(window.Description, "recent") || !strings.Contains(window.Description, "既定値") ||
+		!strings.Contains(window.Description, "差分") {
 		t.Fatalf("window input contract = %+v", window)
 	}
 	if strings.Contains(limit.Description, "Use --window recent") {

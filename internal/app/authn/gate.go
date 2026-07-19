@@ -45,23 +45,23 @@ func New(authenticator Authenticator) *Gate {
 // downstream action calls.
 func (g *Gate) Invoke(ctx context.Context, requirement domainauthn.Requirement, action Action) error {
 	if ctx == nil {
-		return fault.New(fault.KindContract, "missing_authentication_context", "authentication context is not configured", false)
+		return fault.New(fault.KindContract, "missing_authentication_context", "認証コンテキストが設定されていません", false)
 	}
 	if action == nil {
-		return fault.New(fault.KindContract, "missing_authenticated_action", "authenticated action is not configured", false)
+		return fault.New(fault.KindContract, "missing_authenticated_action", "認証済みアクションが設定されていません", false)
 	}
 	requirementSnapshot := requirement.Clone()
 	if err := requirementSnapshot.Validate(); err != nil {
-		return fault.New(fault.KindContract, "invalid_authentication_requirement", "authentication requirement is invalid", false)
+		return fault.New(fault.KindContract, "invalid_authentication_requirement", "認証要件は無効です", false)
 	}
 	if g == nil || portcheck.IsNil(g.authenticator) {
-		return fault.New(fault.KindAuthentication, "missing_authenticator", "authentication is not configured", false)
+		return fault.New(fault.KindAuthentication, "missing_authenticator", "認証が設定されていません", false)
 	}
 	if g.now == nil {
-		return fault.New(fault.KindContract, "missing_authentication_clock", "authentication clock is not configured", false)
+		return fault.New(fault.KindContract, "missing_authentication_clock", "認証用時計が設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return canceledFault("authentication was canceled before credential resolution")
+		return canceledFault("資格情報の解決前に認証がキャンセルされました")
 	}
 
 	session, err := g.authenticator.Authenticate(ctx, requirementSnapshot.Clone())
@@ -69,18 +69,18 @@ func (g *Gate) Invoke(ctx context.Context, requirement domainauthn.Requirement, 
 		return sanitizeAuthenticationError(ctx, err)
 	}
 	if err := ctx.Err(); err != nil {
-		return canceledFault("authentication was canceled before session validation")
+		return canceledFault("セッション検証前に認証がキャンセルされました")
 	}
 
 	sessionSnapshot := session.Clone()
 	if err := sessionSnapshot.Validate(); err != nil {
-		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "authentication returned invalid session metadata", false)
+		return fault.New(fault.KindAuthentication, "invalid_authentication_session", "認証が無効なセッションメタデータを返しました", false)
 	}
 	if err := requirementSnapshot.Satisfies(sessionSnapshot, g.now().UTC()); err != nil {
 		return mismatchFault(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return canceledFault("authentication was canceled before the authenticated action")
+		return canceledFault("認証済みアクションの実行前に認証がキャンセルされました")
 	}
 
 	if err := action(ctx, sessionSnapshot.Clone()); err != nil {
@@ -92,24 +92,24 @@ func (g *Gate) Invoke(ctx context.Context, requirement domainauthn.Requirement, 
 func mismatchFault(err error) error {
 	var mismatch *domainauthn.Mismatch
 	if !errors.As(err, &mismatch) {
-		return fault.New(fault.KindContract, "authentication_evaluation_failed", "authentication metadata could not be evaluated", false)
+		return fault.New(fault.KindContract, "authentication_evaluation_failed", "認証メタデータを評価できませんでした", false)
 	}
 	switch mismatch.Kind {
 	case domainauthn.MismatchCapability:
-		return fault.New(fault.KindPermission, "insufficient_authentication_capability", "authentication does not grant a required capability", false)
+		return fault.New(fault.KindPermission, "insufficient_authentication_capability", "認証に必要な権限がありません", false)
 	case domainauthn.MismatchExpired:
-		return fault.New(fault.KindAuthentication, "authentication_expired", "authentication has expired", false)
+		return fault.New(fault.KindAuthentication, "authentication_expired", "認証の有効期限が切れています", false)
 	case domainauthn.MismatchMethod, domainauthn.MismatchAuthority,
 		domainauthn.MismatchAudience, domainauthn.MismatchAccount:
-		return fault.New(fault.KindAuthentication, "authentication_context_mismatch", "authentication does not match the required context", false)
+		return fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が必要なコンテキストと一致しません", false)
 	default:
-		return fault.New(fault.KindContract, "authentication_evaluation_failed", "authentication metadata could not be evaluated", false)
+		return fault.New(fault.KindContract, "authentication_evaluation_failed", "認証メタデータを評価できませんでした", false)
 	}
 }
 
 func sanitizeAuthenticationError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
-		return canceledFault("authentication was canceled during credential resolution")
+		return canceledFault("資格情報の解決中に認証がキャンセルされました")
 	}
 	if structured, ok := safeStructuredFault(err); ok {
 		switch structured.Kind {
@@ -118,7 +118,7 @@ func sanitizeAuthenticationError(ctx context.Context, err error) error {
 			return structured
 		}
 	}
-	return fault.New(fault.KindAuthentication, "authentication_failed", "authentication could not be established", false)
+	return fault.New(fault.KindAuthentication, "authentication_failed", "認証を確立できませんでした", false)
 }
 
 func sanitizeActionError(ctx context.Context, err error) error {
@@ -126,9 +126,9 @@ func sanitizeActionError(ctx context.Context, err error) error {
 		return structured
 	}
 	if ctx.Err() != nil {
-		return canceledFault("authenticated action was canceled")
+		return canceledFault("認証済みアクションがキャンセルされました")
 	}
-	return fault.New(fault.KindInternal, "unclassified_authenticated_action_error", "authenticated action returned an unclassified error", false)
+	return fault.New(fault.KindInternal, "unclassified_authenticated_action_error", "認証済みアクションが分類不能なエラーを返しました", false)
 }
 
 // safeStructuredFault strips an upstream cause because causes may contain

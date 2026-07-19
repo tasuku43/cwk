@@ -1,68 +1,68 @@
-# Contributing
+# コントリビューションガイド
 
-Thank you for improving Chatwork CLI. Contributions are welcome when they keep the repository runnable, understandable by a new contributor or coding agent, and safe to publish.
+Chatwork CLI の改善へのご協力を歓迎します。リポジトリを常に実行可能に保ち、新しいコントリビューターやコーディングエージェントが理解でき、公開しても安全な変更をお願いします。
 
-## Before you begin
+## 始める前に
 
-- Read [AGENTS.md](AGENTS.md) and the documents it lists.
-- Follow the [Code of Conduct](CODE_OF_CONDUCT.md).
-- Search existing issues and decisions before proposing a second solution to the same problem.
-- For a security vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
-- For usage help, follow [SUPPORT.md](SUPPORT.md).
-- Do not submit confidential code, URLs, credentials, personal data, or material you do not have the right to license.
+- [AGENTS.md](AGENTS.md) と、そこから参照されている文書を読んでください。
+- [行動規範](CODE_OF_CONDUCT.md) に従ってください。
+- 同じ問題に対する別の解決策を提案する前に、既存の Issue と意思決定記録を検索してください。
+- セキュリティ脆弱性は、公開 Issue を作成せず [SECURITY.md](SECURITY.md) に従って報告してください。
+- 利用方法に関する質問は [SUPPORT.md](SUPPORT.md) を参照してください。
+- 機密コード、非公開URL、認証情報、個人データ、またはライセンスする権利のない素材を提出しないでください。
 
-## Development setup
+## 開発環境
 
-Install the Go version declared by `go.mod` and [Task](https://taskfile.dev/). Then run:
+`go.mod` で指定されたバージョンの Go と [Task](https://taskfile.dev/) をインストールし、次を実行します。
 
 ```sh
 task check:fast
 ```
 
-The default repository must remain runnable as `github.com/tasuku43/cwk` with the `cwk` binary. Identity changes belong in a derived repository through the bootstrap workflow, not in a contribution to the reusable template.
+リポジトリは Go モジュール `github.com/tasuku43/cwk`、バイナリ `cwk` として実行可能な状態を維持してください。製品名やモジュールIDの変更は、このリポジトリに対する通常のコントリビューションとは別の製品・互換性判断を必要とします。
 
-## Propose the outcome first
+## まず成果を提案する
 
-For a substantial change, open an issue or include a work packet starting from the [`goal.md` work-packet template](docs/work/_template/goal.md). State:
+大きな変更では、Issue を作成するか、[`goal.md` のワークパケットテンプレート](docs/work/_template/goal.md) から始めたワークパケットを含めてください。次を明記します。
 
-- the user outcome;
-- what is explicitly out of scope;
-- the product, architecture, security, and compatibility constraints;
-- the considered alternatives;
-- objective acceptance criteria.
+- ユーザーが得る成果
+- 明示的に対象外とする範囲
+- 製品、アーキテクチャ、セキュリティ、互換性の制約
+- 検討した代替案
+- 客観的な受け入れ条件
 
-If the change introduces a durable trade-off or supersedes an earlier decision, add an ADR from [the decision template](docs/decisions/0000-template.md).
+長期にわたるトレードオフを導入する場合や、以前の判断を置き換える場合は、[意思決定テンプレート](docs/decisions/0000-template.md) から ADR を追加してください。
 
-## Implement and verify
+## 実装と検証
 
-- Keep domain, application, infrastructure, and CLI responsibilities separate.
-- Add tests that state the behavior and failure boundary.
-- Keep help, routing, and the public command list derived from `cli.Catalog`.
-- Update documentation in the same change when a promise or invariant changes.
-- Use synthetic data in examples and fixtures.
+- ドメイン、アプリケーション、インフラストラクチャ、CLI の責務を分離してください。
+- 振る舞いと失敗境界を示すテストを追加してください。
+- help、ルーティング、公開コマンド一覧は `cli.Catalog` から導出してください。
+- 約束や不変条件が変わる場合は、同じ変更内で文書も更新してください。
+- 例とフィクスチャには合成データを使用してください。
 
-Before opening a pull request, run:
+Pull Request を作成する前に次を実行します。
 
 ```sh
 task check
 task public:check
 ```
 
-Run `task release:check` as well when packaging, Formula, version metadata, or release automation changes.
+パッケージング、Formula、バージョンメタデータ、リリース自動化を変更した場合は、`task release:check` も実行してください。
 
-## Pull requests
+## Pull Request
 
-A pull request should be small enough to review as one decision and should include:
+1つのPull Requestは、1つの判断としてレビューできる大きさにしてください。次を含めます。
 
-- the user-visible outcome and rationale;
-- relevant work packet or ADR links;
-- tests added or changed;
-- commands used for verification;
-- compatibility, security, and public-boundary impact;
-- generated changes clearly separated from hand-written changes.
+- ユーザーに見える成果と、その理由
+- 関連するワークパケットまたは ADR へのリンク
+- 追加・変更したテスト
+- 検証に使用したコマンド
+- 互換性、セキュリティ、公開境界への影響
+- 生成された変更と手書きの変更の明確な区別
 
-Reviewers evaluate conformance to the theses and invariants, not only whether the happy path works. A check may be green while the product decision is still wrong.
+レビューでは、正常系が動作するかだけでなく、テーゼと不変条件への適合も確認します。チェックが成功していても、製品判断が適切とは限りません。
 
-## Licensing contributions
+## コントリビューションのライセンス
 
-This repository is licensed under the MIT License. By submitting a contribution, you represent that you have the right to submit it and agree that it is licensed under the same terms. Do not copy code or documentation from a private or incompatibly licensed source.
+このリポジトリは MIT License の下で提供されています。コントリビューションを提出することで、提出する権利を有し、同じ条件でライセンスされることに同意したものとみなします。非公開または互換性のないライセンスのソースから、コードや文書をコピーしないでください。

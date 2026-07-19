@@ -1,58 +1,58 @@
-name: Feature request
-description: Propose a user outcome and its enforceable contracts.
+name: 機能提案
+description: ユーザーが得る成果と、実行可能な契約を提案します。
 title: "feature: "
 labels: [enhancement]
 body:
   - type: markdown
     attributes:
       value: |
-        Describe the outcome in public, task-oriented language. Do not include
-        private APIs, internal URLs, proprietary identifiers, or customer data.
+        公開可能でタスク指向の言葉で成果を説明してください。
+        非公開API、内部URL、独自の識別子、顧客データを含めないでください。
 
   - type: textarea
     id: outcome
     attributes:
-      label: User outcome
-      description: What should a user or agent be able to accomplish?
+      label: ユーザーが得る成果
+      description: ユーザーまたはエージェントが何を達成できるようにすべきですか？
     validations:
       required: true
 
   - type: textarea
     id: thesis
     attributes:
-      label: Thesis alignment
-      description: Which thesis supports this capability? Should a thesis be refined?
+      label: テーゼとの整合
+      description: どのテーゼがこの機能を支持しますか？テーゼを改善する必要がありますか？
     validations:
       required: true
 
   - type: textarea
     id: discovery-action
     attributes:
-      label: Discovery, action, and opaque ID flow
-      description: Identify producers, output IDs, consumers, and any ambiguity boundary.
+      label: 発見、操作、opaque ID のフロー
+      description: producer、出力ID、consumer、曖昧性の境界を特定してください。
 
   - type: textarea
     id: effects
     attributes:
-      label: Effects and external boundaries
-      description: List reads, creates, writes, destinations, approval, and audit needs.
+      label: 効果と外部境界
+      description: 読み取り、作成、書き込み、送信先、承認、監査の必要性を記載してください。
 
   - type: textarea
     id: output
     attributes:
-      label: Output and compatibility contract
-      description: Describe stdout, stderr, exit status, schema, and compatibility impact.
+      label: 出力と互換性の契約
+      description: stdout、stderr、終了ステータス、スキーマ、互換性への影響を説明してください。
 
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: Explain the smallest viable approach and why alternatives are weaker.
+      label: 検討した代替案
+      description: 実現可能な最小の方法と、他の案が劣る理由を説明してください。
 
   - type: checkboxes
     id: public-safe
     attributes:
-      label: Public safety confirmation
+      label: 公開安全性の確認
       options:
-        - label: This request contains no secret, internal information, or private data.
+        - label: この提案にシークレット、内部情報、非公開データを含めていません。
           required: true

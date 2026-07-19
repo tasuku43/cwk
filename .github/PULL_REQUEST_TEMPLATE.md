@@ -1,40 +1,32 @@
-## Outcome
+## 成果
 
-Describe the user or maintainer outcome. Explain why this change belongs in the
-project; do not only list edited files.
+ユーザーまたはメンテナーが得る成果を説明してください。編集したファイルの一覧だけでなく、この変更がプロジェクトに必要な理由を記載してください。
 
-## Thesis impact
+## テーゼへの影響
 
-- [ ] The change follows the current theses without changing them.
-- [ ] I updated `docs/00_theses.md` and propagated the decision into downstream
-      architecture, contracts, tests, or agent guidance.
+- [ ] 現在のテーゼに従う変更であり、テーゼ自体は変更していません。
+- [ ] `docs/00_theses.md` を更新し、その判断を下流のアーキテクチャ、契約、テスト、エージェント向けガイダンスへ反映しました。
 
-State which thesis guided the design and note any tension or trade-off:
+設計の判断に使ったテーゼと、緊張関係またはトレードオフを記載してください。
 
-## Contracts and safety boundaries
+## 契約と安全境界
 
-Describe changes to command discovery, opaque ID producer/consumer flows,
-effects, external destinations, output schemas, compatibility, or release
-artifacts. Write `None` when there is no contract change.
+コマンド発見、opaque ID の producer/consumer フロー、効果、外部送信先、出力スキーマ、互換性、リリース成果物への変更を説明してください。契約変更がない場合は `なし` と記載してください。
 
-## Public repository check
+## 公開リポジトリの確認
 
-- [ ] This PR contains no secret, credential, private hostname, internal URL,
-      employee/customer data, or proprietary identifier.
-- [ ] Examples use synthetic values and public domains.
-- [ ] New safety or security claims are mapped to enforceable checks.
+- [ ] このPull Requestに、シークレット、認証情報、非公開ホスト名、内部URL、従業員・顧客データ、独自の識別子を含めていません。
+- [ ] 例には合成値と公開ドメインを使用しています。
+- [ ] 新しい安全性・セキュリティ上の主張を、実行可能なチェックに対応付けました。
 
-Do not paste sensitive evidence into this PR. Follow `SECURITY.md` for private
-vulnerability reporting.
+機微な証拠をこのPull Requestへ貼り付けないでください。脆弱性の非公開報告は `SECURITY.md` に従ってください。
 
-## Validation
+## 検証
 
 - [ ] `./scripts/check.sh fast`
 - [ ] `./scripts/check.sh full`
-- [ ] `./scripts/check.sh security` when dependencies, auth, I/O, or trust
-      boundaries changed
-- [ ] `./scripts/check.sh release` when packaging or distribution changed
-- [ ] `./scripts/check.sh public` when metadata, docs, examples, or repository
-      configuration changed
+- [ ] 依存関係、認証、I/O、信頼境界を変更した場合は `./scripts/check.sh security`
+- [ ] パッケージングまたは配布を変更した場合は `./scripts/check.sh release`
+- [ ] メタデータ、文書、例、リポジトリ設定を変更した場合は `./scripts/check.sh public`
 
-List any intentionally skipped profile and why:
+意図的に省略したプロファイルがあれば、理由とともに記載してください。

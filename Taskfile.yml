@@ -2,7 +2,7 @@ version: '3'
 
 tasks:
   build:
-    desc: Build the CLI binary.
+    desc: CLIバイナリをビルドします。
     cmds:
       - mkdir -p bin
       # Local builds intentionally retain the compiled dev version. Only the
@@ -10,51 +10,51 @@ tasks:
       - go build -buildvcs=false -trimpath -o bin/cwk ./cmd/cwk
 
   test:
-    desc: Run the Go test suite.
+    desc: Goテストスイートを実行します。
     cmds:
       - go test ./...
 
   test:race:
-    desc: Run the Go test suite with the race detector.
+    desc: race detector付きでGoテストスイートを実行します。
     cmds:
       - go test -race ./...
 
   contracts:check:
-    desc: Validate the command catalog, capability ledger, and external schema fixtures.
+    desc: コマンドカタログ、capability ledger、外部schema fixtureを検証します。
     cmds:
       - go run ./tools/contractlint
 
   check:fast:
-    desc: Run the quick local and agent completion gate.
+    desc: ローカルとagent向けの短時間gateを実行します。
     cmds:
       - ./scripts/check.sh fast
 
   check:
-    desc: Run every local quality, security, release, and public-readiness gate.
+    desc: 品質、security、release、公開準備の全gateを実行します。
     cmds:
       - ./scripts/check.sh full
 
   security:
-    desc: Run dependency, vulnerability, static security, and secret checks.
+    desc: 依存関係、脆弱性、静的security、secretのcheckを実行します。
     cmds:
       - ./scripts/check.sh security
 
   release:check:
-    desc: Validate release scripts, workflow, artifacts, and Formula contracts.
+    desc: release script、workflow、artifact、Formula contractを検証します。
     cmds:
       - ./scripts/check.sh release
 
   public:check:
-    desc: Validate that the repository is safe to publish.
+    desc: repositoryを安全に公開できることを検証します。
     cmds:
       - ./scripts/check.sh public
 
   bootstrap:preview:
-    desc: Preview exact template substitutions without changing files.
+    desc: fileを変更せずに正確なtemplate置換をpreviewします。
     cmds:
       - go run ./tools/bootstrap --dry-run
 
   bootstrap:
-    desc: Apply validated template substitutions and switch to the ready profile.
+    desc: 検証済みtemplate置換を適用し、ready profileへ切り替えます。
     cmds:
       - go run ./tools/bootstrap

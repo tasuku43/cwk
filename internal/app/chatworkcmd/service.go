@@ -29,19 +29,19 @@ func New(port Port) *Service {
 // It returns no result when cancellation or a contract failure is observed.
 func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request chatwork.Request) (chatwork.Result, error) {
 	if ctx == nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "missing_context", "Chatwork task context is not configured", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "missing_context", "Chatwork タスクコンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled before execution", true, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行前に Chatwork タスクがキャンセルされました", true, err)
 	}
 	if err := binding.Validate(); err != nil {
-		return chatwork.Result{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork authentication binding is invalid", false)
+		return chatwork.Result{}, fault.New(fault.KindAuthentication, "invalid_authentication_binding", "Chatwork 認証バインドは無効です", false)
 	}
 	if err := request.Validate(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_task", "Chatwork task input is invalid", false, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_task", "Chatwork タスク入力は無効です", false, err)
 	}
 	if s == nil || portcheck.IsNil(s.port) {
-		return chatwork.Result{}, fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork task adapter is not configured", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
 	}
 	providerRequest := request
 	providerRequest.MessageFilter = chatwork.MessageFilter{}
@@ -51,36 +51,36 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 			return chatwork.Result{}, structured
 		}
 		if ctx.Err() != nil {
-			return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled during execution", true, ctx.Err())
+			return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true, ctx.Err())
 		}
-		return chatwork.Result{}, fault.New(fault.KindInternal, "unclassified_chatwork_error", "Chatwork task returned an unclassified error", false)
+		return chatwork.Result{}, fault.New(fault.KindInternal, "unclassified_chatwork_error", "Chatwork タスクが分類不能なエラーを返しました", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "Chatwork task was canceled after execution", true, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行後に Chatwork タスクがキャンセルされました", true, err)
 	}
 	if result.Task != providerRequest.Task {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_result_mismatch", "Chatwork task adapter returned a result for a different task", false)
+		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_result_mismatch", "Chatwork タスクアダプターが別のタスクの結果を返しました", false)
 	}
 	if err := result.ValidateFor(providerRequest); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
 	}
 	switch request.Task {
 	case chatwork.TaskMessagesList:
 		messages, selection, selectionErr := assembleMessageWindow(result.Messages, request.MessageFilter)
 		if selectionErr != nil {
-			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, selectionErr)
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, selectionErr)
 		}
 		result.Messages = messages
 		result.MessageSelection = selection
 	case chatwork.TaskMessagesShow:
 		messages, resolutionErr := ResolveMessageRelations(result.Messages)
 		if resolutionErr != nil {
-			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, resolutionErr)
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, resolutionErr)
 		}
 		result.Messages = messages
 	}
 	if err := result.ValidateFor(request); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork task adapter returned an invalid typed result", false, err)
+		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
 	}
 	return result, nil
 }
