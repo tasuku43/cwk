@@ -97,9 +97,10 @@ move, Space to toggle the selected Chatwork task, Enter to validate and save,
 or `q` to leave the last saved profile unchanged. ASCII Space and the U+3000
 full-width space emitted by some Japanese input methods are equivalent. Each
 row keeps its literal `read`, `create`, or `write` effect badge. Cyan, yellow,
-and magenta are only
-supplemental cues for those badges; color is never the sole meaning, and red is
-not used to imply that every write is destructive. Redirected or otherwise
+and magenta are only supplemental cues for those badges; color is never the
+sole meaning, and red is not used to imply that every write is destructive.
+The badge field is padded to the longest label so every command path begins in
+the same column. Redirected or otherwise
 non-terminal invocation fails with a typed error instead of falling back to a
 second input grammar. If the terminal cannot show the current exact command
 path and effect together, movement, toggle, and save are disabled until it is

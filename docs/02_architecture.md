@@ -198,6 +198,8 @@ pure selector model. Every row retains a textual `[read]`, `[create]`, or
 `[write]` badge. Cyan, yellow, and magenta are supplemental cues only; ANSI
 bytes are CLI-authored, are excluded from display-width calculation, and never
 replace the text badge or encode authorization or destructive impact.
+The badge field is right-padded to the visible width of `[create]`, keeping the
+following exact command path at one stable display column across all effects.
 CLI derives the always-on line and the profile-failure recovery island from
 `Catalog.AlwaysCommands()` rather than maintaining another path list. A frame
 that cannot show the complete current command identity admits only a

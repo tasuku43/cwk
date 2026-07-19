@@ -201,9 +201,11 @@ saved profile unchanged on every graceful path.
 
 Every selector row keeps a textual `[read]`, `[create]`, or `[write]` badge.
 Cyan, yellow, and magenta may supplement those badges, but color is never
-effect truth or authority and red is not used as a generic write cue. Add ANSI
-only after terminal-safe text projection and width truncation so hostile text
-cannot author terminal structure and color bytes do not consume display width.
+effect truth or authority and red is not used as a generic write cue. Pad the
+badge field to the longest visible label so exact command paths align across
+effects. Add ANSI only after terminal-safe text projection and width truncation
+so hostile text cannot author terminal structure and color bytes do not consume
+display width.
 
 Treat this selection as cognitive-surface curation only. It is not
 authorization, sandboxing, provider scope, or mutation approval, because a

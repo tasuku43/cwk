@@ -243,6 +243,8 @@ const (
 	configTUIColorYellow  = "\x1b[33m"
 	configTUIColorMagenta = "\x1b[35m"
 	configTUIColorReset   = "\x1b[0m"
+
+	configTUIEffectBadgeWidth = len("[create]")
 )
 
 // renderConfigTUIScreen returns one complete, repaintable frame. Its only ANSI
@@ -294,7 +296,7 @@ func configTUISelectionVisible(model configTUIModel, width, height int) bool {
 		return false
 	}
 	prefix, badge, _ := configTUIItemPrefix(model.items[model.cursor], true)
-	identity := prefix + badge + " " + safeExternalText(model.items[model.cursor].Path)
+	identity := prefix + configTUIEffectBadgeField(badge) + " " + safeExternalText(model.items[model.cursor].Path)
 	return configTUIDisplayWidth(identity) <= width
 }
 
@@ -390,7 +392,7 @@ func configTUIViewportStart(itemCount, cursor, visible int) int {
 
 func renderConfigTUIItem(item configTUIItem, current bool, width int) string {
 	prefix, badge, color := configTUIItemPrefix(item, current)
-	plainPrefix := prefix + badge + " "
+	plainPrefix := prefix + configTUIEffectBadgeField(badge) + " "
 	line := plainPrefix + safeExternalText(item.Path)
 	if item.Summary != "" {
 		line += " - " + safeExternalText(item.Summary)
@@ -403,6 +405,13 @@ func renderConfigTUIItem(item configTUIItem, current bool, width int) string {
 		return line
 	}
 	return prefix + color + badge + configTUIColorReset + line[len(prefix)+len(badge):]
+}
+
+func configTUIEffectBadgeField(badge string) string {
+	if len(badge) >= configTUIEffectBadgeWidth {
+		return badge
+	}
+	return badge + strings.Repeat(" ", configTUIEffectBadgeWidth-len(badge))
 }
 
 func configTUIItemPrefix(item configTUIItem, current bool) (prefix, badge, color string) {

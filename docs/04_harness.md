@@ -150,7 +150,8 @@ The test suite has complementary levels:
   effect badges even when color is unavailable, catalog-derived color spans
   that never replace those labels, deterministic Up/Down movement, ASCII and
   fragmented UTF-8 U+3000 Space toggling, Enter-only save, and
-  q/Escape/Ctrl-C cancellation. An invalid
+  q/Escape/Ctrl-C cancellation. Renderer tests require the exact command path
+  to begin at one display column for read, create, and write rows. An invalid
   active view remains inside the selector with an actionable diagnostic and
   zero writes. Every exit path restores the alternate screen, cursor, output
   mode, and raw input mode; restoration completes before an Enter-confirmed

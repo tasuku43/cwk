@@ -175,7 +175,7 @@ func TestRenderConfigTUIScreenIsBoundedAndKeepsCursorInViewport(t *testing.T) {
 			t.Fatalf("line %d width = %d, want <= %d: %q", index, got, width, line)
 		}
 	}
-	if !strings.Contains(output, "> [x] \x1b[36m[read]\x1b[0m command i") {
+	if !strings.Contains(output, "> [x] \x1b[36m[read]\x1b[0m   command i") {
 		t.Fatalf("cursor is outside viewport:\n%s", output)
 	}
 	if strings.Count(output, "Always on: doctor, help, version, config") != 1 {
@@ -366,6 +366,21 @@ func TestRenderConfigTUIScreenUsesTextEffectBadgesAndNonRedANSIColors(t *testing
 	for _, badge := range []string{"[read]", "[create]", "[write]"} {
 		if !strings.Contains(plain, badge) {
 			t.Fatalf("color was the only effect signal for %q:\n%s", badge, output)
+		}
+	}
+	lines := strings.Split(strings.TrimSuffix(plain, "\n"), "\n")
+	wantColumn := -1
+	for index, path := range []string{"read task", "create task", "write task"} {
+		column := strings.Index(lines[index+2], path)
+		if column < 0 {
+			t.Fatalf("screen lacks path %q: %q", path, lines[index+2])
+		}
+		if wantColumn < 0 {
+			wantColumn = column
+			continue
+		}
+		if column != wantColumn {
+			t.Fatalf("path %q starts at column %d, want %d:\n%s", path, column, wantColumn, plain)
 		}
 	}
 }

@@ -74,8 +74,10 @@ second grammar.
 Every row carries its literal catalog effect badge: `read`, `create`, or
 `write`. Cyan/read, yellow/create, and magenta/write may supplement the badge,
 but color is not semantic and red is not used to suggest that every write is
-destructive. The bounded renderer preserves cursor, checkbox, exact path, and
-badge before truncating optional summary text. If the current exact path or an
+destructive. The effect badge occupies a fixed-width field sized to `[create]`,
+so every exact command path starts in the same column. The bounded renderer
+preserves cursor, checkbox, exact path, and badge before truncating optional
+summary text. If the current exact path or an
 item row cannot fit, the selector shows resize guidance and accepts only a
 non-saving exit; hidden or truncated command identity can never be toggled or
 saved.

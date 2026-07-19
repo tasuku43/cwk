@@ -48,6 +48,8 @@ selected direct cursor navigation and one exact command as the intended UX.
   effect badge. Cyan/read, yellow/create, and magenta/write are supplemental
   cues only; the badge remains sufficient without color, and red is not used
   to imply destructiveness that the effect contract does not establish.
+- [x] The effect badge occupies one fixed-width field, so every exact command
+  path starts at the same display column regardless of effect length.
 - [x] Quitting, EOF/terminal closure, Ctrl-C, or context cancellation before
   Enter restores terminal mode and leaves the prior profile byte-for-byte
   unchanged.

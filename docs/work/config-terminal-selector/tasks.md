@@ -26,6 +26,8 @@
   prove unrelated UTF-8 cannot consume or fabricate the following key.
 - [x] Render a literal read/create/write badge on every selectable row, with
   cyan/yellow/magenta as optional non-semantic cues and no red effect mapping.
+- [x] Pad the effect field to `[create]` width and test that all command paths
+  start at the same ANSI-stripped display column.
 - [x] Add deterministic ANSI, ANSI-stripped semantic, narrow-width,
   visible-cell, truncation, and badge-preservation renderer tests.
 - [x] Add typed non-TTY rejection and prove every pre-Enter exit restores the

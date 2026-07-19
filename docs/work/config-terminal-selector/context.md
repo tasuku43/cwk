@@ -186,6 +186,9 @@
   while U+3000 full-width space produced no frame because the byte parser
   discarded it. The corrected parser accepts the three UTF-8 bytes across
   arbitrary read boundaries and treats unrelated UTF-8 as ignored input.
+- A second visual review found that variable badge lengths shifted the exact
+  command path by up to two columns. The corrected renderer pads `[read]` and
+  `[write]` to `[create]` width before the single path separator.
 - Focused tests pass for `internal/app/configcmd`, `internal/infra/terminalui`,
   `internal/cli`, and `tools/archivepack`; focused `go vet` passes for the same
   implementation surfaces.
