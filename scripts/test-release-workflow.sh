@@ -100,6 +100,9 @@ insert_after_line workflow-level-defaults \
 replace_nth_line workflow-root-permission \
   '  contents: read' \
   '  contents: write'
+replace_nth_line generated-release-notes \
+  '          args=(--verify-tag --title "${GITHUB_REF_NAME}" --notes-from-tag)' \
+  '          args=(--verify-tag --title "${GITHUB_REF_NAME}" --generate-notes)'
 insert_after_line workflow-root-extra-permission \
   '  contents: read' \
   '  issues: write'

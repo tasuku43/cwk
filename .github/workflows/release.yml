@@ -113,7 +113,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         shell: bash
         run: |
-          args=(--verify-tag --title "${GITHUB_REF_NAME}" --generate-notes)
+          args=(--verify-tag --title "${GITHUB_REF_NAME}" --notes-from-tag)
           if [[ "${{ needs.preflight.outputs.stable }}" != true ]]; then
             args+=(--prerelease)
           fi

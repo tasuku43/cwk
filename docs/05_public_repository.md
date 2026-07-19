@@ -139,6 +139,9 @@ Before each public release, verify:
 - installation instructions that do not depend on post-publication
   package-manager metadata work in a clean environment;
 - release notes disclose compatibility, security, and migration impact;
+- the annotated tag carries those reviewed notes and the release workflow
+  publishes them unchanged rather than deriving incomplete notes from pull
+  request history;
 - for a stable release, the candidate Formula was rendered and syntax-checked
   from the exact release revision and the post-publication audit/PR contract
   was reviewed;

@@ -104,6 +104,11 @@ fi
 if grep -qF -- '--clobber' "$workflow"; then
   fail "release workflow must never overwrite existing release assets"
 fi
+if grep -qF -- '--generate-notes' "$workflow"; then
+  fail "release workflow must not replace reviewed annotated-tag notes with generated notes"
+fi
+grep -qF -- '--notes-from-tag' "$workflow" ||
+  fail "release workflow must publish the reviewed annotated-tag notes"
 grep -qF 'already exists; refusing to replace immutable release assets' "$workflow" ||
   fail "release workflow does not fail closed when the tag already has a release"
 

@@ -54,7 +54,8 @@ Each tag publishes:
 
 - one archive for every supported platform tuple;
 - `checksums.txt` containing cryptographic checksums for all archives;
-- generated release notes or reviewed notes describing user-visible changes;
+- reviewed release notes from the annotated tag describing user-visible
+  changes, compatibility, security, and migration impact;
 - prerelease metadata when the tag contains a prerelease suffix.
 
 Archives contain exactly the intended binary, the project `LICENSE`, and the checked-in `THIRD_PARTY_NOTICES` artifact. `scripts/package-release.sh` builds and verifies artifacts; `task release:check` validates the packaging contract, verifies the notice text against the exact pinned Go toolchain license and patent-grant sources plus the reviewed dependency-module licenses, and fails closed if the modules linked by any supported target differ from that reviewed notice manifest.
@@ -109,7 +110,8 @@ The release workflow follows this order:
 3. Build the complete pure-Go platform matrix from that revision.
 4. Verify archive names, canonical order and header modes, reviewed contents, executable behavior, version, and commit.
 5. Generate and verify `checksums.txt`.
-6. Publish one GitHub Release from the reviewed tag.
+6. Publish one GitHub Release from the reviewed tag, using the annotated tag
+   message unchanged as its reviewed notes.
 7. For a stable tag, render and strictly audit the checksum-pinned Homebrew
    Formula without an App credential, then upload that one-file workflow
    artifact.
@@ -120,6 +122,13 @@ The release workflow follows this order:
 The workflow uses a public GitHub Release path. It must not embed private asset URLs, personal access tokens, authorization headers, or organization-specific package infrastructure in Formula content.
 
 Publication is create-only. If a GitHub Release already exists for the tag, the workflow fails without uploading or replacing any asset. It never uses `--clobber`. Correct a failed or incorrect release with a new version and an explicit incident or withdrawal decision; do not silently rewrite published evidence.
+
+Release notes are likewise selected before publication. The workflow requires
+an annotated tag and passes `--notes-from-tag`; it rejects generated-note
+substitution because a direct reviewed commit may otherwise collapse to only a
+comparison link. The release owner reviews the exact annotation before tag
+push. A lightweight tag or an annotation that omits included changes,
+compatibility, security, or migration impact is not release-ready.
 
 Workflow checkouts disable persisted Git credentials. The Formula pull-request
 action receives only a short-lived GitHub App installation token restricted to
@@ -193,6 +202,7 @@ Create a work packet for a release and record:
 - included changes and compatibility impact;
 - security fixes and disclosure coordination;
 - migration or deprecation notes;
+- the exact annotated-tag release notes that summarize those decisions;
 - required profiles and their results;
 - pre-publication clean-environment evidence for installation instructions
   that do not depend on the post-publication Formula;

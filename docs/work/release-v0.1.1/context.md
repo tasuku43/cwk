@@ -12,6 +12,10 @@
 - The exact pre-release source diff contains the configuration-home alias fix,
   tests, product/architecture/security/harness propagation, its work packet,
   and README Homebrew 6 tap-trust plus troubleshooting guidance.
+- GitHub's generated-note preview for the direct `main` commit returned only a
+  full-changelog comparison link. Release preparation therefore changed the
+  workflow to publish reviewed annotated-tag notes and added positive/negative
+  lint enforcement before any `v0.1.1` tag was created.
 
 ## Relevant structure
 
@@ -24,6 +28,8 @@
 - Package and Formula checks: `scripts/package-release.sh`,
   `scripts/render-formula.sh`, `scripts/audit-formula.sh`, and
   `scripts/lint-release.sh`
+- Release-note enforcement: `.github/workflows/release.yml`,
+  `scripts/lint-release-workflow.sh`, and `scripts/test-release-workflow.sh`
 
 ## Constraints
 
@@ -45,6 +51,8 @@
   non-symbolic targets with Unix `0700`/`0600` modes.
 - Included documentation: Homebrew 6 Formula-specific tap trust and actionable
   `command_selection_unsafe` inspection/repair guidance.
+- Included release correction: direct commits use reviewed annotated-tag notes
+  rather than incomplete generated notes derived from pull-request history.
 - Compatibility: normal directories and existing preference bytes are
   unchanged; affected dotfiles environments change from false unsafe failure
   to normal default/saved-state behavior.
@@ -66,9 +74,27 @@
 - [ ] Confirm immediately before tagging that the GitHub App installation is
   limited to `homebrew-tap` with Contents read/write and Pull requests
   read/write.
-- [ ] Preview generated release notes against the exact pushed commit.
+- [ ] Review the exact annotated-tag notes against the exact pushed commit.
 - [ ] Record the resulting Release URL, workflow run, Formula pull request,
   merge, and clean installation.
+
+## Reviewed release notes
+
+The exact `v0.1.1` annotated-tag message will be:
+
+```text
+cwk v0.1.1
+
+変更:
+- macOS/Linuxで、~/.configまたはXDG_CONFIG_HOMEがシンボリックリンクでも、実体が通常のディレクトリならコマンド選択設定を利用できるようにしました。
+- Homebrew 6のFormula単位tap trustと、command_selection_unsafeの確認・修復手順をREADMEへ追加しました。
+
+セキュリティ:
+- cwkディレクトリとcommand-selection.json自体のシンボリックリンク拒否、およびUnixの700/600権限要件は維持します。
+
+移行:
+- 既存の有効な設定ファイルに変更は不要です。
+```
 
 ## Reproduction or observation
 

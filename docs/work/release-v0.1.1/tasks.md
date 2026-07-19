@@ -7,6 +7,8 @@
 - [x] Confirm both required Actions secret names exist without reading values.
 - [x] Record included changes, compatibility, security impact, recovery, and
   non-goals.
+- [x] Reject the incomplete generated-note preview and enforce reviewed
+  annotated-tag notes with a negative workflow mutation test.
 - [x] Confirm the complete working-tree scope includes the configuration-home
   compatibility fix and the existing Homebrew 6 README change.
 - [ ] Confirm the App installation is limited to `homebrew-tap` with Contents
@@ -29,9 +31,10 @@
   public and contractlint passed on 2026-07-19.
 - [x] `git diff --check` passes and every changed path is understood. Evidence:
   the reviewed scope is the store fix, two test files, README installation
-  guidance, four governing documents, and the fix/release work packets.
+  guidance, governing documents, release-note workflow enforcement, and the
+  fix/release work packets.
 - [ ] The exact committed `main` revision passes GitHub CI. Evidence:
-- [ ] Generated release notes for the exact remote commit are reviewed.
+- [ ] Annotated-tag release notes for the exact remote commit are reviewed.
 
 ## Publish
 

@@ -9,10 +9,11 @@
 Commit the complete understood working tree directly to `main` as the patch
 source, including the maintainer's Homebrew 6 README refinement. Run every
 required profile on that state, push the commit, and wait for exact-commit
-GitHub CI. Preview generated notes, confirm the external Homebrew App maximum,
-then create and push one annotated `v0.1.1` tag. Monitor immutable Release
-publication, verify all assets, inspect the Formula-only tap pull request, and
-perform a clean install after merge.
+GitHub CI. Because a generated-note preview for the direct commit contained
+only a comparison link, enforce and review annotated-tag notes, confirm the
+external Homebrew App maximum, then create and push one annotated `v0.1.1`
+tag. Monitor immutable Release publication, verify all assets, inspect the
+Formula-only tap pull request, and perform a clean install after merge.
 
 ## Alternatives considered
 
@@ -47,7 +48,7 @@ security boundary, Homebrew installation guidance, and absence of migration.
 reviewed clean main commit
   -> local full/security/release/public profiles
   -> exact-commit GitHub main CI
-  -> generated-note preview + App maximum confirmation
+  -> annotated-tag note review + App maximum confirmation
   -> annotated v0.1.1 tag
   -> exact-revision archives + checksums + GitHub Release
   -> audited Formula-only shared-tap pull request
@@ -83,7 +84,7 @@ pre-tag condition.
   `task public:check`, and `git diff --check`.
 - Remote pre-tag: successful GitHub CI for the exact commit.
 - Release: five archives plus `checksums.txt`, checksum recomputation, exact tag
-  and commit metadata, and generated notes.
+  and commit metadata, and the reviewed tag notes.
 - Shared tap: one `Formula/cwk.rb` diff with reviewed branch/title/base.
 - Rollout: clean `brew install tasuku43/tap/cwk` after merge.
 
