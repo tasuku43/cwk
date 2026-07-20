@@ -202,6 +202,13 @@ owner assignment, or permission inference from the requested administrator
 list. The extra read uses the same fixed destination, timeout, response bounds,
 rate evidence, and cancellation context.
 
+A `messages list` invocation may also orchestrate zero through the declared
+number of exact same-room reply-parent reads. The application passes the same
+validated secret-free binding unchanged to every operation; infrastructure
+resolves and revalidates that binding immediately before each request. A later
+exact read never receives the PAT, client, or credential-bearing type from the
+application and never turns the binding into reusable authorization state.
+
 The binding is process-local correlation metadata. Do not persist it, cache it
 across sessions, render it, log it, accept it from a user, or use it as proof of
 possession.

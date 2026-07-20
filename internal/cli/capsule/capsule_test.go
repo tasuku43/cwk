@@ -113,6 +113,44 @@ func TestRenderPeriodSelectionExposesEffectiveHalfOpenBounds(t *testing.T) {
 	}
 }
 
+func TestRenderMessageRelationResolutionSeparatesSourceAndFetchedContext(t *testing.T) {
+	room := reference(chatwork.ReferenceRoom, "42")
+	account := reference(chatwork.ReferenceAccount, "7")
+	target := reference(chatwork.ReferenceMessage, "999")
+	child := chatwork.Message{
+		Ref: reference(chatwork.ReferenceMessage, "101"), Room: room,
+		Sender: chatwork.Account{Ref: account, Name: "Child"}, Body: "decision", SendTime: 200,
+		Reply: &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value, Resolved: true},
+	}
+	parent := chatwork.Message{
+		Ref: target, Room: room, Sender: chatwork.Account{Ref: account, Name: "Parent"}, Body: "context", SendTime: 100,
+	}
+	result := chatwork.Result{
+		Task: chatwork.TaskMessagesList, MessageRoom: room,
+		Coverage:            chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false},
+		Messages:            []chatwork.Message{child},
+		MessageReachability: &chatwork.MessageReachability{OldestMessage: child.Ref, OldestSendTime: child.SendTime},
+		MessageRelationResolution: &chatwork.MessageRelationResolution{
+			FetchLimit: 1, FetchAttempts: 1,
+			Targets: []chatwork.MessageRelationTarget{{Target: target, State: chatwork.MessageRelationResolvedByFetch, Message: &parent}},
+		},
+	}
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unresolved-relations=0 unknown-relation-sets=0 oldest-reachable-message-ref=101 oldest-reachable-send-time=200\n",
+		"relation-resolution fetch-limit=1 fetch-attempts=1 targets=1\n",
+		"#1 101 a1 200 reply=message-ref:999 \"decision\"\n",
+		"relation-context provenance=fetched message-ref=999 room-ref=42 sender-ref=7 sender-name=untrusted:\"Parent\" send-time=100 relations=none body=untrusted:\"context\"\n",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("relation-resolution output lacks %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 	result := chatwork.Result{
 		Task: chatwork.TaskMessagesList, MessageRoom: reference(chatwork.ReferenceRoom, "42"),

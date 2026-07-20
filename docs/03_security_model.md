@@ -113,6 +113,16 @@ Chatwork notation is untrusted provider data with a documented syntax, not execu
 
 The typed task result distinguishes explicit resolved, explicit unresolved, and absent relations before presentation. Every candidate must preserve that answer; a clearer or smaller display is not allowed to strengthen a relation.
 
+`messages list` may use a validated same-room reply target as the exact
+destination of an additional read. It never derives that destination from To,
+quote metadata, names, timestamps, prose, or rendered text. The public default
+permits five exact reads and `--resolve-relations` is constrained to 0..100.
+Breadth-first first-reference ordering, one visited set, and one attempt per
+unique target bound recursive chains and cycles. Every exact result must match
+the requested room and message. Not-found and exact-message restriction may be
+retained as typed target evidence; cancellation, rate limits, unavailability,
+malformed results, and other permission faults fail without partial success.
+
 ## Controlled execution boundary
 
 All filesystem writes, subprocess execution, credential access, network calls, and platform services must have a bounded construction path. A command or use case must not receive an unrestricted client merely because it is convenient.
@@ -319,6 +329,14 @@ injected clock observation rather than ambient host-local time. Invalid,
 conflicting, or reversed periods fail before authentication/I/O. Infrastructure
 rejects leaked period fields, and selection retains the original source bound
 so a smaller output cannot claim older-history or provider-filter completeness.
+
+The relation-fetch budget is application policy, not a provider list query or
+pagination control. It is removed before infrastructure calls. One invocation
+performs exactly one list request plus at most the declared number of exact
+message reads, all through the same admitted authentication binding, fixed
+Chatwork destination policy, caller context, timeout, response bounds, and
+one-attempt operation contract. Source reuse consumes no fetch slot; the result
+reports both the configured limit and actual attempts.
 
 Rate-limit headers and error envelopes are untrusted external data. Chatwork
 reset timing is accepted only as one bounded strict-decimal

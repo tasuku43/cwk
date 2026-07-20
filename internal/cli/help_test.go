@@ -591,20 +591,23 @@ func TestMessageListHumanHelpPublishesBoundedSelection(t *testing.T) {
 		t.Fatalf("Run(messages list --help) code = %d, stderr = %q", code, stderr.String())
 	}
 	for _, want := range []string{
-		"--room         必須 flag, reference=chatwork-room",
-		"--window       任意 flag, values=recent|changes",
+		"--room               必須 flag, reference=chatwork-room",
+		"--window             任意 flag, values=recent|changes",
 		"最新の上限付き範囲（recent、既定値）",
 		"プロバイダーの差分範囲（changes）",
-		"--start-index  任意 flag",
+		"--start-index        任意 flag",
 		"1始まりの順位（1〜100）",
-		"--count        任意 flag",
+		"--count              任意 flag",
 		"終了順位ではありません",
 		"--start-index 11 --count 20 は順位11〜30を選びます",
 		"直接の返信コンテキストにより、表示件数はこの値を超えることがあります",
-		"--sender       任意・繰り返し可 flag, reference=chatwork-account",
+		"--sender             任意・繰り返し可 flag, reference=chatwork-account",
 		"列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件",
-		"--context      任意 flag, values=none|replies",
+		"--context            任意 flag, values=none|replies",
 		"上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）",
+		"--resolve-relations  任意 flag",
+		"正規 message_ref による追加の一件取得で再帰的に補う最大件数（0〜100）",
+		"既定値は5、0は追加取得を無効化します",
 		"機械可読契約には 'cwk help messages list --format agent' を実行してください。",
 	} {
 		if !strings.Contains(stdout.String(), want) {

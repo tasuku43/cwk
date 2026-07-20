@@ -82,6 +82,10 @@ func TestMessagePeriodFilterAndSelectionBindExactAnchors(t *testing.T) {
 			SourceSequences: []int{1, 2},
 			AnchorSequences: []int{2},
 		},
+		MessageReachability: &MessageReachability{
+			OldestMessage: parent.Ref, OldestSendTime: parent.SendTime,
+			PeriodReachability: MessagePeriodWithinReachableWindow,
+		},
 	}
 	if err := result.ValidateFor(request); err != nil {
 		t.Fatalf("out-of-period direct context was rejected: %v", err)

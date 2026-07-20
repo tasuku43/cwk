@@ -93,6 +93,10 @@ An agent that knows the user's desired outcome should reach the exact command co
 - The documented `messages list` default is the latest bounded `recent`
   window, matching the common conversation-understanding task. Provider-stateful
   differential retrieval is an explicit `--window changes` choice.
+- The shortest `messages list` also owns five declared exact-message fetch slots
+  for explicit same-room reply parents missing from that bounded source.
+  `--resolve-relations 0` is the opt-out and 1..100 is a deliberate alternate
+  call budget; every result reports the limit, attempts, and target outcomes.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
 
 ### Enforcement
@@ -131,6 +135,13 @@ Chatwork data is converted into a typed, provider-independent task result before
   selectively stronger subset.
 - To does not become a reply; quoted prose, display names, and time proximity do not create relationships.
 - Missing or out-of-bound context remains observable rather than being hidden to make an output look complete.
+- A known same-room reply reference may be completed by a bounded exact read;
+  fetched context remains separate from source-window membership, and a
+  not-found, restricted, or unspent target remains typed rather than silently
+  disappearing. No To, quote, name, time, or prose creates a fetch target.
+- A trustworthy recent source identifies its oldest reachable message. A
+  requested period wholly or partly before that boundary is reported as
+  unreachable rather than being presented as an ordinary empty match.
 - Recurring bounded selection is expressed through finite typed task inputs and
   applied to the typed result. It is not delegated to output parsing or pushed
   into undocumented provider query parameters.
@@ -175,6 +186,11 @@ The message header separately exposes `access-limitation=none|partial|all` and
 the count of unknown relation sets. Only an affected record adds the optional
 `relation-state=unknown`; omitting it means the reviewed relation set was
 complete, not that external text contained no relation-like notation.
+Supplemental reply parents use distinct `relation-context` records with
+`source` or `fetched` provenance; unavailable or budget-exhausted parents use
+`relation-gap`. Neither form receives a provider source sequence. The separate
+`relation-resolution` record exposes the configured exact-read limit and the
+actual number of additional provider calls.
 
 When `messages list` selects exact senders, repeated sender inputs use OR
 semantics. The optional `replies` context is a bounded, direct one-hop expansion
@@ -211,6 +227,24 @@ separate from the provider's 100-message `source-limit`. A source that exceeds i
 declared coverage fails before selection can hide the violation. Because this
 is a stateless rank over separate provider snapshots, intervening source changes
 may shift later ranks; the command does not claim snapshot stability.
+
+After selection and in-window reply context, `messages list` resolves unique
+explicit same-room reply-parent chains referenced by displayed records. A parent
+already present in the original source is attached as supplemental context
+without spending a slot. Otherwise each target consumes at most one exact-read
+slot, in breadth-first first-reference order, and the default public budget is
+five. A supplemental message's explicit same-room parent joins the queue; a
+visited set stops duplicates and cycles. Not-found and restricted are per-target results; transient,
+rate, cancellation, malformed, and unclassified permission faults abort the
+whole command instead of returning partial success. This closure does not
+discover arbitrary history and does not follow cross-room references.
+
+For a nonempty, unrestricted `recent` source with valid typed send times, the
+oldest reachable boundary is the minimum source send time with provider order
+breaking ties. Period selection classifies its bounds as within, partly before,
+or wholly before that boundary. Differential, empty, access-limited, or
+otherwise unprovable sources report `unknown`; the boundary is reachability of
+this operation, never proof of complete room history.
 
 The same fixed-schema rule applies to the reviewed homogeneous read
 collections for contacts, rooms, members, personal tasks, room tasks, files,

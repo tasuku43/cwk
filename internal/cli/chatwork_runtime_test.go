@@ -47,14 +47,16 @@ func (a *chatworkRuntimeAuthenticator) Authenticate(_ context.Context, requireme
 }
 
 type chatworkRuntimePort struct {
-	calls   int
-	request chatwork.Request
-	result  func(chatwork.Request) (chatwork.Result, error)
+	calls    int
+	request  chatwork.Request
+	requests []chatwork.Request
+	result   func(chatwork.Request) (chatwork.Result, error)
 }
 
 func (p *chatworkRuntimePort) Execute(_ context.Context, _ domainauthn.BindingID, request chatwork.Request) (chatwork.Result, error) {
 	p.calls++
 	p.request = request
+	p.requests = append(p.requests, request)
 	if p.result != nil {
 		return p.result(request)
 	}
@@ -308,6 +310,125 @@ func TestBuildMessagePeriodResolvesYesterdayWithFixedTokyoClock(t *testing.T) {
 	}
 	if calls != 1 || period.Day != "2026-07-17" || period.TimeZone != chatwork.MessageDayTimeZone {
 		t.Fatalf("calls=%d period=%+v", calls, period)
+	}
+}
+
+func TestRunChatworkDefaultsFiveRelationFetchesAndSupportsExplicitZero(t *testing.T) {
+	for _, test := range []struct {
+		name      string
+		args      []string
+		wantCalls int
+		resolved  bool
+	}{
+		{name: "default five", args: []string{"--room", "7"}, wantCalls: 2, resolved: true},
+		{name: "explicit zero", args: []string{"--room", "7", "--resolve-relations", "0"}, wantCalls: 1, resolved: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := chatworkRuntimeSpec(t, "messages list")
+			room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+			account := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1"), Name: "Aki"}
+			target := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "99")
+			child := chatwork.Message{
+				Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10"), Room: room,
+				Sender: account, Body: "child", SendTime: 200,
+				Reply: &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value},
+			}
+			parent := chatwork.Message{Ref: target, Room: room, Sender: account, Body: "parent", SendTime: 100}
+			port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+				switch request.Task {
+				case chatwork.TaskMessagesList:
+					if request.MessageRelationFetchLimit != 0 {
+						t.Fatalf("local relation budget leaked to list request: %+v", request)
+					}
+					return chatwork.Result{
+						Task: request.Task, MessageRoom: request.Room,
+						Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+						Messages: []chatwork.Message{child},
+					}, nil
+				case chatwork.TaskMessagesShow:
+					if request.Room != room || request.Message != target {
+						t.Fatalf("exact relation request = %+v", request)
+					}
+					return chatwork.Result{
+						Task: request.Task, Coverage: chatwork.Coverage{Kind: "single_operation", Complete: true},
+						Messages: []chatwork.Message{parent},
+					}, nil
+				default:
+					t.Fatalf("unexpected task %s", request.Task)
+					return chatwork.Result{}, nil
+				}
+			}}
+			cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+			code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), test.args)
+			if code != ExitOK {
+				t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+			}
+			if authenticator.calls != 1 || port.calls != test.wantCalls {
+				t.Fatalf("calls = auth %d provider %d", authenticator.calls, port.calls)
+			}
+			if test.resolved {
+				for _, want := range []string{
+					"relation-resolution fetch-limit=5 fetch-attempts=1 targets=1",
+					"reply=message-ref:99",
+					"relation-context provenance=fetched message-ref=99",
+				} {
+					if !strings.Contains(stdout.String(), want) {
+						t.Errorf("default relation output lacks %q:\n%s", want, stdout.String())
+					}
+				}
+			} else if !strings.Contains(stdout.String(), "unresolved-relations=1") || strings.Contains(stdout.String(), "relation-resolution ") {
+				t.Fatalf("explicit zero did not preserve unresolved no-fetch output:\n%s", stdout.String())
+			}
+		})
+	}
+}
+
+func TestRunChatworkReportsPeriodOutsideReachableRecentWindow(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	account := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1"), Name: "Aki"}
+	oldest := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC).Unix()
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: request.Room,
+			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{{
+				Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10"), Room: room,
+				Sender: account, Body: "reachable", SendTime: oldest,
+			}},
+		}, nil
+	}}
+	cli, _, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--on", "2026-07-08"})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	for _, want := range []string{
+		"count=0 window=recent",
+		"oldest-reachable-message-ref=10 oldest-reachable-send-time=" + strconv.FormatInt(oldest, 10),
+		"period-reachability=out-of-reachable-window",
+		"selection source-count=1",
+		"candidate-count=0",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("unreachable-period output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if port.calls != 1 {
+		t.Fatalf("provider calls = %d, want one list call", port.calls)
+	}
+}
+
+func TestBuildChatworkRequestRejectsRelationFetchBudgetOutsideZeroToHundred(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	for _, value := range []string{"-1", "101", "not-a-number"} {
+		parsed, err := parseChatworkArguments(spec, []string{"--room", "7", "--resolve-relations", value})
+		if err != nil {
+			continue
+		}
+		if _, err := buildChatworkRequest(spec, parsed, nil); err == nil {
+			t.Fatalf("invalid relation budget %q passed", value)
+		}
 	}
 }
 

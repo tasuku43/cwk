@@ -121,6 +121,24 @@ reply neighbor may lie outside that period. A fixed-clock variant proves
 provider task call and zero external post-processing; semantic answer quality
 must match the full source before token reduction is credited.
 
+The active message-relation-closure probe reproduces T1 with a latest-100
+source whose visible Aurora follow-up points to one out-of-window parent, which
+points to a second out-of-window parent containing the owner and deadline. The
+agent invokes the shortest `messages list` once. Its default-five budget drives
+two internal exact reads in breadth-first chain order, and the output reports
+limit five, attempts two, both canonical targets, and fetched provenance. The
+budget is three provider requests inside one task invocation and zero external
+post-processing or explicit `messages show` commands. The answer must not claim
+arbitrary history, To/quote/body expansion, or an unbounded thread.
+
+The active message-period-reachability probe reproduces T2 by requesting Tokyo
+day 2026-07-08 from a trustworthy latest-100 source whose oldest item is on
+2026-07-17. One list invocation must return zero candidates together with
+`out-of-reachable-window` and the exact oldest boundary. The agent must stop
+without probing adjacent dates, treating the day as truly empty, or issuing an
+exact-message read. The budget is one provider request and zero external
+post-processing.
+
 For a future replacement, before experimental implementation the competition work packet pins:
 
 - fixture corpus and exact semantic answer keys;
@@ -318,7 +336,7 @@ go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailin
 go test ./internal/infra/terminalui
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
-go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex|MessagePeriod)'
+go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex|MessagePeriod|MessageRelationClosure|MessageReachability)'
 ```
 
 These prove the bounded human root-to-namespace-to-command navigation, the
@@ -340,6 +358,12 @@ The active message-period scenario proves sender-and-period composition,
 fixed-clock Tokyo day resolution, concrete effective bounds, unchanged source
 coverage/provider calls, context outside the primary period only through typed
 reply edges, semantic-answer retention, and zero external post-processing.
+The active relation-closure scenario proves the default-five public contract,
+recursive same-room parent discovery, two bounded internal exact reads,
+canonical supplemental context, and no external command or parser. The active
+reachability scenario proves that a wholly older requested day is reported as
+unreachable after one list call rather than as empty or as a prompt for date
+probing.
 
 ## Review record
 

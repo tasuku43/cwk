@@ -108,7 +108,8 @@ cwk help messages list --format agent
 たとえば、メッセージ一覧は次のように表示されます。
 
 ```text
-messages room-ref=4101 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0
+messages room-ref=4101 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0 oldest-reachable-message-ref=9001 oldest-reachable-send-time=1700000000
+relation-resolution fetch-limit=5 fetch-attempts=0 targets=0
 external-text=untrusted escaped
 schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"
 actors
@@ -130,11 +131,17 @@ cwk messages list --room 4101 --since 2026-07-17T12:00:00+09:00 --until 2026-07-
 cwk messages list --room 4101 --count 10
 cwk messages list --room 4101 --start-index 11 --count 20
 cwk messages list --room 4101 --sender 7001 --context replies
+cwk messages list --room 4101 --resolve-relations 3
+cwk messages list --room 4101 --resolve-relations 0
 ```
 
 `--on` は `Asia/Tokyo` の一暦日です。`today` と `yesterday` はコマンド開始時に一度だけ具体的な日付へ変換され、出力に有効な `since`、`until`、`on`、`time-zone` が表示されます。`--since` は指定時刻を含み、`--until` は含みません。両者は秒精度で明示的なオフセットを持つRFC3339時刻です。`--on` と同時には指定できません。
 
 順位の例は新しい順の11〜30を選びます。期間、送信者、順位はいずれも、Chatworkから上限100件の範囲を1回取得した後にローカルで適用します。出力とモデル入力は減りますが、通信量は減らず、100件より古い履歴へ遡る機能にもなりません。別々の実行の間にメッセージが増減すると順位は移動し得ます。
+
+既定では、表示対象に同一ルームの明示的な返信元があり、その返信元が取得範囲外なら、正規のメッセージ参照を使って最大5件まで追加取得します。補足したメッセージがさらに同一ルームの返信元を参照すれば、残り枠で再帰的にたどります。`--resolve-relations 3` は追加取得枠を3件にし、`--resolve-relations 0` は無効化します。同じ返信元は1枠だけを使い、元の取得範囲に存在する返信元は追加通信なしで補足し、循環は既訪問として止めます。出力の `relation-resolution` と `relation-context` / `relation-gap` が、上限、実試行数、取得元、取得不能、枠切れを区別します。引用、To、本文、別ルーム、または参照のない任意の古い履歴は探索しません。
+
+最新範囲が非空で閲覧制限もない場合、`oldest-reachable-message-ref` と時刻が、一覧で到達できた最古の境界を示します。期間指定時の `period-reachability` は、その期間が境界内、一部境界外、全体が境界外、または判定不能かを区別します。境界外は「その日に発言がない」ではなく「この一覧取得では届かない」という意味です。
 
 出力の `room-ref`、`message-ref`、`account-ref` は、次のコマンドへそのまま渡せます。表示名から対象を探し直す必要はありません。
 
@@ -147,9 +154,9 @@ cwk messages list --room 4101 --sender 7001 --context replies
 - 部分日や複数日にまたがる時刻範囲を確認する: 包含下限 `--since <RFC3339>`、排他上限 `--until <RFC3339>` の一方または両方を使います。各時刻には `Z` または数値オフセットが必要です。
 - 直近の小さい範囲から確認する: `cwk messages list --room <room-ref> --count <count>`。件数は調査に必要な文脈量に合わせ、続きは出力の `next-start-index` を次の `--start-index` に使います。同じ送信者条件を保ち、別実行の間にメッセージが増減すると順位が動き得ることに注意します。
 - 特定人物が送ったメッセージを確認する: `cwk messages list --room <room-ref> --sender <account-ref>`。対象はその人物が送信した、取得範囲内のメッセージです。全履歴や、その人物宛てのメッセージを意味しません。
-- 絞り込んだ結果の直接の返信経緯を補う: 期間、`--sender`、`--start-index`、または `--count` とともに `--context replies` を指定します。取得範囲内の明示的な返信元・返信先を1ホップだけ追加します。返信コンテキストは主要期間外を含む場合がありますが、出力の `anchors` で主要メッセージと区別できます。スレッド全体や窓外のメッセージは取得しません。
+- 絞り込んだ結果の返信経緯を補う: 期間、`--sender`、`--start-index`、または `--count` とともに `--context replies` を指定すると、取得範囲内の明示的な返信元・返信先を1ホップ追加します。その後、既定の追加取得枠5件が、表示対象と補足メッセージから再帰的に参照された同一ルームの窓外返信元を補います。必要なら `--resolve-relations <0..100>` で枠を変更します。補足は主要期間や件数を超える場合がありますが、元の取得範囲と追加取得は別の来歴で表示されます。
 - プロバイダーの差分範囲が必要と分かっている再調査: `--window changes` を明示します。通常の状況把握は、既定の最新範囲 `recent` を使います。
-- 別ルームまたは現在の窓外へ関係が続く: 出力にある正規のルーム参照とメッセージ参照を使い、対象ルームで別途 `messages list` または `messages show` を実行します。1ルームの上限付き窓だけで窓外の関係を解決したとは扱いません。
+- 別ルームへ関係が続く、または窓外返信元が枠切れ・取得不能になる: 出力にある正規のルーム参照とメッセージ参照を使い、対象を別途 `messages show` で確認します。自動補足は同一ルームの明示的な返信元だけであり、1ルームの上限付き窓から任意の古い履歴を解決したとは扱いません。
 - 正規のメッセージ参照が分かっている1件を深掘りする: `cwk messages show --room <room-ref> --message <message-ref>`。範囲探索のための `list` を繰り返しません。
 
 ## 設計原則

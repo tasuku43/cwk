@@ -45,7 +45,51 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 	}
 	providerRequest := request
 	providerRequest.MessageFilter = chatwork.MessageFilter{}
-	result, err := s.port.Execute(ctx, binding, providerRequest)
+	providerRequest.MessageRelationFetchLimit = 0
+	result, err := s.executeProvider(ctx, binding, providerRequest)
+	if err != nil {
+		return chatwork.Result{}, err
+	}
+	switch request.Task {
+	case chatwork.TaskMessagesList:
+		source, sourceErr := ResolveMessageRelations(result.Messages)
+		if sourceErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, sourceErr)
+		}
+		reachability, reachabilityErr := chatwork.DeriveMessageReachability(result.Coverage, result.MessageAccess, source, request.MessageFilter.Period)
+		if reachabilityErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, reachabilityErr)
+		}
+		messages, selection, selectionErr := assembleMessageWindow(result.Messages, request.MessageFilter)
+		if selectionErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, selectionErr)
+		}
+		result.Messages = messages
+		result.MessageSelection = selection
+		result.MessageReachability = &reachability
+		if request.MessageRelationFetchLimit > 0 {
+			resolved, resolution, resolutionErr := s.resolveMessageRelations(ctx, binding, request.Room, source, result.Messages, request.MessageRelationFetchLimit)
+			if resolutionErr != nil {
+				return chatwork.Result{}, resolutionErr
+			}
+			result.Messages = resolved
+			result.MessageRelationResolution = resolution
+		}
+	case chatwork.TaskMessagesShow:
+		messages, resolutionErr := ResolveMessageRelations(result.Messages)
+		if resolutionErr != nil {
+			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, resolutionErr)
+		}
+		result.Messages = messages
+	}
+	if err := result.ValidateFor(request); err != nil {
+		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
+	}
+	return result, nil
+}
+
+func (s *Service) executeProvider(ctx context.Context, binding authn.BindingID, request chatwork.Request) (chatwork.Result, error) {
+	result, err := s.port.Execute(ctx, binding, request)
 	if err != nil {
 		if structured, ok := fault.PublicCopy(err); ok {
 			return chatwork.Result{}, structured
@@ -58,26 +102,8 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 	if err := ctx.Err(); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行後に Chatwork タスクがキャンセルされました", true, err)
 	}
-	if result.Task != providerRequest.Task {
+	if result.Task != request.Task {
 		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_result_mismatch", "Chatwork タスクアダプターが別のタスクの結果を返しました", false)
-	}
-	if err := result.ValidateFor(providerRequest); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
-	}
-	switch request.Task {
-	case chatwork.TaskMessagesList:
-		messages, selection, selectionErr := assembleMessageWindow(result.Messages, request.MessageFilter)
-		if selectionErr != nil {
-			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, selectionErr)
-		}
-		result.Messages = messages
-		result.MessageSelection = selection
-	case chatwork.TaskMessagesShow:
-		messages, resolutionErr := ResolveMessageRelations(result.Messages)
-		if resolutionErr != nil {
-			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, resolutionErr)
-		}
-		result.Messages = messages
 	}
 	if err := result.ValidateFor(request); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)

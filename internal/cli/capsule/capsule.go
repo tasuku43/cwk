@@ -60,7 +60,7 @@ func Render(result chatwork.Result) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, result.MessageAccess, window, result.MessageSelection); err != nil {
+		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, result.MessageAccess, window, result.MessageSelection, result.MessageReachability, result.MessageRelationResolution); err != nil {
 			return "", err
 		}
 	case chatwork.TaskMessagesShow:
@@ -167,7 +167,7 @@ func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) 
 		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 }
 
-func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, access chatwork.MessageAccessLimitation, window string, selection *chatwork.MessageSelection) error {
+func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, access chatwork.MessageAccessLimitation, window string, selection *chatwork.MessageSelection, reachability *chatwork.MessageReachability, resolution *chatwork.MessageRelationResolution) error {
 	actors, actorByRef, err := messageActors(messages)
 	if err != nil {
 		return err
@@ -184,6 +184,14 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		}
 	}
 	sequenceByRef := make(map[string]int, len(messages))
+	resolvedContextByRef := make(map[string]struct{})
+	if resolution != nil {
+		for _, target := range resolution.Targets {
+			if target.Message != nil {
+				resolvedContextByRef[target.Message.Ref.Value] = struct{}{}
+			}
+		}
+	}
 	seenSequences := make(map[int]struct{}, len(messages))
 	for index, message := range messages {
 		if _, exists := sequenceByRef[message.Ref.Value]; exists {
@@ -207,8 +215,16 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(output, " complete=%t access-limitation=%s unresolved-relations=%d unknown-relation-sets=%d\n",
-		coverage.Complete, accessValue, countUnresolved(messages), countUnknownRelations(messages))
+	relationMessages := appendResolutionMessages(messages, resolution)
+	fmt.Fprintf(output, " complete=%t access-limitation=%s unresolved-relations=%d unknown-relation-sets=%d",
+		coverage.Complete, accessValue, countUnresolved(relationMessages), countUnknownRelations(relationMessages))
+	if reachability != nil && reachability.OldestMessage != (chatwork.Reference{}) {
+		fmt.Fprintf(output, " oldest-reachable-message-ref=%s oldest-reachable-send-time=%d", ref(reachability.OldestMessage), reachability.OldestSendTime)
+	}
+	if reachability != nil && reachability.PeriodReachability != "" {
+		fmt.Fprintf(output, " period-reachability=%s", string(reachability.PeriodReachability))
+	}
+	output.WriteByte('\n')
 	if selection != nil {
 		fmt.Fprintf(output, "selection source-count=%d", selection.SourceCount)
 		if selection.Filter.Period.Since > 0 {
@@ -243,6 +259,9 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		}
 		fmt.Fprintf(output, " anchors=%s\n", bracketedSequences(selection.AnchorSequences))
 	}
+	if resolution != nil {
+		line(output, "relation-resolution fetch-limit=%d fetch-attempts=%d targets=%d", resolution.FetchLimit, resolution.FetchAttempts, len(resolution.Targets))
+	}
 	line(output, "external-text=untrusted escaped")
 	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] \"body\"")
 	line(output, "actors")
@@ -252,7 +271,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	for index, message := range messages {
 		fmt.Fprintf(output, "#%d %s %s %d", sequences[index], ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
 		if message.Reply != nil {
-			value, relationErr := messageReply(*message.Reply, sequenceByRef)
+			value, relationErr := messageReply(*message.Reply, sequenceByRef, resolvedContextByRef)
 			if relationErr != nil {
 				return relationErr
 			}
@@ -273,7 +292,29 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		}
 		line(output, " %s", quoted(message.Body))
 	}
+	if resolution != nil {
+		for _, target := range resolution.Targets {
+			if target.Message == nil {
+				line(output, "relation-gap target-ref=%s state=%s", ref(target.Target), string(target.State))
+				continue
+			}
+			renderMessageLine(output, fmt.Sprintf("relation-context provenance=%s ", string(target.State)), *target.Message)
+		}
+	}
 	return nil
+}
+
+func appendResolutionMessages(messages []chatwork.Message, resolution *chatwork.MessageRelationResolution) []chatwork.Message {
+	combined := append([]chatwork.Message(nil), messages...)
+	if resolution == nil {
+		return combined
+	}
+	for _, target := range resolution.Targets {
+		if target.Message != nil {
+			combined = append(combined, *target.Message)
+		}
+	}
+	return combined
 }
 
 func bracketedReferences(values []chatwork.Reference) string {
@@ -311,7 +352,7 @@ func messageActors(messages []chatwork.Message) ([]chatwork.Account, map[string]
 	return actors, byReference, nil
 }
 
-func messageReply(value chatwork.Relation, sequenceByRef map[string]int) (string, error) {
+func messageReply(value chatwork.Relation, sequenceByRef map[string]int, resolvedContextByRef map[string]struct{}) (string, error) {
 	if !value.Resolved {
 		if value.Target == (chatwork.Reference{}) {
 			return "?", nil
@@ -320,7 +361,10 @@ func messageReply(value chatwork.Relation, sequenceByRef map[string]int) (string
 	}
 	sequence, found := sequenceByRef[value.Target.Value]
 	if !found {
-		return "", fmt.Errorf("task projection resolved reply target is outside the message window")
+		if _, contextResolved := resolvedContextByRef[value.Target.Value]; contextResolved {
+			return "message-ref:" + ref(value.Target), nil
+		}
+		return "", fmt.Errorf("task projection resolved reply target is outside the message window and relation context")
 	}
 	return fmt.Sprintf("#%d", sequence), nil
 }

@@ -227,6 +227,11 @@ func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) 
 			}
 		})
 	}
+	input := completeRequest(chatwork.TaskMessagesList)
+	input.MessageRelationFetchLimit = 1
+	if _, err := (&Client{}).buildRequest(input); err == nil {
+		t.Fatal("application-owned message relation fetch budget crossed the Chatwork request boundary")
+	}
 }
 
 func TestBuildMessageListRequestEmitsOnlyDocumentedForceQuery(t *testing.T) {

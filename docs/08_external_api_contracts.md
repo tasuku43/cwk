@@ -162,8 +162,9 @@ Primary sources: Chatwork's
 and [notation guide](https://developer.chatwork.com/docs/message-notation).
 
 `messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
-`--count`, and `--context` are application-owned selection inputs over that
-single bounded message response.
+`--count`, and `--context` are application-owned selection inputs over the
+single bounded message-list response. `--resolve-relations` is a separate
+application-owned exact-read budget over canonical reply targets.
 Start index and count accept 1 through 100; count alone defaults start index to
 1. Since is inclusive and until exclusive; both are whole-second RFC3339 with
 explicit offsets. `--on` is their mutually exclusive fixed-`Asia/Tokyo`
@@ -174,12 +175,11 @@ newest-first candidate rank, with later provider position breaking equal-time
 ties; the one-based start index and requested maximum count select primary
 anchors; direct typed reply context runs last and may increase displayed count
 beyond the requested count. Membership selection does not reorder the
-provider records or their original sequences. These inputs never become
-Chatwork query parameters, trigger a second request, reduce provider response
-bytes, retrieve older history, or fetch a referenced
-message outside the returned window. Adapter request construction rejects them
-if they cross the application port boundary, and the one provider request
-continues to use only the documented `force` query. There is no provider cursor,
+provider records or their original sequences. Selection inputs never become
+Chatwork query parameters, reduce provider response bytes, or retrieve older
+history. Adapter request construction rejects them if they cross the
+application port boundary, and the one list request continues to use only the
+documented `force` query. There is no provider cursor,
 offset, count, or pagination. The provider's 100-message ceiling is exposed
 separately as `source-limit`; candidate count, applied start index, requested
 count, actual items per page, optional next start index, and anchors belong to
@@ -188,6 +188,19 @@ pagination, but separate calls remain stateless over separate Chatwork results
 and source mutations can shift ranks. Invalid ranks, ambiguous dates,
 offset-free/fractional timestamps, conflicting selectors, and empty or reversed
 periods fail before authentication or provider I/O.
+
+The relation budget accepts 0..100, defaults to five at the public CLI, and is
+also removed before infrastructure. Application walks explicit same-room reply
+parents breadth-first in first-reference order. A parent already present in the
+original list response is supplemental source context and costs no request; an
+absent unique parent permits one exact `GET /rooms/{room_id}/messages/{message_id}`.
+A fetched/source context parent may enqueue its own explicit same-room parent,
+while duplicate and cyclic IDs are visited once. Thus one public list task makes
+exactly one list request plus at most N exact-message requests, each with the
+pinned one-attempt and 20-second read policy. It never searches, follows To or
+quote metadata, crosses rooms, or pages arbitrary history. Exact results are
+bound to the requested room/message. Not-found and restricted become typed
+target outcomes; other failures abort the entire task without partial success.
 
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 

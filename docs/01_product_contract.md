@@ -196,7 +196,7 @@ The current default is the headerless task projection, a further reviewed subtra
 - task-relevant bounds, completeness, and uncertainty;
 - structural trust framing for every external-text field.
 
-It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes` and names the provider ceiling `source-limit`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender, period, or index selection, every provider-returned message is selected. An active selection additionally emits one record before the trust declaration; it preserves the source-window count, exact sender and effective period filters when present, candidate count, one-based start index, requested count, actual items per page, optional next start index, context policy, and primary anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. A record with an unproved relation set emits `relation-state=unknown` and omits relationship facts instead of claiming `relations=none`. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
+It does not publish a global version/task preamble, a standalone provider-oriented coverage record, raw Chatwork notation as semantic structure, undeclared provider/wire fields, duplicated coverage prose, empty optional shells, or helpful non-contract defaults. Collection bounds and completeness sit on the collection record; a message window uses the task vocabulary `recent` or `changes` and names the provider ceiling `source-limit`. `messages list` emits its room, trust classification, and the fixed schema `#sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"` once, then an actor dictionary and one physical record per selected typed message in original provider order. Without a sender, period, or index selection, every provider-returned message is selected. An active selection additionally emits one record before the trust declaration; it preserves the source-window count, exact sender and effective period filters when present, candidate count, one-based start index, requested count, actual items per page, optional next start index, context policy, and primary anchors without adding state to every message. The sequence, canonical message reference, actor, send time, and quoted body are positional; optional typed edges remain labeled. A record with an unproved relation set emits `relation-state=unknown` and omits relationship facts instead of claiming `relations=none`. `#N` is the one-based original provider sequence and may contain gaps after selection; `reply=#N` is a local edge, not command identity. To and reply remain separate, unresolved targets retain an available canonical reference, and depth/thread/root/children/resolved-default records are absent. Bounded reply closure is projected separately: `relation-resolution` states the fetch limit and attempts, `relation-context` identifies source or fetched provenance without a source sequence, and `relation-gap` distinguishes not-found, restricted, and budget-exhausted targets. A declared raw message body remains visible as untrusted external text; presentation does not reinterpret it as a reply, recipient, quote, instruction, or other semantic fact.
 
 Seven homogeneous read collections also declare `external-text=untrusted
 escaped` and one fixed schema before their provider-order records:
@@ -252,7 +252,9 @@ through 100; `--start-index` defaults to 1 when `--count` is supplied; and
 timestamps with explicit offsets and may be supplied independently or together.
 `--on <YYYY-MM-DD|today|yesterday>` is mutually exclusive with those bounds,
 uses the fixed `Asia/Tokyo` calendar, and resolves a command-injected clock once
-to one concrete half-open day. Sender OR and period membership form the primary
+to one concrete half-open day. Optional `--resolve-relations <count>` accepts
+0 through 100, defaults to five, and uses zero as the explicit opt-out. Sender
+OR and period membership form the primary
 candidate predicate.
 Typed `send_time` ranks candidates newest first, with later provider position
 winning equal-time ties. The one-based start index chooses the first rank and
@@ -261,9 +263,21 @@ means ranks 11 through 30 rather than ranks 11 through 20. `replies` runs last a
 only direct parents and children connected to the selected anchors by typed
 reply edges inside the one provider-returned window. Context may increase the
 displayed count beyond the requested count and may add a direct neighbor outside
-the requested primary period; it does not traverse transitively, expand To or quote
-relations, parse raw body notation, fetch missing parents, or perform another
-provider call.
+the requested primary period; it does not traverse transitively, expand To or
+quote relations, or parse raw body notation.
+
+After selection, unique explicit same-room reply parents referenced by the
+displayed result are considered in breadth-first first-reference/provider order. A parent in
+the original source is attached as supplemental context without consuming a
+fetch slot. An absent parent consumes at most one exact-message request; the
+default public invocation therefore performs at most one list call plus five
+exact reads, and an explicit value N permits at most one list call plus N exact
+reads. A supplemental message's explicit same-room reply parent joins the same
+queue. Duplicate and cyclic targets are visited once. A fetched parent is context rather than a
+source message, candidate, ranked item, anchor, or proof of older-history
+coverage. Exact not-found and restricted outcomes remain per-target gaps;
+rate-limit, unavailable, cancellation, malformed, and other permission faults
+fail the command without partial success.
 
 Selection retains the provider window's original one-based sequence and
 physical order, so displayed `#N` values may have gaps even though timestamps
@@ -280,7 +294,7 @@ by or directed exclusively between them. Exact canonical account and message
 references remain the only command identities.
 
 The Chatwork endpoint documents only its `force` window query. Index selection
-is application-owned, makes one provider call, and reduces rendered/token cost
+is application-owned and reduces rendered/token cost
 when it actually removes primary records; it never reduces provider response
 bytes. Its vocabulary and one-based/count semantics derive from SCIM index
 pagination, but it supplies no provider cursor or offset and is not a SCIM or
@@ -290,6 +304,14 @@ negative, above-100, ambiguous date, offset-free timestamp, fractional-second,
 empty/reversed interval, or conflicting day/bound values fail before
 authentication or provider I/O. Period selection changes rendered/model input
 only; it does not reduce provider response bytes or retrieve older history.
+
+For a nonempty `recent` source with no access limitation and valid typed send
+times, the result publishes the minimum-time source message as the oldest
+reachable boundary. A requested period is typed as within that boundary,
+partly before it, wholly before it, or unknown. `changes`, empty, limited, and
+unprovable sources use unknown. A wholly older period is not reported as an
+ordinary empty day, and the boundary never claims complete room history or
+provider pagination.
 
 The governing rule is not “never use a query language”; it is “do not shift a recurring supported task back to the agent.” A generic expression facility must earn its place through the same outcome, discovery, safety, and evaluation evidence as any other public capability.
 
@@ -472,6 +494,14 @@ change for `messages list` invocations that omit `--window`. Omission now sends
 the documented `force=1` query and reports `window=recent`; callers that require
 provider differential semantics must pass exact `--window changes`. Both
 explicit values keep their prior meaning, and no persisted migration is needed.
+
+The bounded relation-closure decision is an intentional pre-1.0 behavioral and
+text-contract change for `messages list`. Omission now permits up to five
+recursive exact same-room reply-parent reads and publishes resolution evidence;
+`--resolve-relations 0` restores zero additional calls. The same change adds an
+oldest-reachable boundary and period-reachability classification where those
+facts can be proved. It does not change the list source ceiling, create provider
+pagination, follow cross-room references, or persist configuration.
 
 Persistent command selection is an additive pre-1.0 local workflow. It does
 not remove capabilities from `DefaultCatalog`; it derives the help and routing

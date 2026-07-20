@@ -1,4 +1,4 @@
-messages room-ref=3701 count=100 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0
+messages room-ref=3701 count=100 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0 oldest-reachable-message-ref=1301 oldest-reachable-send-time=1784205000
 external-text=untrusted escaped
 schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"
 actors

@@ -192,6 +192,9 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 		// differential state remains available only through explicit
 		// --window changes, which the binding loop applies below.
 		request.ForceRecent = true
+		// The shortest task owns a small exact-message budget so ordinary missing
+		// reply chains are self-contained. Zero remains an explicit opt-out.
+		request.MessageRelationFetchLimit = chatwork.DefaultMessageRelationFetches
 	}
 	inputs := make(map[string]CommandInput, len(command.Agent.Inputs))
 	for _, input := range command.Agent.Inputs {
@@ -284,6 +287,15 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 				return chatwork.Request{}, fmt.Errorf("--count は 1 から %d までの整数で指定してください", chatwork.MaxMessageSelectionCount)
 			}
 			request.MessageFilter.Count = count
+		case "--resolve-relations":
+			if request.Task != chatwork.TaskMessagesList {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --resolve-relations に対応していません")
+			}
+			limit, err := strconv.Atoi(value)
+			if err != nil || limit < 0 || limit > chatwork.MaxMessageRelationFetches {
+				return chatwork.Request{}, fmt.Errorf("--resolve-relations は 0 から %d までの整数で指定してください", chatwork.MaxMessageRelationFetches)
+			}
+			request.MessageRelationFetchLimit = limit
 		case "--limit-type":
 			request.LimitType = value
 		case "--window":

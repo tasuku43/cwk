@@ -115,6 +115,12 @@ const (
 	// smaller public count narrows primary messages only; it does not increase
 	// or page beyond this fixed source bound.
 	MaxMessageSelectionCount = 100
+	// MaxMessageRelationFetches bounds explicit exact-message reads used to
+	// complete reply context outside one provider message window.
+	MaxMessageRelationFetches = 100
+	// DefaultMessageRelationFetches closes ordinary reply chains without an
+	// extra option while retaining a small deterministic provider-call bound.
+	DefaultMessageRelationFetches = 5
 )
 
 var messageDayLocation = time.FixedZone(MessageDayTimeZone, 9*60*60)
@@ -169,6 +175,53 @@ type MessageFilter struct {
 	Count      int
 }
 
+// MessagePeriodReachability states only what one trustworthy latest-window
+// lower boundary can prove about a requested period. It does not claim room
+// history completeness or discoverability beyond the provider window.
+type MessagePeriodReachability string
+
+const (
+	MessagePeriodWithinReachableWindow     MessagePeriodReachability = "within-reachable-window"
+	MessagePeriodPartiallyOutsideReachable MessagePeriodReachability = "partially-out-of-reachable-window"
+	MessagePeriodOutsideReachableWindow    MessagePeriodReachability = "out-of-reachable-window"
+	MessagePeriodReachabilityUnknown       MessagePeriodReachability = "unknown"
+)
+
+// MessageReachability records the oldest typed message proven reachable by
+// the current latest-window list result. OldestMessage is absent when an empty,
+// differential, or access-limited source cannot establish that boundary.
+type MessageReachability struct {
+	OldestMessage      Reference
+	OldestSendTime     int64
+	PeriodReachability MessagePeriodReachability
+}
+
+// MessageRelationResolutionState distinguishes how one explicit same-room
+// reply target was handled. Only source and fetched states carry Message.
+type MessageRelationResolutionState string
+
+const (
+	MessageRelationResolvedFromSource MessageRelationResolutionState = "source"
+	MessageRelationResolvedByFetch    MessageRelationResolutionState = "fetched"
+	MessageRelationNotFound           MessageRelationResolutionState = "not-found"
+	MessageRelationRestricted         MessageRelationResolutionState = "restricted"
+	MessageRelationBudgetExhausted    MessageRelationResolutionState = "budget-exhausted"
+)
+
+type MessageRelationTarget struct {
+	Target  Reference
+	State   MessageRelationResolutionState
+	Message *Message
+}
+
+// MessageRelationResolution is the result of one explicit finite exact-read
+// budget. Targets retain deterministic first-reference order.
+type MessageRelationResolution struct {
+	FetchLimit    int
+	FetchAttempts int
+	Targets       []MessageRelationTarget
+}
+
 // Request is the typed union consumed by the application task boundary.
 // Fields unused by the selected Task must remain zero; Validate enforces this
 // incrementally as task implementations are added.
@@ -182,32 +235,33 @@ type Request struct {
 	Invite  Reference
 	Request Reference
 
-	Account              Reference
-	AssignedBy           Reference
-	Admins               []Reference
-	Members              []Reference
-	ReadonlyMembers      []Reference
-	Assignees            []Reference
-	Name                 string
-	Description          string
-	Icon                 string
-	Body                 string
-	Status               string
-	RoomAction           string
-	Limit                int64
-	LimitType            string
-	ForceRecent          bool
-	SelfUnread           bool
-	CreateDownloadURL    bool
-	InviteCode           string
-	InviteRegenerateCode bool
-	InviteEnabled        bool
-	InviteNeedsApproval  bool
-	InviteApprovalSet    bool
-	DescriptionSet       bool
-	FilePath             string
-	FileMessage          string
-	MessageFilter        MessageFilter
+	Account                   Reference
+	AssignedBy                Reference
+	Admins                    []Reference
+	Members                   []Reference
+	ReadonlyMembers           []Reference
+	Assignees                 []Reference
+	Name                      string
+	Description               string
+	Icon                      string
+	Body                      string
+	Status                    string
+	RoomAction                string
+	Limit                     int64
+	LimitType                 string
+	ForceRecent               bool
+	SelfUnread                bool
+	CreateDownloadURL         bool
+	InviteCode                string
+	InviteRegenerateCode      bool
+	InviteEnabled             bool
+	InviteNeedsApproval       bool
+	InviteApprovalSet         bool
+	DescriptionSet            bool
+	FilePath                  string
+	FileMessage               string
+	MessageFilter             MessageFilter
+	MessageRelationFetchLimit int
 }
 
 func (r Request) Validate() error {
@@ -295,6 +349,12 @@ func (r Request) Validate() error {
 	}
 	if r.Task != TaskMessagesList && messageFilterActive(r.MessageFilter) {
 		return fmt.Errorf("message filter is only valid for messages.list")
+	}
+	if r.MessageRelationFetchLimit < 0 || r.MessageRelationFetchLimit > MaxMessageRelationFetches {
+		return fmt.Errorf("message relation fetch limit must be between 0 and %d", MaxMessageRelationFetches)
+	}
+	if r.Task != TaskMessagesList && r.MessageRelationFetchLimit != 0 {
+		return fmt.Errorf("message relation fetch limit is only valid for messages.list")
 	}
 	if err := validateMessageFilter(r.MessageFilter); err != nil {
 		return err
@@ -640,24 +700,26 @@ type Result struct {
 	// MessageRoom is the exact room scope of a messages.list window. It remains
 	// present when Messages is an explicitly empty collection so presentation
 	// never has to reconstruct the requested room from an item.
-	MessageRoom      Reference
-	MessageAccess    MessageAccessLimitation
-	Account          *Account
-	Status           *Status
-	Rooms            []Room
-	Accounts         []Account
-	Messages         []Message
-	Tasks            []WorkTask
-	Files            []File
-	InviteLink       *InviteLink
-	Requests         []ContactRequest
-	Created          []Reference
-	Affected         []Reference
-	CreatedInRoom    *RoomScopedCreation
-	ReadState        *ReadState
-	Acknowledgement  *Acknowledgement
-	MembershipCounts *MembershipCounts
-	MessageSelection *MessageSelection
+	MessageRoom               Reference
+	MessageAccess             MessageAccessLimitation
+	Account                   *Account
+	Status                    *Status
+	Rooms                     []Room
+	Accounts                  []Account
+	Messages                  []Message
+	Tasks                     []WorkTask
+	Files                     []File
+	InviteLink                *InviteLink
+	Requests                  []ContactRequest
+	Created                   []Reference
+	Affected                  []Reference
+	CreatedInRoom             *RoomScopedCreation
+	ReadState                 *ReadState
+	Acknowledgement           *Acknowledgement
+	MembershipCounts          *MembershipCounts
+	MessageSelection          *MessageSelection
+	MessageReachability       *MessageReachability
+	MessageRelationResolution *MessageRelationResolution
 }
 
 // Validate proves that the semantic union uses the one result variant owned by
@@ -676,6 +738,12 @@ func (r Result) Validate() error {
 	}
 	if r.Task != TaskMessagesList && r.MessageSelection != nil {
 		return fmt.Errorf("Chatwork result message selection is only valid for messages.list")
+	}
+	if r.Task != TaskMessagesList && r.MessageReachability != nil {
+		return fmt.Errorf("Chatwork result message reachability is only valid for messages.list")
+	}
+	if r.Task != TaskMessagesList && r.MessageRelationResolution != nil {
+		return fmt.Errorf("Chatwork result message relation resolution is only valid for messages.list")
 	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
@@ -769,6 +837,24 @@ func (r Result) ValidateFor(request Request) error {
 			}
 		} else if r.MessageSelection != nil {
 			return fmt.Errorf("Chatwork unfiltered message result must not contain selection metadata")
+		}
+		if request.MessageFilter.Period != (MessagePeriod{}) {
+			if r.MessageReachability == nil || r.MessageReachability.PeriodReachability == "" {
+				return fmt.Errorf("Chatwork period-selected message result is missing reachability metadata")
+			}
+		} else if r.MessageReachability != nil && r.MessageReachability.PeriodReachability != "" {
+			return fmt.Errorf("Chatwork message result without a period must not declare period reachability")
+		}
+		if request.MessageRelationFetchLimit > 0 {
+			if r.MessageRelationResolution == nil || r.MessageRelationResolution.FetchLimit != request.MessageRelationFetchLimit {
+				return fmt.Errorf("Chatwork message relation resolution does not match the request budget")
+			}
+		} else if r.MessageRelationResolution != nil {
+			return fmt.Errorf("Chatwork message result without a relation budget must not declare relation resolution")
+		}
+	case TaskMessagesShow:
+		if len(r.Messages) != 1 || r.Messages[0].Room != request.Room || r.Messages[0].Ref != request.Message {
+			return fmt.Errorf("Chatwork exact message result does not match the requested room and message")
 		}
 	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
 		if r.CreatedInRoom.ParentRoom != request.Room {
@@ -901,6 +987,16 @@ func (r Result) validateVariantFacts() error {
 		}
 		if r.Task == TaskMessagesList && r.MessageSelection != nil {
 			if err := validateMessageSelection(*r.MessageSelection, r.Messages, r.Coverage); err != nil {
+				return err
+			}
+		}
+		if r.Task == TaskMessagesList && r.MessageReachability != nil {
+			if err := validateMessageReachability(*r.MessageReachability, r.MessageSelection); err != nil {
+				return err
+			}
+		}
+		if r.Task == TaskMessagesList && r.MessageRelationResolution != nil {
+			if err := validateMessageRelationResolution(*r.MessageRelationResolution, r.Messages, r.MessageRoom); err != nil {
 				return err
 			}
 		}
@@ -1087,6 +1183,196 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 			}
 			if !direct {
 				return fmt.Errorf("Chatwork message selection context is not a direct resolved reply neighbor of an anchor")
+			}
+		}
+	}
+	return nil
+}
+
+// DeriveMessageReachability computes only the lower-bound facts proved by a
+// non-limited latest window. Differential, empty, access-limited, or invalid-
+// time sources deliberately yield unknown period reachability.
+func DeriveMessageReachability(coverage Coverage, access MessageAccessLimitation, source []Message, period MessagePeriod) (MessageReachability, error) {
+	if err := validateMessagePeriod(period); err != nil {
+		return MessageReachability{}, err
+	}
+	result := MessageReachability{}
+	latest := coverage.Kind == "latest_window" || coverage.Kind == "recent-window"
+	if latest && access == MessageAccessNone && len(source) > 0 {
+		oldest := source[0]
+		for _, message := range source[1:] {
+			if message.SendTime < oldest.SendTime {
+				oldest = message
+			}
+		}
+		if oldest.SendTime > 0 && oldest.Ref.Kind == ReferenceMessage && ValidateReference(ReferenceMessage, oldest.Ref.Value) == nil {
+			result.OldestMessage = oldest.Ref
+			result.OldestSendTime = oldest.SendTime
+		}
+	}
+	if period == (MessagePeriod{}) {
+		return result, nil
+	}
+	if result.OldestMessage == (Reference{}) {
+		result.PeriodReachability = MessagePeriodReachabilityUnknown
+		return result, nil
+	}
+	result.PeriodReachability = classifyMessagePeriodReachability(period, result.OldestSendTime)
+	return result, nil
+}
+
+func classifyMessagePeriodReachability(period MessagePeriod, oldest int64) MessagePeriodReachability {
+	if period.Until > 0 && period.Until <= oldest {
+		return MessagePeriodOutsideReachableWindow
+	}
+	if period.Since == 0 || period.Since < oldest {
+		return MessagePeriodPartiallyOutsideReachable
+	}
+	return MessagePeriodWithinReachableWindow
+}
+
+func validateMessageReachability(reachability MessageReachability, selection *MessageSelection) error {
+	oldestPresent := reachability.OldestMessage != (Reference{})
+	if oldestPresent {
+		if err := validateResultReference("oldest reachable message", reachability.OldestMessage, ReferenceMessage, false); err != nil {
+			return err
+		}
+		if reachability.OldestSendTime <= 0 {
+			return fmt.Errorf("Chatwork oldest reachable message requires a positive send time")
+		}
+	} else if reachability.OldestSendTime != 0 {
+		return fmt.Errorf("Chatwork oldest reachable send time requires a message reference")
+	}
+	period := MessagePeriod{}
+	if selection != nil {
+		period = selection.Filter.Period
+	}
+	if period == (MessagePeriod{}) {
+		if reachability.PeriodReachability != "" {
+			return fmt.Errorf("Chatwork message reachability without a period must not classify the period")
+		}
+		return nil
+	}
+	if reachability.PeriodReachability == MessagePeriodReachabilityUnknown {
+		if oldestPresent {
+			return fmt.Errorf("Chatwork unknown period reachability must not claim an oldest reachable boundary")
+		}
+		return nil
+	}
+	if !oldestPresent {
+		return fmt.Errorf("Chatwork classified period reachability requires an oldest reachable boundary")
+	}
+	if reachability.PeriodReachability != classifyMessagePeriodReachability(period, reachability.OldestSendTime) {
+		return fmt.Errorf("Chatwork period reachability does not match its oldest reachable boundary")
+	}
+	return nil
+}
+
+func validateMessageRelationResolution(resolution MessageRelationResolution, messages []Message, room Reference) error {
+	if resolution.FetchLimit < 1 || resolution.FetchLimit > MaxMessageRelationFetches {
+		return fmt.Errorf("Chatwork message relation fetch limit is outside its declared bound")
+	}
+	if resolution.FetchAttempts < 0 || resolution.FetchAttempts > resolution.FetchLimit {
+		return fmt.Errorf("Chatwork message relation fetch attempts exceed their declared limit")
+	}
+	if resolution.Targets == nil {
+		return fmt.Errorf("Chatwork message relation resolution targets must be explicit")
+	}
+	displayed := make(map[Reference]struct{}, len(messages))
+	available := make(map[Reference]struct{}, len(messages)+len(resolution.Targets))
+	for _, message := range messages {
+		displayed[message.Ref] = struct{}{}
+		available[message.Ref] = struct{}{}
+	}
+	wanted := make([]Reference, 0)
+	wantedSet := make(map[Reference]struct{}, len(messages)+len(resolution.Targets))
+	for ref := range displayed {
+		wantedSet[ref] = struct{}{}
+	}
+	appendWanted := func(message Message) {
+		if message.Reply == nil || message.Reply.Kind != "reply" || message.Reply.ExternalID != room.Value {
+			return
+		}
+		if _, seen := wantedSet[message.Reply.Target]; !seen {
+			wantedSet[message.Reply.Target] = struct{}{}
+			wanted = append(wanted, message.Reply.Target)
+		}
+	}
+	for _, message := range messages {
+		appendWanted(message)
+	}
+	attempts := 0
+	seen := make(map[Reference]struct{}, len(resolution.Targets))
+	for index, target := range resolution.Targets {
+		if index >= len(wanted) {
+			return fmt.Errorf("Chatwork message relation resolution contains a target not reached from displayed reply chains")
+		}
+		if target.Target != wanted[index] {
+			return fmt.Errorf("Chatwork message relation targets do not preserve first-reference order")
+		}
+		if err := validateResultReference("message relation target", target.Target, ReferenceMessage, false); err != nil {
+			return err
+		}
+		if _, duplicate := seen[target.Target]; duplicate {
+			return fmt.Errorf("Chatwork message relation resolution contains a duplicate target")
+		}
+		seen[target.Target] = struct{}{}
+		resolved := target.State == MessageRelationResolvedFromSource || target.State == MessageRelationResolvedByFetch
+		switch target.State {
+		case MessageRelationResolvedFromSource:
+		case MessageRelationResolvedByFetch, MessageRelationNotFound, MessageRelationRestricted:
+			attempts++
+		case MessageRelationBudgetExhausted:
+			if resolution.FetchAttempts != resolution.FetchLimit {
+				return fmt.Errorf("Chatwork relation budget exhaustion requires every fetch slot to be consumed")
+			}
+		default:
+			return fmt.Errorf("Chatwork message relation resolution state is invalid")
+		}
+		if resolved {
+			if target.Message == nil {
+				return fmt.Errorf("Chatwork resolved message relation target requires context")
+			}
+			if target.Message.Ref != target.Target || target.Message.Room != room {
+				return fmt.Errorf("Chatwork resolved message relation context does not match its target and room")
+			}
+			if _, present := displayed[target.Message.Ref]; present {
+				return fmt.Errorf("Chatwork supplemental relation context duplicates a displayed source message")
+			}
+			if err := validateResultMessage("message relation context", *target.Message); err != nil {
+				return err
+			}
+			available[target.Message.Ref] = struct{}{}
+			appendWanted(*target.Message)
+		} else if target.Message != nil {
+			return fmt.Errorf("Chatwork unresolved message relation target must not carry context")
+		}
+	}
+	if len(wanted) != len(resolution.Targets) {
+		return fmt.Errorf("Chatwork message relation resolution does not cover each unique reachable reply target")
+	}
+	if attempts != resolution.FetchAttempts {
+		return fmt.Errorf("Chatwork message relation fetch attempt count does not match target outcomes")
+	}
+	checkReplyState := func(message Message) error {
+		if message.Reply == nil || message.Reply.Kind != "reply" || message.Reply.ExternalID != room.Value {
+			return nil
+		}
+		_, resolved := available[message.Reply.Target]
+		if message.Reply.Resolved != resolved {
+			return fmt.Errorf("Chatwork reply state does not match relation resolution evidence")
+		}
+		return nil
+	}
+	for _, message := range messages {
+		if err := checkReplyState(message); err != nil {
+			return err
+		}
+	}
+	for _, target := range resolution.Targets {
+		if target.Message != nil {
+			if err := checkReplyState(*target.Message); err != nil {
+				return err
 			}
 		}
 	}

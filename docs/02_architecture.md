@@ -135,20 +135,22 @@ which catalog paths may be selected or attach CLI recovery commands.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
-- Domain defines provider-neutral message, participant, recipient, reply, quote, context-coverage, access-limitation, relation-set state, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing or rendering.
+- Domain defines provider-neutral message, participant, recipient, reply, quote, context coverage, access limitation, relation-set state, relation-resolution provenance/outcomes, reachability, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing, I/O, or rendering.
 - Infrastructure decodes Chatwork wire DTOs, validates the status/header combination that distinguishes normal zero, partial/all access restriction, restricted exact message, and not-found, and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity. A malformed recognized notation form returns the body with an unknown whole relation set rather than failing its list or retaining partial facts.
 - Application use cases select the bounded data required by one outcome,
-  resolve only explicit relationships available within that bound, and return
-  a typed task result with coverage and unresolved facts. Message selection runs
+  resolve only explicit relationships selected by that outcome, and return a
+  typed task result with coverage and unresolved facts. Message selection runs
   here after the one provider response: repeated exact senders form one OR
   candidate set; typed send time establishes newest-first rank with later
   provider position breaking equal-time ties; optional one-based start index
   and requested count select primary anchors; optional reply context then adds
-  only direct typed in-window parents/children. Source sequences and final
-  physical order remain those of the unfiltered provider window.
-  Application-only sender/period/context/start-index/count fields are removed
-  before the infrastructure port is called.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+  only direct typed in-window parents/children. It then reuses original-source
+  parents or spends the finite relation budget on exact same-room reads, one
+  attempt per unique recursively reached target. Source sequences and final physical
+  order remain those of the unfiltered provider window; supplemental context
+  has separate provenance. Application-only sender/period/context/start-index/
+  count/relation-budget fields are removed before each infrastructure call.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`; oldest reachability and period reachability come directly from domain values. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved source replies become `reply=#N`, supplemental parents use canonical-reference reply edges plus separate `relation-context` provenance, and unavailable targets use typed `relation-gap` records. Unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -378,12 +380,24 @@ by typed send time, applies optional one-based
 direct non-transitive `replies` context. A timestamp selects membership but
 never changes provider-order output; equal timestamps prefer the later provider
 position. Omitted targets remain explicit unresolved canonical references
-instead of being guessed or fetched. Selection metadata carries source and
+until the bounded resolution phase; they are never guessed. Selection metadata carries source and
 candidate counts, concrete period bounds/day, start index, requested count,
 actual items per page, optional next start index, original source sequences,
 and primary anchors so presentation need not reconstruct policy. Explicit reply
 context may make displayed count exceed the requested primary count or include
 a direct neighbor outside the primary period.
+
+Public CLI assembly defaults `--resolve-relations` to five and accepts 0..100.
+After selection, application collects unique explicit same-room reply parents
+from displayed source records in first-reference order. A matching message from
+the original source becomes supplemental source context at zero call cost;
+otherwise each target consumes one exact `messages show` operation until the
+budget is exhausted. Exact success must match both requested room and message.
+Not-found and restricted become target states; every transient, cancellation,
+malformed, rate, or other permission fault aborts the list task. The admitted
+authentication binding and caller context are reused unchanged. Fetched
+context is not appended to provider sequences. Its explicit same-room parent
+joins the breadth-first queue; duplicate and cyclic targets are visited once.
 
 CLI request assembly parses whole-second offset-bearing RFC3339 bounds and
 resolves `--on YYYY-MM-DD|today|yesterday` once with its injected clock and the
@@ -391,12 +405,21 @@ fixed `Asia/Tokyo` calendar. Only the effective Unix interval and optional
 concrete day/zone cross the application boundary; the relative word and host
 local zone do not. Missing clocks and invalid or conflicting period syntax fail
 before authentication. Application removes those period fields together with
-sender/context/index fields before calling infrastructure.
+sender/context/index/relation-budget fields before calling infrastructure.
 
-Chatwork documents no limit, cursor, or offset for this endpoint. Infrastructure
-continues to issue exactly one request with only the documented `force` query,
-and rejects application-only sender/period/index/context state if it crosses
-the port. The
+Application derives oldest reachability from the complete typed source before
+local selection. A nonempty, unrestricted `recent` source with positive send
+times yields the minimum-time source message; period bounds are classified
+against it as within, partially outside, wholly outside, or unknown. A
+`changes`, empty, access-limited, or invalid-clock source cannot prove the
+boundary and remains unknown.
+
+Chatwork documents no limit, cursor, or offset for the list endpoint.
+Infrastructure issues exactly one list request with only the documented
+`force` query, then zero through N distinct exact-message requests selected by
+application's declared budget. Each infrastructure operation remains one
+request and one attempt. The adapter rejects application-only sender/period/
+index/context/relation-budget state if it crosses the port. The
 provider's maximum-100 coverage is a `source-limit`, not the public requested
 count or a provider page size. An over-bound source result fails before
 application selection, and invalid public index/count values fail before

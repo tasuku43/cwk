@@ -135,6 +135,27 @@ date filtering, pagination, or older-history access. Reject ambiguous dates,
 offset-free or fractional timestamps, conflicting selectors, and empty or
 reversed intervals before authentication/I/O. Use fixed clocks in tests.
 
+For the reviewed Chatwork reply-relation closure, declare optional
+`--resolve-relations <count>` in 0..100 with public default five and zero as the
+explicit opt-out. After local selection, traverse only typed explicit
+same-room reply parents in breadth-first first-reference order. Reuse parents
+from the original source without spending a slot; otherwise make at most one
+exact read per unique target, and enqueue the same relation kind from attached
+context until the budget is consumed. Use a visited set for duplicates and
+cycles. Preserve supplemental context outside source sequences, publish fetch
+limit/attempts and source/fetched/not-found/restricted/budget-exhausted target
+evidence, and bind every exact result to the requested room/message. Retain
+only reviewed not-found/restricted target outcomes; abort without partial
+success on other faults. Clear the budget before every adapter call and prove
+that To, quotes, names, times, prose, and cross-room references never expand it.
+
+For message-period reachability, derive an oldest boundary only from a
+nonempty, unrestricted `recent` typed source with valid send times. Classify a
+requested period as within, partially outside, wholly outside, or unknown.
+Differential, empty, limited, and unprovable sources stay unknown. Never turn a
+wholly older period into an ordinary empty-day claim or imply provider
+pagination/complete room history.
+
 For the reviewed message-window default, omitted or explicit
 `--window recent` selects the latest bounded provider window; only explicit
 `--window changes` selects differential retrieval. Keep both modes at one

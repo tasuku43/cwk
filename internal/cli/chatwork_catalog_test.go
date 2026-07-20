@@ -143,7 +143,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies]"
+	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies] [--resolve-relations <count>]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -178,6 +178,14 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 		!strings.Contains(context.Description, "1ホップ") || !strings.Contains(context.Description, "既定値") ||
 		!strings.Contains(context.Description, "返信元・返信先") || !strings.Contains(context.Description, "上限付き範囲") {
 		t.Fatalf("context input contract = %+v", context)
+	}
+	resolution := inputs["--resolve-relations"]
+	if resolution.Name == "" || resolution.Required || resolution.Repeatable || resolution.Source != InputSourceFlag ||
+		len(resolution.AllowedValues) != 0 || resolution.ReferenceKind != "" ||
+		!strings.Contains(resolution.Description, "0〜100") || !strings.Contains(resolution.Description, "追加の一件取得") ||
+		!strings.Contains(resolution.Description, "重複ID") || !strings.Contains(resolution.Description, "再帰的") ||
+		!strings.Contains(resolution.Description, "既定値は5") || !strings.Contains(resolution.Description, "0は追加取得を無効化") {
+		t.Fatalf("resolve-relations input contract = %+v", resolution)
 	}
 	window := inputs["--window"]
 	if !reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
