@@ -221,6 +221,7 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskRoomsUpdate, "updated room-ref=42"},
 		{chatwork.TaskRoomsLeave, "left room-ref=42"},
 		{chatwork.TaskRoomsDelete, "deleted room-ref=42"},
+		{chatwork.TaskMembersFind, `member-candidates query="Synthetic" source-count=1 candidate-count=1 complete=true`},
 		{chatwork.TaskMembersList, "members count=1"},
 		{chatwork.TaskMembersReplace, "membership-counts administrators=0 members=0 readonly=0"},
 		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0"},
@@ -245,8 +246,8 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskContactRequestsAccept, "accepted account-ref=7 room-ref=42"},
 		{chatwork.TaskContactRequestsReject, "rejected request-ref=500"},
 	}
-	if len(tests) != 33 {
-		t.Fatalf("task route count = %d, want 33", len(tests))
+	if len(tests) != 34 {
+		t.Fatalf("task route count = %d, want 34", len(tests))
 	}
 	for _, test := range tests {
 		t.Run(string(test.task), func(t *testing.T) {
@@ -631,6 +632,48 @@ func TestRenderCollectionsUseOneFixedSchemaAndPositionalRecord(t *testing.T) {
 				t.Fatalf("record repeated field-level trust markers:\n%s", got)
 			}
 		})
+	}
+}
+
+func TestRenderMemberCandidatesKeepsAmbiguityAndEscapesExternalNames(t *testing.T) {
+	result := resultForTask(chatwork.TaskMembersFind)
+	result.Accounts = []chatwork.Account{
+		{Ref: reference(chatwork.ReferenceAccount, "7"), Name: "篠原\n花子", Role: "member"},
+		{Ref: reference(chatwork.ReferenceAccount, "8"), Name: "篠原 太郎", Role: "readonly"},
+	}
+	result.MemberSelection = &chatwork.MemberSelection{Query: "篠原", SourceCount: 3}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "member-candidates query=\"篠原\" source-count=3 candidate-count=2 complete=true\n" +
+		"external-text=untrusted escaped\n" +
+		"schema: account-ref \"name\" role\n" +
+		"7 \"篠原\\\\n花子\" \"member\"\n" +
+		"8 \"篠原 太郎\" \"readonly\"\n"
+	if got != want {
+		t.Fatalf("member candidates mismatch\n--- got ---\n%s--- want ---\n%s", got, want)
+	}
+	if strings.Contains(got, "selected") {
+		t.Fatalf("ambiguous candidates claimed an automatic selection:\n%s", got)
+	}
+}
+
+func TestRenderMemberCandidatesMakesZeroMatchesExplicit(t *testing.T) {
+	result := resultForTask(chatwork.TaskMembersFind)
+	result.Accounts = []chatwork.Account{}
+	result.MemberSelection = &chatwork.MemberSelection{Query: "該当なし", SourceCount: 3}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "member-candidates query=\"該当なし\" source-count=3 candidate-count=0 complete=true\n" +
+		"external-text=untrusted escaped\n" +
+		"schema: account-ref \"name\" role\n"
+	if got != want {
+		t.Fatalf("empty member candidates mismatch\n--- got ---\n%s--- want ---\n%s", got, want)
 	}
 }
 
@@ -1131,7 +1174,7 @@ func resultForTask(task chatwork.Task) chatwork.Result {
 		result.Coverage = chatwork.Coverage{Kind: "provider_window", Limit: 100, Complete: false}
 	case chatwork.TaskMessagesList:
 		result.Coverage = chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false}
-	case chatwork.TaskContactsList, chatwork.TaskRoomsList, chatwork.TaskMembersList:
+	case chatwork.TaskContactsList, chatwork.TaskRoomsList, chatwork.TaskMembersFind, chatwork.TaskMembersList:
 		result.Coverage = chatwork.Coverage{Kind: "provider_collection", Complete: true}
 	default:
 		result.Coverage = chatwork.Coverage{Kind: "single_operation", Complete: true}
@@ -1143,8 +1186,11 @@ func resultForTask(task chatwork.Task) chatwork.Result {
 		result.Status = &chatwork.Status{}
 	case chatwork.TaskPersonalTasksList, chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksShow:
 		result.Tasks = []chatwork.WorkTask{workTask}
-	case chatwork.TaskContactsList, chatwork.TaskMembersList:
+	case chatwork.TaskContactsList, chatwork.TaskMembersFind, chatwork.TaskMembersList:
 		result.Accounts = []chatwork.Account{account}
+		if task == chatwork.TaskMembersFind {
+			result.MemberSelection = &chatwork.MemberSelection{Query: "Synthetic", SourceCount: 1}
+		}
 	case chatwork.TaskRoomsList, chatwork.TaskRoomsShow:
 		result.Rooms = []chatwork.Room{{Ref: room, Name: "Synthetic Room"}}
 	case chatwork.TaskRoomsCreate:

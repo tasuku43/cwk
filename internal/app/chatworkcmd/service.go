@@ -4,6 +4,7 @@ package chatworkcmd
 
 import (
 	"context"
+	"strings"
 
 	"github.com/tasuku43/cwk/internal/app/portcheck"
 	"github.com/tasuku43/cwk/internal/domain/authn"
@@ -44,6 +45,13 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 		return chatwork.Result{}, fault.New(fault.KindContract, "missing_chatwork_port", "Chatwork タスクアダプターが設定されていません", false)
 	}
 	providerRequest := request
+	if request.Task == chatwork.TaskMembersFind {
+		// Member-name discovery is an application-owned projection of the one
+		// complete room-member read. Display text never crosses the provider
+		// boundary as an identity or undocumented query parameter.
+		providerRequest.Task = chatwork.TaskMembersList
+		providerRequest.MemberQuery = ""
+	}
 	providerRequest.MessageFilter = chatwork.MessageFilter{}
 	providerRequest.MessageRelationFetchLimit = 0
 	result, err := s.executeProvider(ctx, binding, providerRequest)
@@ -51,6 +59,20 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 		return chatwork.Result{}, err
 	}
 	switch request.Task {
+	case chatwork.TaskMembersFind:
+		sourceCount := len(result.Accounts)
+		candidates := make([]chatwork.Account, 0, sourceCount)
+		for _, account := range result.Accounts {
+			if strings.Contains(account.Name, request.MemberQuery) {
+				candidates = append(candidates, account)
+			}
+		}
+		result.Task = chatwork.TaskMembersFind
+		result.Accounts = candidates
+		result.MemberSelection = &chatwork.MemberSelection{
+			Query:       request.MemberQuery,
+			SourceCount: sourceCount,
+		}
 	case chatwork.TaskMessagesList:
 		source, sourceErr := ResolveMessageRelations(result.Messages)
 		if sourceErr != nil {

@@ -106,6 +106,15 @@ name matching, raw-body inference, hidden additional calls, and an unbounded
 "related" mode are not acceptable shortcuts. For message reply context, test
 the exact hop bound and prove To/quote/raw notation cannot expand it.
 
+When the supported outcome begins with an external display name, keep name
+matching in a discover command rather than accepting it in a reference-bound
+act input. A reviewed local candidate filter may reuse one complete typed
+provider collection after clearing the query before the port. It must preserve
+source order, return every match with canonical references and explicit
+query/source/candidate metadata, visibly escape external names, and never
+auto-select even a unique result. Test zero, unique, and ambiguous candidates
+plus direct reuse of the chosen reference by the next command.
+
 For the reviewed Chatwork message index selection, declare optional one-based
 `--start-index <index>` and maximum `--count <count>` with the inclusive range
 1..100; count alone defaults start index to 1. Exact-sender OR matching precedes
@@ -305,6 +314,11 @@ Keep human root help as a catalog-derived navigation projection: directly
 runnable single-word commands plus one entry per top-level namespace. Exact
 leaf summaries belong in namespace help, and each displayed selector must
 round-trip through the same catalog rather than a separate help registry.
+If a human workflow genuinely benefits from a short "when this, do that"
+recipe, store structured exact command steps on catalog command metadata.
+Render it only in exact-command human help when the selected command is one of
+its steps and every step exists in the active view. Keep root/namespace human
+help as indexes and keep recipes out of every agent-help shape.
 Exact human help must derive input requirements, repeatability, source, allowed
 values, reference kind, and descriptions from `AgentContract.Inputs`; do not
 reconstruct that contract from usage prose. Validate every projected input name

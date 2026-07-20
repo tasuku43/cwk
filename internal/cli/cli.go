@@ -187,7 +187,7 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	}
 	ctx = withCommandPath(ctx, command.Path)
 	if len(rest) == 1 && isHelpFlag(rest[0]) {
-		return c.emit(ctx, renderCommandHelp(command))
+		return c.emit(ctx, renderCommandHelp(command, c.catalog.Commands()))
 	}
 	if err := ctx.Err(); err != nil {
 		return c.fail(ctx, err)

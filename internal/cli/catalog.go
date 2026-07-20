@@ -284,6 +284,20 @@ type AgentContract struct {
 	Mutation       *MutationContract    `json:"mutation,omitempty"`
 }
 
+// HumanHelpRecipe is a small catalog-owned workflow shown only in human help.
+// Structured exact paths let an active catalog omit the whole recipe when one
+// step is unavailable; agent indexes remain unchanged.
+type HumanHelpRecipe struct {
+	Title string
+	Note  string
+	Steps []HumanHelpRecipeStep
+}
+
+type HumanHelpRecipeStep struct {
+	Path string
+	Args string
+}
+
 // CommandSpec is the single source of truth for dispatch, human help, and the
 // machine-readable agent specification.
 type CommandSpec struct {
@@ -296,6 +310,7 @@ type CommandSpec struct {
 	// view. False is deliberately the always-visible control-plane default.
 	Configurable bool
 	Agent        AgentContract
+	HumanRecipes []HumanHelpRecipe
 	handler      commandHandler
 	chatwork     *chatworkCommandDefinition
 }
@@ -482,6 +497,9 @@ func (c Catalog) Validate() error {
 		if err := validateAgentIndexEntry(command); err != nil {
 			return fmt.Errorf("catalog command %q: %w", command.Path, err)
 		}
+		if err := validateHumanHelpRecipes(command.HumanRecipes); err != nil {
+			return fmt.Errorf("catalog command %q: %w", command.Path, err)
+		}
 		if err := validateCommandReferenceRole(command); err != nil {
 			return fmt.Errorf("catalog command %q: %w", command.Path, err)
 		}
@@ -537,6 +555,32 @@ func (c Catalog) Validate() error {
 				if declaredError.Code == "unclassified_mutation_outcome" && nextCommand.Effect != operation.EffectRead {
 					return fmt.Errorf("catalog command %q error %q must point to a read-only reconciliation command", command.Path, declaredError.Code)
 				}
+			}
+		}
+	}
+	return nil
+}
+
+func validateHumanHelpRecipes(recipes []HumanHelpRecipe) error {
+	for recipeIndex, recipe := range recipes {
+		if err := validateContractText("human help recipe title", recipe.Title); err != nil {
+			return fmt.Errorf("human help recipe %d has an invalid title", recipeIndex)
+		}
+		if recipe.Note != "" {
+			if err := validateContractText("human help recipe note", recipe.Note); err != nil {
+				return fmt.Errorf("human help recipe %d has an invalid note", recipeIndex)
+			}
+		}
+		if len(recipe.Steps) == 0 {
+			return fmt.Errorf("human help recipe %d has no steps", recipeIndex)
+		}
+		for stepIndex, step := range recipe.Steps {
+			if err := operation.ValidateCommandPath(step.Path); err != nil {
+				return fmt.Errorf("human help recipe %d step %d has an invalid command path", recipeIndex, stepIndex)
+			}
+			if !utf8.ValidString(step.Args) || strings.TrimSpace(step.Args) != step.Args ||
+				strings.IndexFunc(step.Args, isUnsafeContractRune) >= 0 {
+				return fmt.Errorf("human help recipe %d step %d has invalid arguments", recipeIndex, stepIndex)
 			}
 		}
 	}
@@ -1620,6 +1664,10 @@ func (c Catalog) Match(args []string) (CommandSpec, []string, bool) {
 
 func cloneCommandSpec(command CommandSpec) CommandSpec {
 	command.Agent = cloneAgentContract(command.Agent)
+	command.HumanRecipes = cloneSlice(command.HumanRecipes)
+	for index := range command.HumanRecipes {
+		command.HumanRecipes[index].Steps = cloneSlice(command.HumanRecipes[index].Steps)
+	}
 	return command
 }
 

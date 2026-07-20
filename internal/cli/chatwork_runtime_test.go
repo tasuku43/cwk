@@ -63,6 +63,45 @@ func (p *chatworkRuntimePort) Execute(_ context.Context, _ domainauthn.BindingID
 	return chatwork.Result{Task: request.Task, Coverage: chatwork.Coverage{Kind: "bounded", Complete: true}}, nil
 }
 
+func TestRunChatworkFindsMemberCandidatesBeforeExactSenderUse(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "members find")
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task != chatwork.TaskMembersList || request.MemberQuery != "" {
+			t.Fatalf("provider request = %+v", request)
+		}
+		return chatwork.Result{
+			Task:     request.Task,
+			Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+			Accounts: []chatwork.Account{
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2501"), Name: "篠原 花子", Role: "member"},
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2502"), Name: "山田 太郎", Role: "admin"},
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2503"), Name: "篠原 太郎", Role: "readonly"},
+			},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--query", "篠原"})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code=%d stderr=%s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = auth %d provider %d", authenticator.calls, port.calls)
+	}
+	for _, want := range []string{
+		`member-candidates query="篠原" source-count=3 candidate-count=2 complete=true`,
+		`2501 "篠原 花子" "member"`,
+		`2503 "篠原 太郎" "readonly"`,
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("candidate output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "2502") || strings.Contains(stdout.String(), "山田") {
+		t.Fatalf("candidate output leaked non-match:\n%s", stdout.String())
+	}
+}
+
 func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
@@ -630,8 +669,8 @@ func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T
 
 func TestBuildChatworkRequestCoversEveryCatalogTask(t *testing.T) {
 	specs := chatworkCommandSpecs()
-	if len(specs) != 33 {
-		t.Fatalf("Chatwork specs = %d, want fixed 33-task contract", len(specs))
+	if len(specs) != 34 {
+		t.Fatalf("Chatwork specs = %d, want fixed 34-task contract", len(specs))
 	}
 	seen := make(map[chatwork.Task]struct{}, len(specs))
 	for _, spec := range specs {

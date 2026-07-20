@@ -51,6 +51,8 @@ func Render(result chatwork.Result) (string, error) {
 		line(&output, "left room-ref=%s", ref(result.Acknowledgement.Target))
 	case chatwork.TaskRoomsDelete:
 		line(&output, "deleted room-ref=%s", ref(result.Acknowledgement.Target))
+	case chatwork.TaskMembersFind:
+		renderMemberCandidates(&output, result.Accounts, result.Coverage, *result.MemberSelection)
 	case chatwork.TaskMembersList:
 		renderMembers(&output, result.Accounts, result.Coverage)
 	case chatwork.TaskMembersReplace:
@@ -147,6 +149,16 @@ func renderMembers(output *strings.Builder, accounts []chatwork.Account, coverag
 	for _, account := range accounts {
 		line(output, "%s %s %s",
 			ref(account.Ref), quoted(account.Name), atom(account.Role))
+	}
+}
+
+func renderMemberCandidates(output *strings.Builder, accounts []chatwork.Account, coverage chatwork.Coverage, selection chatwork.MemberSelection) {
+	fmt.Fprintf(output, "member-candidates query=%s source-count=%d candidate-count=%d complete=%t\n",
+		quoted(selection.Query), selection.SourceCount, len(accounts), coverage.Complete)
+	line(output, "external-text=untrusted escaped")
+	line(output, `schema: account-ref "name" role`)
+	for _, account := range accounts {
+		line(output, "%s %s %s", ref(account.Ref), quoted(account.Name), atom(account.Role))
 	}
 }
 

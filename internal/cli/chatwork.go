@@ -249,6 +249,8 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 		switch name {
 		case "--name":
 			request.Name = value
+		case "--query":
+			request.MemberQuery = value
 		case "--description":
 			request.Description = value
 			request.DescriptionSet = true

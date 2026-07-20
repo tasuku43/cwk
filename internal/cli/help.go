@@ -165,7 +165,7 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 		return c.emit(ctx, c.renderRootHelp())
 	}
 	if exact {
-		return c.emit(ctx, renderCommandHelp(commands[0]))
+		return c.emit(ctx, renderCommandHelp(commands[0], c.catalog.Commands()))
 	}
 	return c.emit(ctx, renderNamespaceHelp(selector, commands))
 }
@@ -240,7 +240,8 @@ func (c Catalog) Select(selector string) ([]CommandSpec, bool) {
 }
 
 func (c *CLI) renderRootHelp() []byte {
-	directCommands, namespaces := rootTextHelpEntries(c.catalog.Commands())
+	commands := c.catalog.Commands()
+	directCommands, namespaces := rootTextHelpEntries(commands)
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
@@ -261,6 +262,62 @@ func (c *CLI) renderRootHelp() []byte {
 	fmt.Fprintf(&output, "コマンドを選ぶには '%s <namespace> --help' を実行してください。\n", ProgramName)
 	fmt.Fprintln(&output, "詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。")
 	fmt.Fprintf(&output, "結果・エラー・復旧を含む機械可読契約には '%s help <exact-command> --format agent' を実行してください。\n", ProgramName)
+	return output.Bytes()
+}
+
+func relevantHumanHelpRecipes(commands, relevant []CommandSpec) []HumanHelpRecipe {
+	available := make(map[string]struct{}, len(commands))
+	for _, command := range commands {
+		available[command.Path] = struct{}{}
+	}
+	relevantPaths := make(map[string]struct{}, len(relevant))
+	for _, command := range relevant {
+		relevantPaths[command.Path] = struct{}{}
+	}
+	recipes := make([]HumanHelpRecipe, 0)
+	seen := make(map[string]struct{})
+	for _, command := range commands {
+		for _, recipe := range command.HumanRecipes {
+			if _, exists := seen[recipe.Title]; exists {
+				continue
+			}
+			complete := true
+			touchesSelection := false
+			for _, step := range recipe.Steps {
+				if _, exists := available[step.Path]; !exists {
+					complete = false
+					break
+				}
+				if _, exists := relevantPaths[step.Path]; exists {
+					touchesSelection = true
+				}
+			}
+			if !complete || !touchesSelection {
+				continue
+			}
+			seen[recipe.Title] = struct{}{}
+			recipes = append(recipes, recipe)
+		}
+	}
+	return recipes
+}
+
+func renderHumanHelpRecipes(recipes []HumanHelpRecipe) []byte {
+	var output bytes.Buffer
+	fmt.Fprintln(&output, "よくある使い方:")
+	for _, recipe := range recipes {
+		fmt.Fprintf(&output, "  %s:\n", recipe.Title)
+		for _, step := range recipe.Steps {
+			fmt.Fprintf(&output, "    %s %s", ProgramName, step.Path)
+			if step.Args != "" {
+				fmt.Fprintf(&output, " %s", step.Args)
+			}
+			output.WriteByte('\n')
+		}
+		if recipe.Note != "" {
+			fmt.Fprintf(&output, "    %s\n", recipe.Note)
+		}
+	}
 	return output.Bytes()
 }
 
@@ -346,7 +403,7 @@ func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
 	return output.Bytes()
 }
 
-func renderCommandHelp(command CommandSpec) []byte {
+func renderCommandHelp(command CommandSpec, allCommands []CommandSpec) []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "使い方:")
 	fmt.Fprintln(&output, "  "+command.Usage())
@@ -366,6 +423,10 @@ func renderCommandHelp(command CommandSpec) []byte {
 	}
 	for _, reference := range command.ConsumedRefs() {
 		fmt.Fprintf(&output, "使用する参照: %s（入力 %s）\n", reference.Kind, reference.Argument)
+	}
+	if recipes := relevantHumanHelpRecipes(allCommands, []CommandSpec{command}); len(recipes) > 0 {
+		fmt.Fprintln(&output)
+		output.Write(renderHumanHelpRecipes(recipes))
 	}
 	fmt.Fprintln(&output)
 	namespace := commandNamespace(command.Path)

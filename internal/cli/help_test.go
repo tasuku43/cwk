@@ -39,7 +39,7 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		"  personal-tasks    1 コマンド\n" +
 		"  contacts          1 コマンド\n" +
 		"  rooms             6 コマンド\n" +
-		"  members           2 コマンド\n" +
+		"  members           3 コマンド\n" +
 		"  messages          7 コマンド\n" +
 		"  room-tasks        4 コマンド\n" +
 		"  files             3 コマンド\n" +
@@ -660,8 +660,9 @@ func TestMessageListScopedAgentHelpPublishesSelectionDefaults(t *testing.T) {
 }
 
 func TestEveryCatalogInputIsProjectedIntoExactHumanHelp(t *testing.T) {
-	for _, command := range DefaultCatalog().Commands() {
-		output := string(renderCommandHelp(command))
+	commands := DefaultCatalog().Commands()
+	for _, command := range commands {
+		output := string(renderCommandHelp(command, commands))
 		if len(command.Agent.Inputs) == 0 {
 			if strings.Contains(output, "\n入力:\n") {
 				t.Errorf("input-free command %q rendered an Inputs section\n%s", command.Path, output)
@@ -768,6 +769,140 @@ func TestHumanRootHelpGrowthDependsOnNamespacesNotLeafCommands(t *testing.T) {
 		if strings.Contains(output, command.Path) || strings.Contains(output, command.Summary) {
 			t.Fatalf("root help leaked leaf %q\n%s", command.Path, output)
 		}
+	}
+}
+
+func TestExactCommandHelpOmitsRecipesWithUnavailableSteps(t *testing.T) {
+	commands := DefaultCatalog().Commands()
+	withoutFind := make([]CommandSpec, 0, len(commands)-1)
+	for _, command := range commands {
+		if command.Path != "members find" {
+			withoutFind = append(withoutFind, command)
+		}
+	}
+	catalog := NewCatalog(withoutFind...)
+	messages, exists := catalog.Lookup("messages list")
+	if !exists {
+		t.Fatal("messages list is absent")
+	}
+	output := string(renderCommandHelp(messages, catalog.Commands()))
+	if strings.Contains(output, "人物名からその人の投稿を探す") || strings.Contains(output, "cwk members find") {
+		t.Fatalf("exact help retained an unavailable recipe:\n%s", output)
+	}
+	if !strings.Contains(output, "今日または昨日の会話を確認する") {
+		t.Fatalf("independent available recipe disappeared:\n%s", output)
+	}
+}
+
+func TestOnlyExactHumanHelpShowsRecipesRelatedToItsCommand(t *testing.T) {
+	tests := []struct {
+		args      []string
+		want      []string
+		forbidden []string
+	}{
+		{
+			args:      []string{"help"},
+			forbidden: []string{"よくある使い方", "人物名からその人の投稿を探す", "今日または昨日の会話を確認する"},
+		},
+		{
+			args:      []string{"help", "messages"},
+			forbidden: []string{"よくある使い方", "人物名からその人の投稿を探す", "今日または昨日の会話を確認する"},
+		},
+		{
+			args:      []string{"help", "members"},
+			forbidden: []string{"よくある使い方", "人物名からその人の投稿を探す", "今日または昨日の会話を確認する"},
+		},
+		{
+			args: []string{"help", "messages", "list"},
+			want: []string{"人物名からその人の投稿を探す", "今日または昨日の会話を確認する"},
+		},
+		{
+			args:      []string{"help", "members", "find"},
+			want:      []string{"人物名からその人の投稿を探す"},
+			forbidden: []string{"今日または昨日の会話を確認する"},
+		},
+		{
+			args:      []string{"help", "messages", "show"},
+			forbidden: []string{"よくある使い方", "人物名からその人の投稿を探す", "今日または昨日の会話を確認する"},
+		},
+	}
+	for _, test := range tests {
+		t.Run(strings.Join(test.args[1:], " "), func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			command := New(strings.NewReader(""), &stdout, &stderr)
+			if code := runCLI(command, test.args); code != ExitOK {
+				t.Fatalf("help code=%d stderr=%q", code, stderr.String())
+			}
+			for _, want := range test.want {
+				if !strings.Contains(stdout.String(), want) {
+					t.Errorf("related help lacks %q:\n%s", want, stdout.String())
+				}
+			}
+			for _, forbidden := range test.forbidden {
+				if strings.Contains(stdout.String(), forbidden) {
+					t.Errorf("related help contains unrelated recipe %q:\n%s", forbidden, stdout.String())
+				}
+			}
+		})
+	}
+}
+
+func TestHumanRecipesDoNotEnterAnyAgentHelpShape(t *testing.T) {
+	for _, args := range [][]string{
+		{"help", "--format", "agent"},
+		{"help", "messages", "list", "--format", "agent"},
+	} {
+		var stdout, stderr bytes.Buffer
+		command := New(strings.NewReader(""), &stdout, &stderr)
+		if code := runCLI(command, args); code != ExitOK {
+			t.Fatalf("agent help %v code=%d stderr=%q", args, code, stderr.String())
+		}
+		for _, forbidden := range []string{"よくある使い方", "人物名からその人の投稿を探す", "候補が複数なら account-ref", "昨日は today を yesterday"} {
+			if strings.Contains(stdout.String(), forbidden) {
+				t.Fatalf("agent help %v contains human recipe %q", args, forbidden)
+			}
+		}
+		if len(args) == 3 && (!strings.Contains(stdout.String(), `"path":"members find"`) ||
+			!strings.Contains(stdout.String(), `"summary":"ルーム内の表示名からメンバー候補を探す"`)) {
+			t.Fatalf("root agent index cannot select members find: %s", stdout.String())
+		}
+	}
+}
+
+func TestDefaultHumanRecipeStepsResolveToExactCatalogCommands(t *testing.T) {
+	catalog := DefaultCatalog()
+	for _, command := range catalog.Commands() {
+		for _, recipe := range command.HumanRecipes {
+			for _, step := range recipe.Steps {
+				if _, exists := catalog.Lookup(step.Path); !exists {
+					t.Errorf("recipe %q step %q is not an exact catalog command", recipe.Title, step.Path)
+				}
+			}
+		}
+	}
+}
+
+func TestMessagesListExactAgentHelpIncludesMemberFindSenderWorkflow(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	command := New(strings.NewReader(""), &stdout, &stderr)
+	if code := runCLI(command, []string{"help", "messages", "list", "--format", "agent"}); code != ExitOK {
+		t.Fatalf("messages list agent help code=%d stderr=%q", code, stderr.String())
+	}
+	var document agentDocument
+	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, workflow := range document.Workflows {
+		if workflow.ReferenceKind == "chatwork-account" && workflow.Producer.Path == "members find" &&
+			workflow.Producer.Field == "account_ref" && workflow.Consumer.Path == "messages list" &&
+			workflow.Consumer.Input == "--sender" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("messages list exact help lacks members find -> --sender workflow: %+v", document.Workflows)
 	}
 }
 

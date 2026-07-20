@@ -52,6 +52,13 @@ Using only root/namespace indexes, exact-command help, and one candidate's outpu
 7. select the canonical reference required by a declared next command;
 8. select recovery from typed failure metadata.
 
+The member-name sender scenario adds one bounded two-command workflow: choose
+`members find` from its outcome, preserve zero/one/multiple candidate ambiguity,
+take the selected canonical `account_ref` unchanged, and invoke
+`messages list --sender` without first dumping the message window. Its provider
+budget is one complete member read plus one bounded message read; external
+processing and full-message pre-dump budgets are both zero.
+
 Scoring compares answers with the shared key. Presentation-specific explanations are not accepted as substitutes for semantic correctness.
 
 ## Candidate eligibility

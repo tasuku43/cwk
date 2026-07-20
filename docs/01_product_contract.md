@@ -57,7 +57,10 @@ Human text discovery is hierarchical. Root help shows the directly runnable
 single-word utilities and each canonical top-level task namespace once; it does
 not repeat the namespace's leaf paths or summaries. `<namespace> --help` (or
 `help <namespace>`) then lists only that namespace's exact commands, and an
-exact trailing `--help` shows one command contract. Namespace membership,
+exact trailing `--help` shows one command contract plus any reviewed structured
+recipes whose exact steps contain that command. A recipe is omitted unless all
+of its steps exist in the active view. Root and namespace help do not render
+recipes. Namespace membership,
 counts, section-relative ordering, and selectors derive from `cli.Catalog`;
 namespace nodes are not implicit executable commands. Exact human help projects
 each declared input's required/repeatable state, source, allowed values,
@@ -66,6 +69,10 @@ help uses compact root and namespace indexes containing exact command-level
 outcomes and pointers. Only an exact-command selector returns the complete
 invocation, output, failure, recovery, authentication, mutation, and workflow
 contract.
+
+Human recipes are not included in any schema-v4 agent help. For agents, the
+exact leaf summary makes the discovery outcome selectable and exact-command
+agent help supplies complete inputs and canonical-reference workflows.
 
 ### User-selected command view
 
@@ -234,6 +241,17 @@ A future replacement becomes a public contract through a dedicated competition a
 Candidate worktrees are experimental. Their output is not public merely because it runs. Raw runs, score summaries, audit findings, and known benchmark defects remain evidence even when the experiment is inconclusive; they must not be rewritten to imply that the subsequently selected format won. The flat `messages list` adjacency refinement is a separate explicit owner compatibility decision, not a retroactive Competition 1 result.
 
 ## Filtering and task composition
+
+`members find --room <room-ref> --query <text>` is the supported bridge from
+an external display name to canonical account candidates inside one exact
+room. It performs exact, case-sensitive substring matching over the complete
+typed result of the existing room-members read, preserves provider order, and
+reports the query, source-member count, candidate count, completeness, display
+name, role, and reusable `account_ref`. It performs no case, whitespace, or
+Unicode normalization, ranking, fuzzy search, or automatic selection. Zero,
+one, and multiple candidates are equally valid discover outcomes. The query is
+application-owned and never becomes a Chatwork request parameter; the selected
+canonical reference is passed unchanged to `messages list --sender`.
 
 Omitting `messages list --window` selects the latest bounded `recent` window,
 which is the normal conversation-understanding outcome. Explicit

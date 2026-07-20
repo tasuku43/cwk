@@ -33,7 +33,7 @@ func TestEveryTaskIsValid(t *testing.T) {
 	tasks := []Task{
 		TaskAccountShow, TaskAccountStatus, TaskPersonalTasksList, TaskContactsList,
 		TaskRoomsList, TaskRoomsCreate, TaskRoomsShow, TaskRoomsUpdate, TaskRoomsLeave,
-		TaskRoomsDelete, TaskMembersList, TaskMembersReplace, TaskMessagesList,
+		TaskRoomsDelete, TaskMembersFind, TaskMembersList, TaskMembersReplace, TaskMessagesList,
 		TaskMessagesSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
 		TaskMessagesUpdate, TaskMessagesDelete, TaskRoomTasksList, TaskRoomTasksCreate,
 		TaskRoomTasksShow, TaskRoomTasksSetStatus, TaskFilesList, TaskFilesUpload,
@@ -41,8 +41,8 @@ func TestEveryTaskIsValid(t *testing.T) {
 		TaskInviteLinkDelete, TaskContactRequestsList, TaskContactRequestsAccept,
 		TaskContactRequestsReject,
 	}
-	if len(tasks) != 33 {
-		t.Fatalf("task count = %d, want 33", len(tasks))
+	if len(tasks) != 34 {
+		t.Fatalf("task count = %d, want 34", len(tasks))
 	}
 	seen := make(map[Task]struct{}, len(tasks))
 	for _, task := range tasks {
@@ -56,6 +56,37 @@ func TestEveryTaskIsValid(t *testing.T) {
 	}
 	if Task("rooms.get").Valid() {
 		t.Fatal("unknown provider-shaped task is valid")
+	}
+}
+
+func TestMemberFindRequestAndResultKeepDisplayTextSeparateFromIdentity(t *testing.T) {
+	room, err := NewReference(ReferenceRoom, "42")
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, err := NewReference(ReferenceAccount, "7")
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := Request{Task: TaskMembersFind, Room: room, MemberQuery: "篠原"}
+	result := Result{
+		Task:            TaskMembersFind,
+		Coverage:        Coverage{Kind: "provider_collection", Complete: true},
+		Accounts:        []Account{{Ref: account, Name: "篠原 花子", Role: "member"}},
+		MemberSelection: &MemberSelection{Query: "篠原", SourceCount: 2},
+	}
+	if err := result.ValidateFor(request); err != nil {
+		t.Fatal(err)
+	}
+
+	result.Accounts[0].Name = "山田 太郎"
+	if err := result.ValidateFor(request); err == nil || !strings.Contains(err.Error(), "non-matching") {
+		t.Fatalf("non-matching candidate error = %v", err)
+	}
+	result.Accounts = []Account{}
+	result.MemberSelection.Query = "別名"
+	if err := result.ValidateFor(request); err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("query mismatch error = %v", err)
 	}
 }
 

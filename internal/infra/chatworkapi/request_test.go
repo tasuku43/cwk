@@ -234,6 +234,14 @@ func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) 
 	}
 }
 
+func TestBuildRequestRejectsApplicationDerivedMemberFindTask(t *testing.T) {
+	input := completeRequest(chatwork.TaskMembersFind)
+	input.MemberQuery = "篠原"
+	if _, err := (&Client{}).buildRequest(input); err == nil {
+		t.Fatal("application-derived members.find task crossed the Chatwork request boundary")
+	}
+}
+
 func TestBuildMessageListRequestEmitsOnlyDocumentedForceQuery(t *testing.T) {
 	for name, test := range map[string]struct {
 		force bool

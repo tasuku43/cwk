@@ -57,7 +57,10 @@ An agent that knows the user's desired outcome should reach the exact command co
   likewise needs only its compact index and one exact-command request.
 - Human text help narrows from one root namespace entry to that namespace's
   exact commands instead of repeating every leaf command at the root. Direct
-  single-word utilities remain directly visible.
+  single-word utilities remain directly visible. Exact-command human help may
+  show reviewed multi-command recipes whose steps contain that command and are
+  all present in the active catalog. Root and namespace help remain indexes;
+  recipes never enter agent help or become a second routing registry.
 - Human and agent help are complementary projections: the human hierarchy
   reduces visual duplication, while the machine root retains exact outcomes so
   exact invocation detail remains at most one further request away. Complete
@@ -89,7 +92,7 @@ An agent that knows the user's desired outcome should reach the exact command co
   uncertain-save reconciliation. `help` describes commands; it does not
   reconcile saved state.
 - Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
-- Commands do not silently search again, choose a display-name match, or rely on hidden defaults.
+- Commands do not silently search again, choose a display-name match, or rely on hidden defaults. A dedicated discover command may filter a complete typed candidate collection by external display text, but it returns every match with canonical references and never promotes one match to an act-command identity.
 - The documented `messages list` default is the latest bounded `recent`
   window, matching the common conversation-understanding task. Provider-stateful
   differential retrieval is an explicit `--window changes` choice.
@@ -114,7 +117,9 @@ An agent that knows the user's desired outcome should reach the exact command co
   `doctor` and `version` paths.
 - Root and namespace agent-index entries retain the 512-byte per-command budget.
 - Human-help tests prove that every catalog command belongs to exactly one root
-  entry and round-trips through its canonical namespace.
+  entry and round-trips through its canonical namespace; exact-help recipe
+  steps resolve against the active catalog and disappear as a unit when any
+  step is hidden.
 - Agent-readiness tests reject command probing, whole-namespace contract
   loading, prose scraping, and undeclared follow-up calls.
 

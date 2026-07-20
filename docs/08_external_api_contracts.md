@@ -161,6 +161,14 @@ Primary sources: Chatwork's
 [limitation notice](https://developer.chatwork.com/changelog/2022-09-06-notice),
 and [notation guide](https://developer.chatwork.com/docs/message-notation).
 
+`members find --query` is an application-owned projection of the existing
+complete `GET /rooms/{room_id}/members` response. The provider request remains
+identical to `members list`: one room path and no query parameter. Application
+preserves source order, filters typed display names by exact case-sensitive
+substring, and returns every canonical candidate with query/source-count
+provenance. Infrastructure must reject or remain unreachable for a leaked
+`members.find` provider task or nonempty member query.
+
 `messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
 `--count`, and `--context` are application-owned selection inputs over the
 single bounded message-list response. `--resolve-relations` is a separate

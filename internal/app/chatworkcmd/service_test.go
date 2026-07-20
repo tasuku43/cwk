@@ -3,12 +3,62 @@ package chatworkcmd
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/tasuku43/cwk/internal/domain/authn"
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
+
+func TestExecuteFindsMemberCandidatesAfterOneQueryFreeMemberRead(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	accounts := []chatwork.Account{
+		{Ref: relationshipReference(t, chatwork.ReferenceAccount, "7"), Name: "篠原 花子", Role: "member"},
+		{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8"), Name: "山田 太郎", Role: "admin"},
+		{Ref: relationshipReference(t, chatwork.ReferenceAccount, "9"), Name: "篠原 太郎", Role: "readonly"},
+	}
+	port := &fakePort{result: chatwork.Result{
+		Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+		Accounts: accounts,
+	}}
+	request := chatwork.Request{Task: chatwork.TaskMembersFind, Room: room, MemberQuery: "篠原"}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port.calls != 1 || port.request.Task != chatwork.TaskMembersList || port.request.MemberQuery != "" || port.request.Room != room {
+		t.Fatalf("provider call = %d request=%+v", port.calls, port.request)
+	}
+	want := []chatwork.Account{accounts[0], accounts[2]}
+	if !reflect.DeepEqual(result.Accounts, want) || result.Task != chatwork.TaskMembersFind {
+		t.Fatalf("member candidates = %+v", result)
+	}
+	if result.MemberSelection == nil || result.MemberSelection.Query != "篠原" || result.MemberSelection.SourceCount != 3 {
+		t.Fatalf("member selection = %+v", result.MemberSelection)
+	}
+}
+
+func TestExecuteMemberFindPreservesExplicitEmptyCandidateSet(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	port := &fakePort{result: chatwork.Result{
+		Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+		Accounts: []chatwork.Account{
+			{Ref: relationshipReference(t, chatwork.ReferenceAccount, "7"), Name: "山田 太郎", Role: "member"},
+		},
+	}}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMembersFind, Room: room, MemberQuery: "篠原",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Accounts == nil || len(result.Accounts) != 0 || result.MemberSelection == nil || result.MemberSelection.SourceCount != 1 {
+		t.Fatalf("empty candidates = %+v", result)
+	}
+}
 
 type fakePort struct {
 	calls   int

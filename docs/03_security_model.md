@@ -366,6 +366,12 @@ This projection protects terminal and TSV/JSON structure. It does **not** detect
 
 Exact-command agent help publishes this boundary in `io_contract`: `external_text_trust` is `untrusted_data`, `external_text_projection` is `visible_escape`, and `opaque_reference_policy` is `validated_exact_bytes`. Compact root and namespace indexes contain no I/O contract or external text.
 
+Display-name discovery does not weaken this boundary. A `members find` query is
+text, not an account identity; matching external member names remain untrusted
+and visibly escaped, and all matches retain validated exact account references.
+The discover command never authorizes or automatically invokes a reference-
+consuming command, including when exactly one candidate is returned.
+
 A derived project must decide:
 
 - which output modes are stable;

@@ -76,6 +76,7 @@ const (
 	TaskRoomsUpdate           Task = "rooms.update"
 	TaskRoomsLeave            Task = "rooms.leave"
 	TaskRoomsDelete           Task = "rooms.delete"
+	TaskMembersFind           Task = "members.find"
 	TaskMembersList           Task = "members.list"
 	TaskMembersReplace        Task = "members.replace"
 	TaskMessagesList          Task = "messages.list"
@@ -260,6 +261,7 @@ type Request struct {
 	DescriptionSet            bool
 	FilePath                  string
 	FileMessage               string
+	MemberQuery               string
 	MessageFilter             MessageFilter
 	MessageRelationFetchLimit int
 }
@@ -304,11 +306,21 @@ func (r Request) Validate() error {
 	}
 	for name, value := range map[string]string{
 		"name": r.Name, "description": r.Description, "body": r.Body,
-		"file message": r.FileMessage,
+		"file message": r.FileMessage, "member query": r.MemberQuery,
 	} {
 		if err := validateText(name, value, 65535); err != nil {
 			return err
 		}
+	}
+	if r.Task == TaskMembersFind {
+		if r.Room.Value == "" {
+			return fmt.Errorf("member discovery requires a room reference")
+		}
+		if r.MemberQuery == "" || len(r.MemberQuery) > 255 {
+			return fmt.Errorf("member discovery query must contain 1 to 255 UTF-8 bytes")
+		}
+	} else if r.MemberQuery != "" {
+		return fmt.Errorf("member query is only valid for members.find")
 	}
 	if r.Task == TaskRoomsCreate {
 		if r.Account.Value == "" {
@@ -488,7 +500,7 @@ func (t Task) Valid() bool {
 	switch t {
 	case TaskAccountShow, TaskAccountStatus, TaskPersonalTasksList, TaskContactsList,
 		TaskRoomsList, TaskRoomsCreate, TaskRoomsShow, TaskRoomsUpdate, TaskRoomsLeave,
-		TaskRoomsDelete, TaskMembersList, TaskMembersReplace, TaskMessagesList,
+		TaskRoomsDelete, TaskMembersFind, TaskMembersList, TaskMembersReplace, TaskMessagesList,
 		TaskMessagesSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
 		TaskMessagesUpdate, TaskMessagesDelete, TaskRoomTasksList, TaskRoomTasksCreate,
 		TaskRoomTasksShow, TaskRoomTasksSetStatus, TaskFilesList, TaskFilesUpload,
@@ -693,6 +705,14 @@ type MessageSelection struct {
 	AnchorSequences []int
 }
 
+// MemberSelection records how the application projected one complete room
+// member collection by display-name query. A result remains a candidate set;
+// it never declares that one matching external name is the selected identity.
+type MemberSelection struct {
+	Query       string
+	SourceCount int
+}
+
 // Result is a typed semantic union. Only fields relevant to Task are populated.
 type Result struct {
 	Task     Task
@@ -717,6 +737,7 @@ type Result struct {
 	ReadState                 *ReadState
 	Acknowledgement           *Acknowledgement
 	MembershipCounts          *MembershipCounts
+	MemberSelection           *MemberSelection
 	MessageSelection          *MessageSelection
 	MessageReachability       *MessageReachability
 	MessageRelationResolution *MessageRelationResolution
@@ -745,6 +766,9 @@ func (r Result) Validate() error {
 	if r.Task != TaskMessagesList && r.MessageRelationResolution != nil {
 		return fmt.Errorf("Chatwork result message relation resolution is only valid for messages.list")
 	}
+	if r.Task != TaskMembersFind && r.MemberSelection != nil {
+		return fmt.Errorf("Chatwork result member selection is only valid for members.find")
+	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
 	}
@@ -758,7 +782,7 @@ func (r Result) Validate() error {
 		want = "status"
 	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
 		want = "tasks"
-	case TaskContactsList, TaskMembersList:
+	case TaskContactsList, TaskMembersFind, TaskMembersList:
 		want = "accounts"
 	case TaskRoomsList, TaskRoomsShow:
 		want = "rooms"
@@ -788,6 +812,19 @@ func (r Result) Validate() error {
 	}
 
 	switch r.Task {
+	case TaskMembersFind:
+		if r.MemberSelection == nil {
+			return fmt.Errorf("members.find result is missing selection metadata")
+		}
+		if err := validateText("member selection query", r.MemberSelection.Query, 255); err != nil || r.MemberSelection.Query == "" {
+			return fmt.Errorf("members.find result query is invalid")
+		}
+		if r.MemberSelection.SourceCount < len(r.Accounts) {
+			return fmt.Errorf("members.find source count is smaller than its candidate count")
+		}
+		if !r.Coverage.Complete {
+			return fmt.Errorf("members.find requires a complete room member source")
+		}
 	case TaskRoomsShow:
 		if len(r.Rooms) != 1 {
 			return fmt.Errorf("rooms.show result must contain exactly one room")
@@ -824,6 +861,15 @@ func (r Result) ValidateFor(request Request) error {
 	}
 
 	switch r.Task {
+	case TaskMembersFind:
+		if r.MemberSelection.Query != request.MemberQuery {
+			return fmt.Errorf("members.find result query does not match the request")
+		}
+		for _, account := range r.Accounts {
+			if !strings.Contains(account.Name, request.MemberQuery) {
+				return fmt.Errorf("members.find result contains a non-matching account")
+			}
+		}
 	case TaskMessagesList:
 		if r.MessageRoom != request.Room {
 			return fmt.Errorf("Chatwork result message room does not match the request")
@@ -940,7 +986,7 @@ func (r Result) validateVariantFacts() error {
 	switch r.Task {
 	case TaskAccountShow, TaskContactRequestsAccept:
 		return validateResultAccount("account", *r.Account, false)
-	case TaskContactsList, TaskMembersList:
+	case TaskContactsList, TaskMembersFind, TaskMembersList:
 		for index, account := range r.Accounts {
 			if err := validateResultAccount(fmt.Sprintf("account[%d]", index), account, false); err != nil {
 				return err

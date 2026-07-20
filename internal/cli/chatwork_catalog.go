@@ -34,7 +34,7 @@ func chatworkCommandSpecs() []CommandSpec {
 	invite := string(chatwork.ReferenceInvite)
 	request := string(chatwork.ReferenceRequest)
 
-	return []CommandSpec{
+	commands := []CommandSpec{
 		chatworkRead("account show", "認証済みのChatworkアカウントを表示する", "", RoleDiscover,
 			"chatwork.account.inspect", "設定済みのChatworkトークンに結び付いたアカウントを正確に確認する",
 			nil, fields(refField("account_ref", account, "ルーム作成とアカウント絞り込みで使用できる正規のアカウント参照。"), textField("name", "アカウントの表示名。"), textField("organization", "存在する場合の、空でない人間可読な組織名と部署情報。")), chatwork.TaskAccountShow),
@@ -72,6 +72,12 @@ func chatworkCommandSpecs() []CommandSpec {
 			"chatwork.rooms.manage", "選択したグループチャットとその中のデータを完全に削除する",
 			[]CommandInput{refFlag("--room", true, room, "削除する完全一致のルーム。"), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "削除したルームの正規参照。")), chatwork.TaskRoomsDelete, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityUnbounded, no, yes, yes)),
+		chatworkRead("members find", "ルーム内の表示名からメンバー候補を探す", "--room <room-ref> --query <text>", RoleDiscover,
+			"chatwork.members.manage", "完全一致するルームの全メンバーから表示名を部分一致で絞り、曖昧さを残した正規 account-ref 候補を返す",
+			[]CommandInput{
+				refFlag("--room", true, room, "候補を探す完全一致のルーム。rooms list で得た room_ref を変更せずに渡します。"),
+				textFlag("--query", true, "表示名に含まれる1〜255 UTF-8バイトの文字列。大文字小文字、空白、Unicodeを正規化せず完全一致の部分文字列として照合し、複数候補を自動選択しません。"),
+			}, fields(textField("query", "照合に使った引用済み文字列。"), integerField("source_count", "照合した完全なルームメンバー数。"), integerField("candidate_count", "表示名が部分一致した候補数。"), refField("account_ref", account, "候補の正規アカウント参照。選択後は変更せず messages list --sender へ渡します。"), textField("name", "ターミナルで安全な引用済み候補表示名。"), textField("role", "候補のルーム権限。"), completeField()), chatwork.TaskMembersFind),
 		chatworkRead("members list", "完全一致するルームのメンバーを一覧表示する", "--room <room-ref>", RoleAct,
 			"chatwork.members.manage", "完全一致する一つのルームについて、メンバーの識別情報と権限を固定位置スキーマで一覧表示する",
 			[]CommandInput{refFlag("--room", true, room, "メンバー構成を確認する完全一致のルーム。")}, fields(refField("account_ref", account, "1番目にあるメンバーアカウントの正規参照。"), textField("name", "2番目にある、ターミナルで安全な引用済みメンバー表示名。"), textField("role", "3番目にあるメンバーの権限。"), completeField()), chatwork.TaskMembersList),
@@ -90,7 +96,7 @@ func chatworkCommandSpecs() []CommandSpec {
 				textFlag("--on", false, "Asia/Tokyo の一暦日を YYYY-MM-DD、today、yesterday のいずれかで選びます。相対日はコマンド開始時に一度だけ具体化し、--since/--until とは同時に指定できません。"),
 				integerFlag("--start-index", false, "任意の送信者・期間照合後に、型付き送信時刻が新しい順で選択を始める1始まりの順位（1〜100）です。省略時は1です。"),
 				integerFlag("--count", false, "--start-index から返す主要メッセージの最大件数（1〜100）です。終了順位ではありません。--start-index 11 --count 20 は順位11〜30を選びます。直接の返信コンテキストにより、表示件数はこの値を超えることがあります。"),
-				repeatedRefFlag("--sender", false, account, "プロバイダーの上限付き範囲内で、完全一致の送信者アカウントに絞り込みます。列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件です。"),
+				repeatedRefFlag("--sender", false, account, "プロバイダーの上限付き範囲内で、完全一致の送信者アカウントに絞り込みます。表示名しか分からない場合は先に members find で候補を取得し、選んだ account_ref を変更せず渡します。列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件です。"),
 				enumFlag("--context", false, "送信者、期間、順位のいずれかの選択とともに使用し、関連レコードを含めない（none、既定値）か、上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）かを選択します。返信コンテキストは主要期間外を含む場合があります。", "none", "replies"),
 				integerFlag("--resolve-relations", false, "表示対象と補足メッセージが参照する同一ルームの未解決返信元を、正規 message_ref による追加の一件取得で再帰的に補う最大件数（0〜100）です。既定値は5、0は追加取得を無効化します。元の100件内にある返信元と重複IDは枠を消費せず、循環は一度だけ扱います。"),
 			}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
@@ -169,6 +175,30 @@ func chatworkCommandSpecs() []CommandSpec {
 			[]CommandInput{refFlag("--request", true, request, "受信済み承認依頼の完全一致参照。"), confirmFlag(confirmDestructive)}, fields(refField("request_ref", request, "拒否したコンタクト承認依頼の正規参照。")), chatwork.TaskContactRequestsReject, confirmDestructive, "contact-requests list",
 			writeMutation("chatwork-contact-request", "--request", "", operation.CardinalityOne, no, yes, yes)),
 	}
+	for index := range commands {
+		if commands[index].Path != "messages list" {
+			continue
+		}
+		commands[index].HumanRecipes = []HumanHelpRecipe{
+			{
+				Title: "人物名からその人の投稿を探す",
+				Steps: []HumanHelpRecipeStep{
+					{Path: "members find", Args: "--room <room-ref> --query <name>"},
+					{Path: "messages list", Args: "--room <room-ref> --sender <account-ref>"},
+				},
+				Note: "候補が複数なら account-ref を勝手に選ばず、対象を確認してから2段目へ進みます。",
+			},
+			{
+				Title: "今日または昨日の会話を確認する",
+				Steps: []HumanHelpRecipeStep{
+					{Path: "messages list", Args: "--room <room-ref> --on today"},
+				},
+				Note: "昨日は today を yesterday に置き換えます。",
+			},
+		}
+		break
+	}
+	return commands
 }
 
 const (

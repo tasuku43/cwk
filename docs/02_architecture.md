@@ -193,7 +193,7 @@ outcomes, so they cannot imply an unknown room-create result.
 
 ## Catalog as the public source of truth
 
-`cli.Catalog` contains every public `cli.CommandSpec`. Routing, root help, command help, uniqueness checks, and catalog-wide effect tests derive from it.
+`cli.Catalog` contains every public `cli.CommandSpec`. Routing, root help, command help, uniqueness checks, catalog-wide effect tests, and structured human-help recipes derive from it.
 
 `DefaultCatalog` remains the complete public, capability, API-coverage, and
 release ledger. Each leaf declares whether it is configurable. Production
@@ -220,6 +220,13 @@ visible consumer, but each visible required-reference consumer must have a
 reachable visible producer and every visible recovery action must resolve
 inside the view. Selection never auto-enables another command to repair an
 invalid graph.
+
+Human recipes are structured metadata attached to a public `CommandSpec`, not
+another dispatcher. Exact-command text help scans active catalog metadata,
+retains only recipes whose steps contain the selected command, and renders one
+only when every structured exact step exists in the active view. Root and
+namespace text help remain indexes. Recipes are absent from every agent-help
+shape, whose bounded discovery contract is unchanged.
 
 `config` is one fixed-`tool_local`-target write and the sole public
 command-selection command. CLI builds its checkbox rows from
@@ -294,6 +301,14 @@ configuration, and stdin. A non-argv source cannot bypass terminal-safe help
 structure.
 
 Do not add a second command list for documentation or dispatch. Internal adapters and generated operations are not public merely because they exist. A capability becomes public only when a user-task use case and command specification deliberately expose it.
+
+`members find` is an application-derived read task. The CLI binds an exact room
+reference and non-identity display-name query; application clears that query,
+executes the existing `members.list` provider port task once, filters the
+complete typed account collection with exact substring semantics, changes the
+result task back to `members.find`, and attaches source-count/query provenance.
+Infrastructure therefore owns no display-name search policy or undocumented
+query parameter, while presentation receives only a validated candidate set.
 
 At minimum, catalog validation rejects:
 

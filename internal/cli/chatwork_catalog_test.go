@@ -26,8 +26,8 @@ func TestChatworkCatalogContainsEveryTypedTaskOnce(t *testing.T) {
 		}
 		seen[task] = command.Path
 	}
-	if len(seen) != 33 {
-		t.Fatalf("typed Chatwork task bindings = %d, want 33", len(seen))
+	if len(seen) != 34 {
+		t.Fatalf("typed Chatwork task bindings = %d, want 34", len(seen))
 	}
 }
 
@@ -116,7 +116,7 @@ func TestInviteLinkCatalogPublishesCompleteReplacementAndDescription(t *testing.
 
 func TestPresentationChangesKeepSuccessFormatsTextOnly(t *testing.T) {
 	changed := map[string]bool{
-		"contacts list": true, "rooms list": true, "members list": true,
+		"contacts list": true, "rooms list": true, "members find": true, "members list": true,
 		"personal-tasks list": true, "room-tasks list": true, "files list": true,
 		"contact-requests list": true, "messages list": true, "messages show": true,
 	}
@@ -129,6 +129,34 @@ func TestPresentationChangesKeepSuccessFormatsTextOnly(t *testing.T) {
 			command.Agent.Output.JSONSchemaVersion != 0 || command.Agent.Output.JSONEnvelope != "" {
 			t.Fatalf("%s success output contract changed: %+v", command.Path, command.Agent.Output)
 		}
+	}
+}
+
+func TestMembersFindCatalogPublishesCandidateDiscoveryWithoutAutomaticSelection(t *testing.T) {
+	var find CommandSpec
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path == "members find" {
+			find = command
+			break
+		}
+	}
+	if find.Path == "" {
+		t.Fatal("members find is absent from the Chatwork catalog")
+	}
+	if find.Role != RoleDiscover || find.Effect.String() != "read" || find.Usage() != "cwk members find --room <room-ref> --query <text>" {
+		t.Fatalf("members find command = %+v", find)
+	}
+	inputs := make(map[string]CommandInput, len(find.Agent.Inputs))
+	for _, input := range find.Agent.Inputs {
+		inputs[input.Name] = input
+	}
+	if !inputs["--room"].Required || inputs["--room"].ReferenceKind != "chatwork-room" ||
+		!inputs["--query"].Required || inputs["--query"].ReferenceKind != "" ||
+		!strings.Contains(inputs["--query"].Description, "複数候補を自動選択しません") {
+		t.Fatalf("members find inputs = %+v", inputs)
+	}
+	if !strings.Contains(find.Agent.Outcome, "曖昧さを残した") {
+		t.Fatalf("members find outcome = %q", find.Agent.Outcome)
 	}
 }
 
@@ -170,7 +198,8 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	sender := inputs["--sender"]
 	if sender.Required || !sender.Repeatable || sender.ReferenceKind != "chatwork-account" ||
 		!strings.Contains(sender.Description, "繰り返し") || !strings.Contains(sender.Description, "OR") ||
-		!strings.Contains(sender.Description, "プロバイダーの上限付き範囲") || !strings.Contains(sender.Description, "100") {
+		!strings.Contains(sender.Description, "プロバイダーの上限付き範囲") || !strings.Contains(sender.Description, "100") ||
+		!strings.Contains(sender.Description, "members find") || !strings.Contains(sender.Description, "変更せず") {
 		t.Fatalf("sender input contract = %+v", sender)
 	}
 	context := inputs["--context"]
