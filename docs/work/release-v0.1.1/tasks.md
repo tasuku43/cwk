@@ -52,14 +52,19 @@
 - [x] Download the five archives and `checksums.txt`, verify the exact filename
   set, and recompute every checksum.
 - [x] Release metadata identifies `v0.1.1` and the reviewed commit.
-- [ ] Dispatch the stable-tag-only recovery workflow and confirm it revalidates
+- [x] Dispatch the stable-tag-only recovery workflow and confirm it revalidates
   the immutable Release before crossing the App boundary.
-- [ ] The shared-tap pull request changes only `Formula/cwk.rb`.
-- [ ] The Formula pull request merges through reviewed automation.
-- [ ] A clean `brew install tasuku43/tap/cwk` succeeds after merge.
+- [x] The shared-tap pull request changes only `Formula/cwk.rb`. Evidence:
+  App-authored `tasuku43/homebrew-tap#27`.
+- [x] The Formula pull request merges through reviewed automation. Evidence:
+  tap run `29699636925` passed syntax and auto-merge checks.
+- [x] A clean `brew install tasuku43/tap/cwk` succeeds after merge. Evidence:
+  installed version `0.1.1` at release commit `1362038fb860f4ddc2e6b50719811dd396a68df4`.
+- [x] The installed binary accepts a symbolic-link `XDG_CONFIG_HOME` in both
+  `doctor` and interactive `config`; the latter exits without writing on `q`.
 
 ## Hand off
 
-- [ ] Record final URLs and bounded evidence without credential values.
-- [ ] Mark the goal complete only after the post-merge clean install succeeds.
-- [ ] Leave any non-blocking follow-up explicit.
+- [x] Record final URLs and bounded evidence without credential values.
+- [x] Mark the goal complete only after the post-merge clean install succeeds.
+- [x] Leave any non-blocking follow-up explicit.

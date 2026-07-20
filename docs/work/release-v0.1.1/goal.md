@@ -1,6 +1,6 @@
 # Work Goal: Release cwk v0.1.1
 
-- Status: In progress
+- Status: Complete
 - Owner: Release maintainer
 - Target: v0.1.1 on 2026-07-19
 - Related ADRs: [ADR 0004](../../decisions/0004-shared-homebrew-tap.md)
@@ -39,9 +39,9 @@ the current tap-trust workflow.
   GitHub Release with five archives and `checksums.txt`.
 - [x] Published checksums match every archive and release metadata identifies
   the reviewed commit.
-- [ ] The stable workflow proposes only `Formula/cwk.rb` to
+- [x] The stable workflow proposes only `Formula/cwk.rb` to
   `tasuku43/homebrew-tap` through the reviewed App boundary.
-- [ ] After the Formula pull request merges, a clean
+- [x] After the Formula pull request merges, a clean
   `brew install tasuku43/tap/cwk` succeeds.
 - [x] No credential value, private identifier, personal data, or mutable
   private asset URL is published.

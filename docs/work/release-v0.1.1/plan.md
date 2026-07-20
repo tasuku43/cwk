@@ -1,6 +1,6 @@
 # Work Plan: Release cwk v0.1.1
 
-- Status: Accepted
+- Status: Complete
 - Goal: [goal.md](goal.md)
 - Context: [context.md](context.md)
 

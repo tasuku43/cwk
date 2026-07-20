@@ -43,6 +43,21 @@
   The correction peels the already validated annotated tag with
   `git rev-parse --verify "${tag}^{commit}"`; a negative mutation test rejects
   replacing that immutable binding with `HEAD`.
+- Corrected main CI run `29699185052` passed. Recovery run `29699364723` then
+  passed exact tag/full-gate preflight, read-only six-asset/checksum validation,
+  exact-revision Formula render/strict audit, fresh-runner App token creation,
+  and Formula-only tap proposal.
+- App-authored <https://github.com/tasuku43/homebrew-tap/pull/27> changed only
+  `Formula/cwk.rb`; syntax and auto-merge checks in run `29699636925` passed and
+  the PR merged on 2026-07-19. The merged Formula is byte-identical to the
+  locally strict-audited Formula.
+- A clean Homebrew rollout removed only the old Cellar-managed `cwk 0.1.0`,
+  retained external configuration, and installed `cwk 0.1.1`. The installed
+  binary reports `cwk 0.1.1 (1362038fb860f4ddc2e6b50719811dd396a68df4)`.
+- Installed-binary `cwk doctor` passed. A separate temporary
+  `XDG_CONFIG_HOME` symbolic link also passed `cwk doctor`; `cwk config` opened
+  its TUI and exited with `q` without a write, directly replaying the original
+  failed prerequisite.
 
 ## Relevant structure
 
@@ -98,8 +113,11 @@
 
 ## Unknowns
 
-- [ ] Record the recovery workflow run and resulting Formula pull request.
-- [ ] Record the Formula merge and clean Homebrew installation.
+- None blocking release completion.
+- Non-blocking follow-up: pinned `actions/create-github-app-token` currently
+  warns that `app-id` is deprecated in favor of `client-id`; migration must be
+  reviewed with the pinned action contract and secret naming before changing
+  the release boundary.
 
 ## Reviewed release notes
 
