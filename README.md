@@ -1,10 +1,13 @@
 ![cwk — ノイズを削り、文脈を残すChatwork CLI](docs/assets/readme/cwk-hero.png)
 
-# cwk
+---
 
-> エージェントのためのChatwork CLI。
+<p align="center"><strong>エージェントのためのChatwork CLI。</strong></p>
 
-`cwk` は、Chatworkでの作業をエージェントが迷わず進めるためのCLIです。長いAPIレスポンスをそのまま返すのではなく、必要な情報、関係、次の操作に使える参照をコンパクトにまとめます。
+<p align="center">
+  Chatworkでの作業に必要な情報、関係、次の操作に使える参照を、<br>
+  エージェントが迷わない形へコンパクトにまとめます。
+</p>
 
 ## インストール
 
