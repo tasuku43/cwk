@@ -252,12 +252,6 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			request.Status = value
 		case "--limit":
 			switch request.Task {
-			case chatwork.TaskMessagesList:
-				limit, err := strconv.Atoi(value)
-				if err != nil || limit < 1 || limit > chatwork.MaxMessageSelectionLimit {
-					return chatwork.Request{}, fmt.Errorf("--limit は 1 から %d までの整数で指定してください", chatwork.MaxMessageSelectionLimit)
-				}
-				request.MessageFilter.Limit = limit
 			case chatwork.TaskRoomTasksCreate:
 				limit, err := strconv.ParseInt(value, 10, 64)
 				if err != nil || limit <= 0 {
@@ -267,6 +261,24 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			default:
 				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --limit に対応していません")
 			}
+		case "--start-index":
+			if request.Task != chatwork.TaskMessagesList {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --start-index に対応していません")
+			}
+			start, err := strconv.Atoi(value)
+			if err != nil || start < 1 || start > chatwork.MaxMessageSelectionCount {
+				return chatwork.Request{}, fmt.Errorf("--start-index は 1 から %d までの整数で指定してください", chatwork.MaxMessageSelectionCount)
+			}
+			request.MessageFilter.StartIndex = start
+		case "--count":
+			if request.Task != chatwork.TaskMessagesList {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --count に対応していません")
+			}
+			count, err := strconv.Atoi(value)
+			if err != nil || count < 1 || count > chatwork.MaxMessageSelectionCount {
+				return chatwork.Request{}, fmt.Errorf("--count は 1 から %d までの整数で指定してください", chatwork.MaxMessageSelectionCount)
+			}
+			request.MessageFilter.Count = count
 		case "--limit-type":
 			request.LimitType = value
 		case "--window":
@@ -298,7 +310,11 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 		request.InviteEnabled = true
 	}
 	if request.Task == chatwork.TaskMessagesList &&
-		(len(request.MessageFilter.Senders) > 0 || request.MessageFilter.Limit > 0) &&
+		request.MessageFilter.Count > 0 && request.MessageFilter.StartIndex == 0 {
+		request.MessageFilter.StartIndex = 1
+	}
+	if request.Task == chatwork.TaskMessagesList &&
+		(len(request.MessageFilter.Senders) > 0 || request.MessageFilter.StartIndex > 0 || request.MessageFilter.Count > 0) &&
 		request.MessageFilter.Context == "" {
 		request.MessageFilter.Context = chatwork.MessageContextNone
 	}

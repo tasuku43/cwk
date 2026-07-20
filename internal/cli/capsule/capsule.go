@@ -211,8 +211,17 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		coverage.Complete, accessValue, countUnresolved(messages), countUnknownRelations(messages))
 	if selection != nil {
 		fmt.Fprintf(output, "selection source-count=%d", selection.SourceCount)
-		if selection.Filter.Limit > 0 {
-			fmt.Fprintf(output, " candidate-count=%d limit=%d", selection.CandidateCount, selection.Filter.Limit)
+		if selection.Filter.StartIndex > 0 || selection.Filter.Count > 0 {
+			fmt.Fprintf(output, " candidate-count=%d start-index=%d", selection.CandidateCount, selection.Filter.StartIndex)
+		}
+		if selection.Filter.Count > 0 {
+			fmt.Fprintf(output, " count=%d", selection.Filter.Count)
+		}
+		if selection.Filter.StartIndex > 0 || selection.Filter.Count > 0 {
+			fmt.Fprintf(output, " items-per-page=%d", selection.ItemsPerPage)
+		}
+		if selection.NextStartIndex > 0 {
+			fmt.Fprintf(output, " next-start-index=%d", selection.NextStartIndex)
 		}
 		if len(selection.Filter.Senders) > 0 {
 			fmt.Fprintf(output, " senders=%s", bracketedReferences(selection.Filter.Senders))

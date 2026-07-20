@@ -9,14 +9,15 @@ import (
 
 // assembleMessageWindow resolves one complete bounded source window before
 // selecting newest primary messages. Sender matching forms one OR candidate
-// set, Limit selects that set by typed send time without reordering output, and
-// reply context is exactly one hop from the selected anchors.
+// set, StartIndex and Count select candidates by typed send time without
+// reordering output, and reply context is exactly one hop from the selected
+// anchors.
 func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageFilter) ([]chatwork.Message, *chatwork.MessageSelection, error) {
 	resolvedSource, err := ResolveMessageRelations(messages)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(filter.Senders) == 0 && filter.Limit == 0 {
+	if len(filter.Senders) == 0 && filter.StartIndex == 0 && filter.Count == 0 {
 		return resolvedSource, nil, nil
 	}
 
@@ -41,7 +42,7 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 	}
 
 	anchors := append([]bool(nil), candidates...)
-	if filter.Limit > 0 && len(candidateIndexes) > filter.Limit {
+	if filter.StartIndex > 0 || filter.Count > 0 {
 		sort.Slice(candidateIndexes, func(left, right int) bool {
 			leftIndex, rightIndex := candidateIndexes[left], candidateIndexes[right]
 			if resolvedSource[leftIndex].SendTime == resolvedSource[rightIndex].SendTime {
@@ -52,7 +53,15 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 			return resolvedSource[leftIndex].SendTime > resolvedSource[rightIndex].SendTime
 		})
 		anchors = make([]bool, len(resolvedSource))
-		for _, index := range candidateIndexes[:filter.Limit] {
+		first := filter.StartIndex - 1
+		if first > len(candidateIndexes) {
+			first = len(candidateIndexes)
+		}
+		last := len(candidateIndexes)
+		if filter.Count > 0 && first+filter.Count < last {
+			last = first + filter.Count
+		}
+		for _, index := range candidateIndexes[first:last] {
 			anchors[index] = true
 		}
 	}
@@ -117,6 +126,12 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 		CandidateCount:  len(candidateIndexes),
 		SourceSequences: sourceSequences,
 		AnchorSequences: anchorSequences,
+	}
+	if filter.StartIndex > 0 || filter.Count > 0 {
+		selection.ItemsPerPage = len(anchorSequences)
+	}
+	if filter.Count > 0 && filter.StartIndex-1+len(anchorSequences) < len(candidateIndexes) {
+		selection.NextStartIndex = filter.StartIndex + len(anchorSequences)
 	}
 	return selected, selection, nil
 }

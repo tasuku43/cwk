@@ -11,7 +11,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
-func TestAssembleMessageWindowLimitRanksTypedSendTimeThenPreservesProviderOrder(t *testing.T) {
+func TestAssembleMessageWindowCountRanksTypedSendTimeThenPreservesProviderOrder(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
@@ -25,7 +25,7 @@ func TestAssembleMessageWindowLimitRanksTypedSendTimeThenPreservesProviderOrder(
 	}
 
 	selected, selection, err := assembleMessageWindow(messages, chatwork.MessageFilter{
-		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextNone, Limit: 2,
+		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextNone, StartIndex: 1, Count: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -42,7 +42,7 @@ func TestAssembleMessageWindowLimitRanksTypedSendTimeThenPreservesProviderOrder(
 	}
 }
 
-func TestAssembleMessageWindowLimitWithoutSenderRanksTypedSendTime(t *testing.T) {
+func TestAssembleMessageWindowCountWithoutSenderRanksTypedSendTime(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	messages := []chatwork.Message{
@@ -52,7 +52,7 @@ func TestAssembleMessageWindowLimitWithoutSenderRanksTypedSendTime(t *testing.T)
 	}
 
 	selected, selection, err := assembleMessageWindow(messages, chatwork.MessageFilter{
-		Context: chatwork.MessageContextNone, Limit: 1,
+		Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -67,7 +67,7 @@ func TestAssembleMessageWindowLimitWithoutSenderRanksTypedSendTime(t *testing.T)
 	}
 }
 
-func TestAssembleMessageWindowLimitRanksOneCombinedSenderORCandidateSet(t *testing.T) {
+func TestAssembleMessageWindowCountRanksOneCombinedSenderORCandidateSet(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
@@ -80,7 +80,7 @@ func TestAssembleMessageWindowLimitRanksOneCombinedSenderORCandidateSet(t *testi
 	}
 
 	selected, selection, err := assembleMessageWindow(messages, chatwork.MessageFilter{
-		Senders: []chatwork.Reference{a, b}, Context: chatwork.MessageContextNone, Limit: 2,
+		Senders: []chatwork.Reference{a, b}, Context: chatwork.MessageContextNone, StartIndex: 1, Count: 2,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -95,7 +95,7 @@ func TestAssembleMessageWindowLimitRanksOneCombinedSenderORCandidateSet(t *testi
 	}
 }
 
-func TestAssembleMessageWindowAppliesReplyContextAfterLimit(t *testing.T) {
+func TestAssembleMessageWindowAppliesReplyContextAfterCount(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	parent := selectionMessageAt(t, "201", room, a, 100)
@@ -103,7 +103,7 @@ func TestAssembleMessageWindowAppliesReplyContextAfterLimit(t *testing.T) {
 	child.SendTime = 300
 
 	selected, selection, err := assembleMessageWindow([]chatwork.Message{parent, child}, chatwork.MessageFilter{
-		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextReplies, Limit: 1,
+		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextReplies, StartIndex: 1, Count: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -116,15 +116,15 @@ func TestAssembleMessageWindowAppliesReplyContextAfterLimit(t *testing.T) {
 		!reflect.DeepEqual(selection.AnchorSequences, []int{2}) {
 		t.Fatalf("selection = %+v", selection)
 	}
-	if len(selected) <= selection.Filter.Limit {
-		t.Fatalf("displayed count = %d, want reply context allowed beyond anchor limit %d", len(selected), selection.Filter.Limit)
+	if len(selected) <= selection.Filter.Count {
+		t.Fatalf("displayed count = %d, want reply context allowed beyond primary count %d", len(selected), selection.Filter.Count)
 	}
 	if selected[1].Reply == nil || !selected[1].Reply.Resolved || selected[1].Reply.Target.Value != "201" {
 		t.Fatalf("child reply = %+v, want resolved context parent", selected[1].Reply)
 	}
 }
 
-func TestAssembleMessageWindowAppliesReplyContextToNoSenderLimitAnchors(t *testing.T) {
+func TestAssembleMessageWindowAppliesReplyContextToNoSenderCountAnchors(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
@@ -133,7 +133,7 @@ func TestAssembleMessageWindowAppliesReplyContextToNoSenderLimitAnchors(t *testi
 	child.SendTime = 300
 
 	selected, selection, err := assembleMessageWindow([]chatwork.Message{parent, child}, chatwork.MessageFilter{
-		Context: chatwork.MessageContextReplies, Limit: 1,
+		Context: chatwork.MessageContextReplies, StartIndex: 1, Count: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +148,7 @@ func TestAssembleMessageWindowAppliesReplyContextToNoSenderLimitAnchors(t *testi
 	}
 }
 
-func TestAssembleMessageWindowLimitRebasesOmittedParentAsUnresolved(t *testing.T) {
+func TestAssembleMessageWindowCountRebasesOmittedParentAsUnresolved(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
@@ -157,7 +157,7 @@ func TestAssembleMessageWindowLimitRebasesOmittedParentAsUnresolved(t *testing.T
 	child.SendTime = 300
 
 	selected, selection, err := assembleMessageWindow([]chatwork.Message{parent, child}, chatwork.MessageFilter{
-		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextNone, Limit: 1,
+		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -173,7 +173,7 @@ func TestAssembleMessageWindowLimitRebasesOmittedParentAsUnresolved(t *testing.T
 	}
 }
 
-func TestAssembleMessageWindowLimitBoundaries(t *testing.T) {
+func TestAssembleMessageWindowCountBoundaries(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	hundred := make([]chatwork.Message, 100)
@@ -196,7 +196,7 @@ func TestAssembleMessageWindowLimitBoundaries(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			selected, selection, err := assembleMessageWindow(test.messages, chatwork.MessageFilter{
-				Context: chatwork.MessageContextNone, Limit: test.limit,
+				Context: chatwork.MessageContextNone, StartIndex: 1, Count: test.limit,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -214,7 +214,7 @@ func TestAssembleMessageWindowLimitBoundaries(t *testing.T) {
 	}
 }
 
-func TestExecuteAppliesLimitAfterOneFilterFreePortCall(t *testing.T) {
+func TestExecuteAppliesCountAfterOneFilterFreePortCall(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	port := &fakePort{result: chatwork.Result{
@@ -227,7 +227,7 @@ func TestExecuteAppliesLimitAfterOneFilterFreePortCall(t *testing.T) {
 	}}
 	request := chatwork.Request{
 		Task: chatwork.TaskMessagesList, Room: room,
-		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone, Limit: 1},
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1},
 	}
 
 	result, err := New(port).Execute(context.Background(), testBinding(t), request)
@@ -238,7 +238,7 @@ func TestExecuteAppliesLimitAfterOneFilterFreePortCall(t *testing.T) {
 		t.Fatalf("port calls = %d, want 1", port.calls)
 	}
 	if !reflect.DeepEqual(port.request.MessageFilter, chatwork.MessageFilter{}) {
-		t.Fatalf("local limit leaked to port: %+v", port.request.MessageFilter)
+		t.Fatalf("local index selection leaked to port: %+v", port.request.MessageFilter)
 	}
 	if got := messageValues(result.Messages); !reflect.DeepEqual(got, []string{"202"}) {
 		t.Fatalf("selected refs = %v", got)
@@ -248,7 +248,7 @@ func TestExecuteAppliesLimitAfterOneFilterFreePortCall(t *testing.T) {
 	}
 }
 
-func TestExecuteRejectsProviderWindowAboveCoverageBeforeLocalLimit(t *testing.T) {
+func TestExecuteRejectsProviderWindowAboveCoverageBeforeLocalCount(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	messages := make([]chatwork.Message, 101)
@@ -262,7 +262,7 @@ func TestExecuteRejectsProviderWindowAboveCoverageBeforeLocalLimit(t *testing.T)
 	}}
 	request := chatwork.Request{
 		Task: chatwork.TaskMessagesList, Room: room,
-		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone, Limit: 1},
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1},
 	}
 
 	result, err := New(port).Execute(context.Background(), testBinding(t), request)

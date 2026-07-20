@@ -109,19 +109,21 @@ const (
 	MessageContextNone    MessageContext = "none"
 	MessageContextReplies MessageContext = "replies"
 
-	// MaxMessageSelectionLimit matches the largest provider message window. A
-	// smaller public limit narrows primary messages only; it does not increase
+	// MaxMessageSelectionCount matches the largest provider message window. A
+	// smaller public count narrows primary messages only; it does not increase
 	// or page beyond this fixed source bound.
-	MaxMessageSelectionLimit = 100
+	MaxMessageSelectionCount = 100
 )
 
 // MessageFilter selects primary messages authored by any of the exact
-// canonical accounts, or every source message when Senders is empty. Limit
-// keeps the newest primary messages before Context adds direct reply neighbors.
+// canonical accounts, or every source message when Senders is empty. StartIndex
+// is the 1-based newest-first primary rank, Count keeps at most that many
+// primary messages, and Context then adds direct reply neighbors.
 type MessageFilter struct {
-	Senders []Reference
-	Context MessageContext
-	Limit   int
+	Senders    []Reference
+	Context    MessageContext
+	StartIndex int
+	Count      int
 }
 
 // Request is the typed union consumed by the application task boundary.
@@ -295,12 +297,18 @@ func validRoomIconPreset(value string) bool {
 }
 
 func validateMessageFilter(filter MessageFilter) error {
-	if filter.Limit < 0 || filter.Limit > MaxMessageSelectionLimit {
-		return fmt.Errorf("message selection limit must be between 1 and %d when present", MaxMessageSelectionLimit)
+	if filter.StartIndex < 0 || filter.StartIndex > MaxMessageSelectionCount {
+		return fmt.Errorf("message selection start index must be between 1 and %d when present", MaxMessageSelectionCount)
 	}
-	if len(filter.Senders) == 0 && filter.Limit == 0 {
+	if filter.Count < 0 || filter.Count > MaxMessageSelectionCount {
+		return fmt.Errorf("message selection count must be between 1 and %d when present", MaxMessageSelectionCount)
+	}
+	if filter.Count > 0 && filter.StartIndex == 0 {
+		return fmt.Errorf("message selection count requires an explicit or defaulted start index")
+	}
+	if len(filter.Senders) == 0 && filter.StartIndex == 0 && filter.Count == 0 {
 		if filter.Context != "" {
-			return fmt.Errorf("message context requires a sender filter or message limit")
+			return fmt.Errorf("message context requires a sender filter or message index selection")
 		}
 		return nil
 	}
@@ -327,7 +335,7 @@ func validateMessageFilter(filter MessageFilter) error {
 }
 
 func messageFilterActive(filter MessageFilter) bool {
-	return len(filter.Senders) > 0 || filter.Context != "" || filter.Limit > 0
+	return len(filter.Senders) > 0 || filter.Context != "" || filter.StartIndex > 0 || filter.Count > 0
 }
 
 func (t Task) Valid() bool {
@@ -533,6 +541,8 @@ type MessageSelection struct {
 	Filter          MessageFilter
 	SourceCount     int
 	CandidateCount  int
+	ItemsPerPage    int
+	NextStartIndex  int
 	SourceSequences []int
 	AnchorSequences []int
 }
@@ -788,7 +798,7 @@ func (r Result) validateVariantFacts() error {
 			if r.Coverage.Limit <= 0 {
 				return fmt.Errorf("Chatwork message window requires a positive source limit")
 			}
-			if r.Coverage.Limit > MaxMessageSelectionLimit {
+			if r.Coverage.Limit > MaxMessageSelectionCount {
 				return fmt.Errorf("Chatwork message window exceeds the provider source-limit contract")
 			}
 			if len(r.Messages) > r.Coverage.Limit {
@@ -920,12 +930,33 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 		previous = sequence
 		anchorSet[sequence] = struct{}{}
 	}
-	wantAnchors := selection.CandidateCount
-	if selection.Filter.Limit > 0 && wantAnchors > selection.Filter.Limit {
-		wantAnchors = selection.Filter.Limit
+	startOffset := 0
+	if selection.Filter.StartIndex > 0 {
+		startOffset = selection.Filter.StartIndex - 1
+	}
+	wantAnchors := selection.CandidateCount - startOffset
+	if wantAnchors < 0 {
+		wantAnchors = 0
+	}
+	if selection.Filter.Count > 0 && wantAnchors > selection.Filter.Count {
+		wantAnchors = selection.Filter.Count
 	}
 	if len(selection.AnchorSequences) != wantAnchors {
-		return fmt.Errorf("Chatwork message selection anchor count does not match its candidate limit")
+		return fmt.Errorf("Chatwork message selection anchor count does not match its start index and requested count")
+	}
+	indexed := selection.Filter.StartIndex > 0 || selection.Filter.Count > 0
+	if indexed && selection.ItemsPerPage != wantAnchors {
+		return fmt.Errorf("Chatwork message selection items-per-page does not match its primary anchors")
+	}
+	if !indexed && selection.ItemsPerPage != 0 {
+		return fmt.Errorf("Chatwork sender-only message selection must not declare page metadata")
+	}
+	wantNextStartIndex := 0
+	if selection.Filter.Count > 0 && startOffset+wantAnchors < selection.CandidateCount {
+		wantNextStartIndex = selection.Filter.StartIndex + wantAnchors
+	}
+	if selection.NextStartIndex != wantNextStartIndex {
+		return fmt.Errorf("Chatwork message selection next start index does not match its remaining candidates")
 	}
 	if selection.Filter.Context == MessageContextNone && !equalSequences(selection.AnchorSequences, selection.SourceSequences) {
 		return fmt.Errorf("Chatwork message selection without context must mark every displayed message as an anchor")
@@ -986,7 +1017,7 @@ func equalSequences(left, right []int) bool {
 }
 
 func equalMessageFilters(left, right MessageFilter) bool {
-	if left.Context != right.Context || left.Limit != right.Limit || len(left.Senders) != len(right.Senders) {
+	if left.Context != right.Context || left.StartIndex != right.StartIndex || left.Count != right.Count || len(left.Senders) != len(right.Senders) {
 		return false
 	}
 	for index := range left.Senders {

@@ -540,18 +540,19 @@ func TestMessageListHumanHelpPublishesBoundedSelection(t *testing.T) {
 		t.Fatalf("Run(messages list --help) code = %d, stderr = %q", code, stderr.String())
 	}
 	for _, want := range []string{
-		"--room     必須 flag, reference=chatwork-room",
-		"--window   任意 flag, values=recent|changes",
+		"--room         必須 flag, reference=chatwork-room",
+		"--window       任意 flag, values=recent|changes",
 		"最新の上限付き範囲（recent、既定値）",
 		"プロバイダーの差分範囲（changes）",
-		"--limit    任意 flag",
-		"新しい",
-		"1",
-		"100",
-		"直接の返信コンテキストにより、この件数を超えるレコードが追加される",
-		"--sender   任意・繰り返し可 flag, reference=chatwork-account",
+		"--start-index  任意 flag",
+		"1始まりの順位（1〜100）",
+		"--count        任意 flag",
+		"終了順位ではありません",
+		"--start-index 11 --count 20 は順位11〜30を選びます",
+		"直接の返信コンテキストにより、表示件数はこの値を超えることがあります",
+		"--sender       任意・繰り返し可 flag, reference=chatwork-account",
 		"列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件",
-		"--context  任意 flag, values=none|replies",
+		"--context      任意 flag, values=none|replies",
 		"上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）",
 		"機械可読契約には 'cwk help messages list --format agent' を実行してください。",
 	} {
@@ -574,20 +575,27 @@ func TestMessageListScopedAgentHelpPublishesSelectionDefaults(t *testing.T) {
 	if len(document.Commands) != 1 || document.Commands[0].Path != "messages list" {
 		t.Fatalf("agent commands = %+v", document.Commands)
 	}
-	var limit, window *CommandInput
+	var startIndex, count, window *CommandInput
 	for index := range document.Commands[0].Contract.Inputs {
 		input := &document.Commands[0].Contract.Inputs[index]
 		switch input.Name {
-		case "--limit":
-			limit = input
+		case "--start-index":
+			startIndex = input
+		case "--count":
+			count = input
 		case "--window":
 			window = input
 		}
 	}
-	if limit == nil || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
-		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
-		!strings.Contains(limit.Description, "新しい") || !strings.Contains(limit.Description, "返信コンテキスト") {
-		t.Fatalf("agent limit contract = %+v", limit)
+	if startIndex == nil || startIndex.Required || startIndex.Repeatable || startIndex.Source != InputSourceFlag ||
+		!strings.Contains(startIndex.Description, "1始まり") || !strings.Contains(startIndex.Description, "100") ||
+		!strings.Contains(startIndex.Description, "省略時は1") {
+		t.Fatalf("agent start-index contract = %+v", startIndex)
+	}
+	if count == nil || count.Required || count.Repeatable || count.Source != InputSourceFlag ||
+		!strings.Contains(count.Description, "1〜100") || !strings.Contains(count.Description, "終了順位ではありません") ||
+		!strings.Contains(count.Description, "順位11〜30") || !strings.Contains(count.Description, "返信コンテキスト") {
+		t.Fatalf("agent count contract = %+v", count)
 	}
 	if window == nil || window.Required || window.Repeatable || window.Source != InputSourceFlag ||
 		!reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||

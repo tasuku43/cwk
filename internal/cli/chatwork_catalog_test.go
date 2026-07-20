@@ -143,7 +143,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--limit <count>] [--sender <account-ref>] [--context none|replies]"
+	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -152,13 +152,20 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	for _, input := range messages.Agent.Inputs {
 		inputs[input.Name] = input
 	}
-	limit := inputs["--limit"]
-	if limit.Name == "" || limit.Required || limit.Repeatable || limit.Source != InputSourceFlag ||
-		len(limit.AllowedValues) != 0 || limit.ReferenceKind != "" ||
-		!strings.Contains(limit.Description, "1") || !strings.Contains(limit.Description, "100") ||
-		!strings.Contains(limit.Description, "新しい") ||
-		!strings.Contains(limit.Description, "返信コンテキスト") {
-		t.Fatalf("limit input contract = %+v", limit)
+	count := inputs["--count"]
+	if count.Name == "" || count.Required || count.Repeatable || count.Source != InputSourceFlag ||
+		len(count.AllowedValues) != 0 || count.ReferenceKind != "" ||
+		!strings.Contains(count.Description, "1") || !strings.Contains(count.Description, "100") ||
+		!strings.Contains(count.Description, "最大件数") || !strings.Contains(count.Description, "終了順位ではありません") ||
+		!strings.Contains(count.Description, "11〜30") || !strings.Contains(count.Description, "返信コンテキスト") {
+		t.Fatalf("count input contract = %+v", count)
+	}
+	start := inputs["--start-index"]
+	if start.Name == "" || start.Required || start.Repeatable || start.Source != InputSourceFlag ||
+		len(start.AllowedValues) != 0 || start.ReferenceKind != "" ||
+		!strings.Contains(start.Description, "1始まり") || !strings.Contains(start.Description, "1〜100") ||
+		!strings.Contains(start.Description, "省略時は1") {
+		t.Fatalf("start-index input contract = %+v", start)
 	}
 	sender := inputs["--sender"]
 	if sender.Required || !sender.Repeatable || sender.ReferenceKind != "chatwork-account" ||
@@ -178,7 +185,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 		!strings.Contains(window.Description, "差分") {
 		t.Fatalf("window input contract = %+v", window)
 	}
-	if strings.Contains(limit.Description, "Use --window recent") {
-		t.Fatalf("limit input repeats the new default window: %+v", limit)
+	if strings.Contains(count.Description, "Use --window recent") {
+		t.Fatalf("count input repeats the new default window: %+v", count)
 	}
 }

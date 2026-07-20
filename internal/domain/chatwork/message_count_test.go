@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestMessageFilterLimitValidation(t *testing.T) {
+func TestMessageFilterCountValidation(t *testing.T) {
 	room := Reference{Kind: ReferenceRoom, Value: "42"}
 	tests := []struct {
 		name    string
@@ -13,11 +13,11 @@ func TestMessageFilterLimitValidation(t *testing.T) {
 		wantErr bool
 	}{
 		{name: "absent", filter: MessageFilter{}},
-		{name: "one", filter: MessageFilter{Context: MessageContextNone, Limit: 1}},
-		{name: "provider bound", filter: MessageFilter{Context: MessageContextNone, Limit: 100}},
-		{name: "reply context around limit anchors", filter: MessageFilter{Context: MessageContextReplies, Limit: 10}},
-		{name: "negative", filter: MessageFilter{Context: MessageContextNone, Limit: -1}, wantErr: true},
-		{name: "above provider bound", filter: MessageFilter{Context: MessageContextNone, Limit: 101}, wantErr: true},
+		{name: "one", filter: MessageFilter{Context: MessageContextNone, StartIndex: 1, Count: 1}},
+		{name: "provider bound", filter: MessageFilter{Context: MessageContextNone, StartIndex: 1, Count: 100}},
+		{name: "reply context around count anchors", filter: MessageFilter{Context: MessageContextReplies, StartIndex: 1, Count: 10}},
+		{name: "negative", filter: MessageFilter{Context: MessageContextNone, StartIndex: 1, Count: -1}, wantErr: true},
+		{name: "above provider bound", filter: MessageFilter{Context: MessageContextNone, StartIndex: 1, Count: 101}, wantErr: true},
 		{name: "context without selector", filter: MessageFilter{Context: MessageContextReplies}, wantErr: true},
 	}
 	for _, test := range tests {
@@ -31,13 +31,13 @@ func TestMessageFilterLimitValidation(t *testing.T) {
 
 	if err := (Request{
 		Task:          TaskRoomsList,
-		MessageFilter: MessageFilter{Context: MessageContextNone, Limit: 1},
+		MessageFilter: MessageFilter{Context: MessageContextNone, StartIndex: 1, Count: 1},
 	}).Validate(); err == nil {
 		t.Fatal("message limit on another task passed")
 	}
 }
 
-func TestMessageLimitSelectionValidatesCandidateCountAndExactRequest(t *testing.T) {
+func TestMessageCountSelectionValidatesCandidateCountAndExactRequest(t *testing.T) {
 	valid := validLimitedMessageResult()
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid limited selection failed: %v", err)
@@ -50,10 +50,10 @@ func TestMessageLimitSelectionValidatesCandidateCountAndExactRequest(t *testing.
 		t.Fatalf("exact limited request binding failed: %v", err)
 	}
 
-	differentLimit := request
-	differentLimit.MessageFilter.Limit = 1
-	if err := valid.ValidateFor(differentLimit); err == nil {
-		t.Fatal("selection bound to a different local limit")
+	differentCount := request
+	differentCount.MessageFilter.Count = 1
+	if err := valid.ValidateFor(differentCount); err == nil {
+		t.Fatal("selection bound to a different local count")
 	}
 
 	tests := map[string]func(*Result){
@@ -87,7 +87,7 @@ func TestMessageLimitSelectionValidatesCandidateCountAndExactRequest(t *testing.
 	}
 }
 
-func TestMessageLimitAllowsMatchingSenderToReappearOnlyAsDirectContext(t *testing.T) {
+func TestMessageCountAllowsMatchingSenderToReappearOnlyAsDirectContext(t *testing.T) {
 	room := Reference{Kind: ReferenceRoom, Value: "42"}
 	sender := Reference{Kind: ReferenceAccount, Value: "7"}
 	parent := Message{
@@ -106,9 +106,11 @@ func TestMessageLimitAllowsMatchingSenderToReappearOnlyAsDirectContext(t *testin
 		Coverage: Coverage{Kind: "latest_window", Limit: 100, Complete: false},
 		Messages: []Message{parent, child},
 		MessageSelection: &MessageSelection{
-			Filter:          MessageFilter{Senders: []Reference{sender}, Context: MessageContextReplies, Limit: 1},
+			Filter:          MessageFilter{Senders: []Reference{sender}, Context: MessageContextReplies, StartIndex: 1, Count: 1},
 			SourceCount:     2,
 			CandidateCount:  2,
+			ItemsPerPage:    1,
+			NextStartIndex:  2,
 			SourceSequences: []int{1, 2},
 			AnchorSequences: []int{2},
 		},
@@ -170,9 +172,11 @@ func validLimitedMessageResult() Result {
 			},
 		},
 		MessageSelection: &MessageSelection{
-			Filter:          MessageFilter{Senders: []Reference{sender}, Context: MessageContextNone, Limit: 2},
+			Filter:          MessageFilter{Senders: []Reference{sender}, Context: MessageContextNone, StartIndex: 1, Count: 2},
 			SourceCount:     4,
 			CandidateCount:  4,
+			ItemsPerPage:    2,
+			NextStartIndex:  3,
 			SourceSequences: []int{2, 4},
 			AnchorSequences: []int{2, 4},
 		},
