@@ -2,12 +2,7 @@
 
 ---
 
-<p align="center"><strong>エージェントのためのChatwork CLI。</strong></p>
-
-<p align="center">
-  Chatworkでの作業に必要な情報、関係、次の操作に使える参照を、<br>
-  エージェントが迷わない形へコンパクトにまとめます。
-</p>
+`cwk` は、AIエージェントがChatworkのルーム、メッセージ、タスクなどを操作するためのCLIです。Chatwork APIのレスポンスをそのまま表示せず、操作に必要な情報と参照を整理して出力します。
 
 ## インストール
 
