@@ -73,9 +73,11 @@ An exhaustive command follows this contract:
 Paged commands support only JSON and use JSON as their default. This keeps every successful presentation self-describing and prevents a text or TSV page without a completion marker from looking exhaustive. Catalog validation rejects a missing paged binding, a binding on complete output, any other output format, a required or non-CLI cursor input, an invalid or colliding top-level cursor field, a missing or unknown completion rule, non-opaque cursors, kind mismatch, and extra cursor candidates. Renderer fixture checks require the top-level cursor to be present and string-typed. Agent help projects the binding with the input/output contracts and derives a same-command continuation workflow, so an agent passes the emitted cursor bytes back without trimming, decoding, or guessing. A declared page is not an incomplete successful output; silently truncating that page, omitting its continuation cursor, or reaching a local limit without a cursor is a contract failure.
 
 A finite application-owned projection over one already complete bounded task
-result is not provider pagination. It may expose an explicit selection limit
-only when output also retains the upstream source bound and selection provenance;
-it must not imply that another page exists or manufacture a cursor.
+result is not provider pagination. It may expose SCIM-derived one-based
+`start-index` and maximum `count` selection only when output also retains the
+upstream source bound and selection provenance. A locally derived next start
+index is a rank continuation hint, not an opaque provider cursor or snapshot
+guarantee, and does not change the catalog result from `complete` to `paged`.
 
 ## Timeout, retry, and idempotency
 
@@ -159,21 +161,26 @@ Primary sources: Chatwork's
 [limitation notice](https://developer.chatwork.com/changelog/2022-09-06-notice),
 and [notation guide](https://developer.chatwork.com/docs/message-notation).
 
-`messages list --sender`, `--limit`, and `--context` are application-owned
-selection inputs over that single bounded message response. The optional limit
-accepts 1 through 100 primary messages. Exact-sender OR matching runs first;
-typed `send_time` then chooses the newest N candidates, with later provider
-position breaking equal-time ties; direct typed reply context runs last and may
-increase displayed count beyond N. Membership selection does not reorder the
+`messages list --sender`, `--start-index`, `--count`, and `--context` are
+application-owned selection inputs over that single bounded message response.
+Start index and count accept 1 through 100; count alone defaults start index to
+1. Exact-sender OR matching runs first; typed `send_time` then establishes
+newest-first candidate rank, with later provider position breaking equal-time
+ties; the one-based start index and requested maximum count select primary
+anchors; direct typed reply context runs last and may increase displayed count
+beyond the requested count. Membership selection does not reorder the
 provider records or their original sequences. These inputs never become
 Chatwork query parameters, trigger a second request, or fetch a referenced
 message outside the returned window. Adapter request construction rejects them
 if they cross the application port boundary, and the one provider request
-continues to use only the documented `force` query. There is no cursor, offset,
-or pagination. The provider's 100-message ceiling is exposed separately as
-`source-limit`; the requested limit and pre-limit candidate count belong to
-selection provenance. Invalid limit values fail before authentication or
-provider I/O.
+continues to use only the documented `force` query. There is no provider cursor,
+offset, count, or pagination. The provider's 100-message ceiling is exposed
+separately as `source-limit`; candidate count, applied start index, requested
+count, actual items per page, optional next start index, and anchors belong to
+selection provenance. The one-based/count vocabulary derives from SCIM index
+pagination, but separate calls remain stateless over separate Chatwork results
+and source mutations can shift ranks. Invalid values fail before authentication
+or provider I/O.
 
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 

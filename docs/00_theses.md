@@ -50,14 +50,19 @@ An agent that knows the user's desired outcome should reach the exact command co
 
 ### Consequences
 
-- Root agent help is a compact outcome index.
-- An unknown outcome needs at most the root index and one scoped request; a known path needs one scoped request.
+- Root and namespace agent help are compact outcome indexes. A namespace never
+  aggregates complete command contracts.
+- An unknown outcome needs at most the root index and one exact-command request;
+  a known path needs one exact-command request. Direct namespace navigation
+  likewise needs only its compact index and one exact-command request.
 - Human text help narrows from one root namespace entry to that namespace's
   exact commands instead of repeating every leaf command at the root. Direct
   single-word utilities remain directly visible.
 - Human and agent help are complementary projections: the human hierarchy
   reduces visual duplication, while the machine root retains exact outcomes so
-  scoped invocation detail remains at most one further request away.
+  exact invocation detail remains at most one further request away. Complete
+  inputs, output, authentication, failures, mutation facts, and workflows are
+  returned only for one exact command.
 - The complete catalog remains the product and release contract, while a user
   may derive a smaller active attention view by enabling exact command paths.
   Routing and every help projection consume that same view so an irrelevant
@@ -103,10 +108,11 @@ An agent that knows the user's desired outcome should reach the exact command co
   blocked unseen mutations, declared uncertain-error grammar, doctor
   fingerprint reconciliation, and migration of only the formerly selectable
   `doctor` and `version` paths.
-- Root agent entries retain the 512-byte per-command budget.
+- Root and namespace agent-index entries retain the 512-byte per-command budget.
 - Human-help tests prove that every catalog command belongs to exactly one root
   entry and round-trips through its canonical namespace.
-- Agent-readiness tests reject command probing, prose scraping, and undeclared follow-up calls.
+- Agent-readiness tests reject command probing, whole-namespace contract
+  loading, prose scraping, and undeclared follow-up calls.
 
 ## Axiom 3: Semantics precede presentation
 
@@ -178,16 +184,22 @@ sequence, including gaps, distinguishes sender matches from added context once
 per document, and does not claim that two selected speakers form an exclusive
 conversation.
 
-An optional `messages list --limit` accepts 1 through 100 and caps primary
-message anchors without becoming a provider query or pagination control. The
-candidate set is all source messages, or the exact-sender OR matches when
-`--sender` is present. Typed send time selects the newest N candidates; equal
-times prefer the later provider position. Selected records are still emitted in
-their original provider order with original source sequences. Explicit
-`replies` context runs afterward and may therefore make displayed count exceed
-N. Selection metadata keeps the requested limit and candidate count separate
-from the provider's 100-message `source-limit`, and a source that exceeds its
-declared coverage fails before selection can hide the violation.
+Optional `messages list --start-index` and `--count` use SCIM-derived index
+semantics over the one bounded provider result without becoming provider
+pagination. `start-index` is the one-based first primary-message rank and
+defaults to 1; `count` is the requested maximum number of primary anchors, not
+an inclusive end rank. Thus `--start-index 11 --count 20` selects ranks 11
+through 30. The candidate set is all source messages, or the exact-sender OR
+matches when `--sender` is present. Typed send time establishes candidate rank;
+equal times prefer the later provider position. Selected records are still
+emitted in their original provider order with original source sequences.
+Explicit `replies` context runs afterward and may therefore make displayed
+count exceed `count`. Selection metadata keeps candidate count, start index,
+requested count, actual items per page, and optional next start index separate
+from the provider's 100-message `source-limit`. A source that exceeds its
+declared coverage fails before selection can hide the violation. Because this
+is a stateless rank over separate provider snapshots, intervening source changes
+may shift later ranks; the command does not claim snapshot stability.
 
 The same fixed-schema rule applies to the reviewed homogeneous read
 collections for contacts, rooms, members, personal tasks, room tasks, files,

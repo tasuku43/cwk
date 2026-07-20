@@ -386,7 +386,7 @@ func DefaultCatalog() Catalog {
 			Role:    RoleUtility,
 			Agent: AgentContract{
 				CapabilityID: "cli.discovery",
-				Outcome:      "外部I/Oを行わずに、コマンドの使用法、契約、ワークフロー、次の操作を確認する",
+				Outcome:      "外部I/Oを行わずに、ルートまたは名前空間の索引から正確なコマンドを選び、その使用法、契約、ワークフロー、次の操作を確認する",
 				Inputs: []CommandInput{
 					{Name: "command", Source: InputSourceArgument, Required: false, Description: "完全一致するコマンドパスまたは正規のコマンド名前空間を選択します。", AllowedValues: []string{}},
 					{Name: "--format", Source: InputSourceFlag, Required: false, Description: "人向けテキストまたは機械可読なエージェント契約を選択します。", AllowedValues: []string{"text", "agent"}},
@@ -405,7 +405,7 @@ func DefaultCatalog() Catalog {
 					},
 					Completeness:      OutputCompletenessComplete,
 					JSONEnvelope:      "commands",
-					JSONSchemaVersion: 3,
+					JSONSchemaVersion: 4,
 				},
 				Prerequisites: []string{},
 				Errors: []CommandError{

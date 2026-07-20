@@ -305,6 +305,13 @@ or unknown path receives that migration exception.
 
 For the first Chatwork implementation, metadata and ordinary provider requests have a 20-second timeout, file uploads have a 60-second timeout, and every logical operation has one transport attempt. Successful response bodies are capped at 8 MiB and provider error bodies at 64 KiB. The complete rendered result is capped at 16 MiB, aggregate lists at 10,000 items, and uploads at 5 MiB. The five provider-documented 100-item list operations retain their lower bound. Exceeding any limit fails closed without partial successful output; user configuration cannot raise a ceiling.
 
+Message `--start-index` and `--count` are bounded local selection inputs, not
+network controls. Values outside 1..100, duplicates, and malformed values fail
+before authentication or I/O. Infrastructure rejects either field if it crosses
+the application port, and a provider result above `source-limit=100` fails
+before local selection can conceal it. A derived next start index carries no
+credential, opaque provider state, or snapshot-stability claim.
+
 Rate-limit headers and error envelopes are untrusted external data. Chatwork
 reset timing is accepted only as one bounded strict-decimal
 `x-ratelimit-reset` Unix timestamp in the official five-minute window;
@@ -331,7 +338,7 @@ Remote or file-derived text may contain terminal controls, format characters, Un
 
 This projection protects terminal and TSV/JSON structure. It does **not** detect intent in printable text, remove prompt-like content, or prove that a language model will ignore it. Printable text such as `SYSTEM ...` or JSON-looking content remains semantically untrusted data. Agent consumers must keep data fields separate from instructions and apply their own trust policy; the CLI cannot claim semantic prompt-injection prevention.
 
-Scoped agent help publishes this boundary in `io_contract`: `external_text_trust` is `untrusted_data`, `external_text_projection` is `visible_escape`, and `opaque_reference_policy` is `validated_exact_bytes`.
+Exact-command agent help publishes this boundary in `io_contract`: `external_text_trust` is `untrusted_data`, `external_text_projection` is `visible_escape`, and `opaque_reference_policy` is `validated_exact_bytes`. Compact root and namespace indexes contain no I/O contract or external text.
 
 A derived project must decide:
 
@@ -344,7 +351,7 @@ A derived project must decide:
 
 Do not let presentation sanitization change the identity used for authorization. Authorization uses validated domain values; display labels/content use a visible projection. Opaque references bypass that projection and retain the exact validated value.
 
-For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the `external_text_trust: untrusted_data` meaning already published by scoped agent help. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
+For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the `external_text_trust: untrusted_data` meaning already published by exact-command agent help. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
 
 Candidate C's historical context capsule used local aliases only inside one output document. They were never accepted by command parsers, mutation policy, audit identity, or infrastructure. The current `messages list` likewise uses actor aliases only to factor repeated display data inside one document. Every actor dictionary entry exposes its validated canonical account reference, every message record exposes its validated canonical message reference, and command inputs accept only those canonical values unchanged. Aliases never cross into mutation policy, audit identity, application, or infrastructure.
 

@@ -106,17 +106,20 @@ name matching, raw-body inference, hidden additional calls, and an unbounded
 "related" mode are not acceptable shortcuts. For message reply context, test
 the exact hop bound and prove To/quote/raw notation cannot expand it.
 
-For the reviewed Chatwork message count limit, declare optional
-`--limit <count>` with the inclusive range 1..100. Exact-sender OR matching
-precedes the limit; typed send time selects the newest N primary anchors, with
-later provider position breaking equal-time ties; direct typed reply context
-follows and may increase displayed count beyond N. Preserve provider order and
-original source sequences in output. Keep the requested limit and pre-limit
-candidate count separate from the provider's `source-limit=100`. This selection
-makes one provider request using only documented `force`; it is not a query parameter,
-cursor, offset, or page. Reject invalid values before authentication/I/O and
-reject a provider result above declared coverage before local selection can hide
-it.
+For the reviewed Chatwork message index selection, declare optional one-based
+`--start-index <index>` and maximum `--count <count>` with the inclusive range
+1..100; count alone defaults start index to 1. Exact-sender OR matching precedes
+typed-time newest-first ranking, later provider position breaks equal-time ties,
+then index/count select primary anchors; direct typed reply context follows and
+may increase displayed count beyond the requested count. Preserve provider
+order and original source sequences in output. Keep candidate count, applied
+start index, requested count, actual items per page, and optional next start
+index separate from provider `source-limit=100`. This SCIM-derived vocabulary
+still makes one provider request using only documented `force`; it is not a
+provider query parameter, cursor, offset, or page and does not promise snapshot
+stability across calls. Reject invalid values before authentication/I/O and
+reject a provider result above declared coverage before local selection can
+hide it.
 
 For the reviewed message-window default, omitted or explicit
 `--window recent` selects the latest bounded provider window; only explicit
@@ -257,11 +260,12 @@ interchangeable across every matching field/input edge. Ensure required
 reference chains lead back to a command that can run without an unresolved
 required reference rather than forming a closed cycle.
 Verify that root agent help adds only the command's path, namespace, summary,
-capability, outcome, effect, and role. Then use an exact-command or
-namespace-scoped invocation to verify the complete contract and workflows.
-Root agent help must not regain inputs, output detail, authentication, errors,
-mutation facts, or workflows as the catalog grows, and each encoded command
-entry must remain within the 512-byte catalog budget.
+capability, outcome, effect, and role. Then use an exact-command invocation to
+verify the complete contract and touching workflows. A namespace invocation is
+a compact index with exact-command pointers, never an aggregate of complete
+contracts. Root and namespace agent help must not regain inputs, output detail,
+authentication, errors, mutation facts, or workflows as the catalog grows, and
+each encoded command entry must remain within the 512-byte catalog budget.
 Keep human root help as a catalog-derived navigation projection: directly
 runnable single-word commands plus one entry per top-level namespace. Exact
 leaf summaries belong in namespace help, and each displayed selector must
@@ -391,9 +395,11 @@ Add the smallest set that proves the capability:
   quality floor, latency, benchmark-defect reporting, and raw result retention;
 - finite-filter tests proving exact canonical inputs, OR/AND semantics,
   invalid combinations before I/O, provider-call count, selection bounds,
-  typed-time newest-N membership and deterministic ties, source-order
-  preservation, source/candidate/requested-limit distinction, context allowed
-  beyond a primary limit, context-hop limits, over-coverage source rejection,
+  typed-time ranking and deterministic ties, start/count continuation without
+  repeated ranks, source-order preservation,
+  source/candidate/start/requested-count/items-per-page/next-start distinction,
+  context allowed beyond requested primary count, context-hop limits,
+  over-coverage source rejection,
   match/context distinction, and no inference from presentation or external
   text;
 - retained baseline fixtures for the candidate-C first contract and active

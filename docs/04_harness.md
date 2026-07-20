@@ -208,7 +208,7 @@ The test suite has complementary levels:
   candidate fingerprint; tests require both to match the subsequent doctor
   result and reject the same fingerprint reported as `source=default`, so an
   uncertain write is inspected without a second mutation or false success.
-  Scoped agent help publishes the exact dynamic error-message grammar, and a
+  Exact-command agent help publishes the exact dynamic error-message grammar, and a
   JSON error fixture must match it byte-for-byte around the fingerprint.
 - Config success-output tests fix the two-line natural-Japanese
   visible/hidden/change transcript, require cleanup prose only for a nonzero
@@ -230,12 +230,16 @@ The test suite has complementary levels:
   runner umask from making a valid Formula unreadable to Homebrew.
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
-  multi-sender message selection contract and the inclusive 1..100 primary
-  message limit.
+  multi-sender message selection contract and the inclusive 1..100 start-index
+  and count bounds.
 - Catalog hostile-input tests reject invalid UTF-8, terminal controls, Unicode
   format controls, line separators, and whitespace in non-argv input names
   before exact help can render them.
-- Agent-help shape and size-growth tests keep root discovery index-only while scoped help retains the complete invocation and recovery contract.
+- Agent-help shape and size-growth tests keep root and namespace discovery
+  index-only while exact-command help retains the complete invocation,
+  recovery, and touching-workflow contract. Namespace growth tests reject
+  global inputs, I/O/error contracts, command contracts, mutations, and
+  workflows in the index payload.
 - Localization contract tests require Japanese summaries, outcomes, input and
   output descriptions, prerequisites, and recovery reasons for every public
   catalog command while separately proving that command paths, flags, allowed
@@ -270,12 +274,14 @@ The test suite has complementary levels:
   manual release-owner review.
 - Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
-- Bounded message-selection tests prove sender OR precedes newest-N selection,
-  typed send time chooses anchors with later provider position breaking ties,
-  reply context follows the limit, and rendered records retain provider order
-  and source sequences. They distinguish requested limit and candidate count
-  from the provider `source-limit`, allow explicit context to exceed N, reject
-  invalid values before authentication/I/O, reject a source above declared
+- Bounded message-selection tests prove sender OR precedes typed-time ranking,
+  later provider position breaks equal-time ties, one-based start index and
+  maximum count choose primary anchors, reply context follows that selection,
+  and rendered records retain provider order and source sequences. They
+  distinguish candidate count, applied start index, requested count, actual
+  items per page, and next start index from provider `source-limit`, allow
+  explicit context to exceed the requested count, reject invalid values before
+  authentication/I/O, reject a source above declared
   coverage before selection, and keep local policy out of the one documented
   `force` request. CLI/runtime tests additionally prove omitted and explicit
   `recent` emit the latest-window request while explicit `changes` retains the
@@ -313,9 +319,9 @@ Every strong statement should identify its enforcement path.
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
 | User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
-| Bounded agent root discovery | Fixed root-index shape, 512-byte per-command entry validation, and 100-command growth/selection tests |
+| Bounded agent discovery | Fixed root/namespace index and exact-scope shapes, exact-command-only request pointers, 512-byte per-command entry validation, forbidden-detail canaries, and 100-command root/namespace growth tests |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
-| Agent command certainty | Root/scoped help round-trip tests plus task transcripts with no command probing or prose scraping |
+| Agent command certainty | Root/namespace-index to exact-scope round-trip tests plus task transcripts with no whole-namespace contract loading, command probing, or prose scraping |
 | Supported outcome completeness | Transcript assertion of zero external post-processing and declared provider/context coverage |
 | Context relationship truth | Presentation-independent typed fixtures and negative inference tests for To, quote, names, proximity, and missing references |
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
@@ -323,7 +329,7 @@ Every strong statement should identify its enforcement path.
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
 | Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header with the provider bound named `source-limit`, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. Message actor aliases are allowed only as document-local compression with canonical dictionary entries; semantic raw-notation records, wire extras, derived thread metadata, and non-contract defaults fail |
-| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional primary `--limit` 1..100; sender predicate then typed-send-time newest-N selection with later-position tie-break then direct typed one-hop reply expansion; context allowed beyond N; provider-order gapped source sequences; source/candidate/requested-limit and anchor/context distinction; one documented `force` request with no pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
+| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional one-based `--start-index` and maximum `--count` 1..100; sender predicate then typed-send-time ranking with later-position tie-break then index/count selection then direct typed one-hop reply expansion; context allowed beyond requested count; provider-order gapped source sequences; source/candidate/start/requested-count/items-per-page/next-start and anchor/context distinction; one documented `force` request with no provider pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
 | Fixed Chatwork API coverage | Strict 32-operation snapshot plus bidirectional operation-to-public-capability validation |

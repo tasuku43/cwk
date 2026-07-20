@@ -141,13 +141,14 @@ For Chatwork output, including relationship-aware message results and the curren
   resolve only explicit relationships available within that bound, and return
   a typed task result with coverage and unresolved facts. Message selection runs
   here after the one provider response: repeated exact senders form one OR
-  candidate set; optional limit selects its newest N messages by typed send time
-  with later provider position breaking equal-time ties; optional reply context
-  then adds only direct typed in-window parents/children. Source sequences and
-  final physical order remain those of the unfiltered provider window.
-  Application-only sender/context/limit fields are removed before the
+  candidate set; typed send time establishes newest-first rank with later
+  provider position breaking equal-time ties; optional one-based start index
+  and requested count select primary anchors; optional reply context then adds
+  only direct typed in-window parents/children. Source sequences and final
+  physical order remain those of the unfiltered provider window.
+  Application-only sender/context/start-index/count fields are removed before the
   infrastructure port is called.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, optional primary-message limit, context, and anchor metadata directly from application. Presentation emits candidate count and requested limit only for count limiting and omits context only for the limit-only default `none`. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -208,8 +209,8 @@ are omitted on the next confirmed save. This narrow migration does not make
 arbitrary always-on paths valid selection entries.
 
 The active view is loaded before trailing-help normalization and command
-matching. Root, namespace, exact, and trailing human help; root and scoped agent
-help; recovery projections; reference workflows; and routing consume that same
+matching. Root, namespace, exact, and trailing human help; root/namespace agent
+indexes and exact-command scopes; recovery projections; reference workflows; and routing consume that same
 view. A disabled command therefore takes the existing `unknown_command` path
 before lazy PAT resolution or provider I/O. View validation is deliberately
 narrower than full-catalog validation: a visible terminal producer may have no
@@ -253,7 +254,7 @@ it does not duplicate the fingerprint. An uncertain fault names the expected
 `source=saved` as well as its candidate fingerprint; reconciliation succeeds
 only when `doctor` reports both, so an absent profile whose all-enabled default
 happens to hash identically is not mistaken for a persisted replacement.
-Scoped agent help declares the exact runtime message grammar, and the JSON
+Exact-command agent help declares the exact runtime message grammar, and the JSON
 error contract is tested against it rather than leaving these dynamic values in
 undeclared prose. Malformed
 serialized content is
@@ -321,11 +322,26 @@ At minimum, catalog validation rejects:
 | `RoleAct` | Operates on required declared opaque references, or on one exact catalog-declared fixed `tool_local` singleton when no selection exists |
 | `RoleUnknown` | Invalid for a public command |
 
-Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. A fixed target instead declares a stable kind, ID, description, and `tool_local` scope directly on the agent contract; it cannot coexist with produced or consumed target references. The catalog derives the reference graph, scoped workflows, next actions, and fixed-target facts from those fields. A shared reference kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every reference kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Human help may stay concise; scoped agent help exposes the exact graph, fixed target, pagination binding, and field meanings.
+Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. A fixed target instead declares a stable kind, ID, description, and `tool_local` scope directly on the agent contract; it cannot coexist with produced or consumed target references. The catalog derives the reference graph, scoped workflows, next actions, and fixed-target facts from those fields. A shared reference kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every reference kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Human help may stay concise; exact-command agent help exposes the exact graph, fixed target, pagination binding, and field meanings.
 
-Agent-help schema version 3 separates selection from invocation detail. Root `help --format agent` is an `index` view containing only each command's path, top-level namespace, summary, capability ID, outcome, effect, and role. Each encoded command entry has a 512-byte catalog budget. Its `scope_request` names `commands[].path` and `commands[].namespace` as selectors and supplies the exact invocation template. `help <selector> --format agent` is a `scope` view containing global I/O/error contracts, complete selected `AgentContract` values, and reference workflows touching the selection. Structured inputs mark repeatable flags explicitly; argument parsing consumes that same catalog field rather than maintaining a second flag registry. Its I/O contract marks external text as untrusted data, declares visible structural projection, and distinguishes validated exact opaque references. A known path therefore needs one help invocation; an unknown outcome needs the root index and one scoped invocation. Root size still grows with the number of outcomes, but detailed inputs, outputs, authentication, failures, mutations, and workflows do not multiply there.
+Agent-help schema version 4 separates selection from invocation detail at an
+exact-command boundary. Root `help --format agent` is an `index` view containing
+only each command's path, top-level namespace, summary, capability ID, outcome,
+effect, and role. A namespace selector returns the same compact fields for only
+that namespace plus an explicit namespace scope marker. Each encoded index entry
+has a 512-byte catalog budget. Both indexes name only `commands[].path` and
+`help <exact-command> --format agent` as the complete-contract request. An exact
+selector returns a `scope` view containing global I/O/error contracts, one
+complete `AgentContract`, and reference workflows touching that command.
+Structured inputs mark repeatable flags explicitly; argument parsing consumes
+that same catalog field rather than maintaining a second flag registry. Its I/O
+contract marks external text as untrusted data, declares visible structural
+projection, and distinguishes validated exact opaque references. A known path
+therefore needs one help invocation; an unknown outcome needs the root index and
+one exact request. Detailed inputs, outputs, authentication, failures, mutations,
+and workflows multiply in neither root nor namespace indexes.
 
-Catalog `CommandOutput` metadata is executable compatibility data, not descriptive decoration. Generic CLI contract tests run each built-in JSON renderer and compare its `schema_version`, declared envelope, and every item key with the corresponding catalog declaration. Agent-help shape snapshots separately fix the intentionally different root and scoped views.
+Catalog `CommandOutput` metadata is executable compatibility data, not descriptive decoration. Generic CLI contract tests run each built-in JSON renderer and compare its `schema_version`, declared envelope, and every item key with the corresponding catalog declaration. Agent-help shape snapshots separately fix the intentionally different root index, namespace index, and exact scope views.
 
 ## Semantic and presentation boundary
 
@@ -348,7 +364,7 @@ Relationship truth has three states:
 | explicit and unresolved | Provider notation identifies a relation but the referenced object is outside the bound or unavailable | Preserve the relation and unresolved/coverage state without fabricating the object |
 | absent or unsupported | No provider fact establishes the relation | Do not imply that the relation exists |
 
-Filtering, count limiting, and context selection are application outcome
+Filtering, index selection, and context selection are application outcome
 concerns. Provider pagination and notation parsing remain infrastructure
 concerns. Presentation owns only representation. CLI request assembly resolves
 an omitted `messages list --window` to recent before the application boundary;
@@ -357,23 +373,26 @@ differential request. Infrastructure remains a policy-free boolean-to-query
 mapping: recent emits `force=1`, while changes omits `force`. In particular,
 `messages list`
 evaluates exact-sender OR selection once over the bounded typed provider result,
-then applies optional `--limit` 1..100 by typed send time, and only then expands
+then ranks candidates by typed send time, applies optional one-based
+`--start-index` and maximum `--count` 1..100, and only then expands
 direct non-transitive `replies` context. A timestamp selects membership but
 never changes provider-order output; equal timestamps prefer the later provider
 position. Omitted targets remain explicit unresolved canonical references
 instead of being guessed or fetched. Selection metadata carries source and
-candidate counts, the requested limit, original source sequences, and primary
-anchors so presentation need not reconstruct policy. Explicit reply context may
-make displayed count exceed the primary limit.
+candidate counts, start index, requested count, actual items per page, optional
+next start index, original source sequences, and primary anchors so presentation
+need not reconstruct policy. Explicit reply context may make displayed count
+exceed the requested primary count.
 
 Chatwork documents no limit, cursor, or offset for this endpoint. Infrastructure
 continues to issue exactly one request with only the documented `force` query,
 and rejects application-only selection state if it crosses the port. The
-provider's maximum-100 coverage is a `source-limit`, not the public selection
-limit or a page size. An over-bound source result fails before application
-selection, and invalid public limit values fail before authentication or I/O.
-The catalog result remains one complete bounded task result with no pagination
-binding.
+provider's maximum-100 coverage is a `source-limit`, not the public requested
+count or a provider page size. An over-bound source result fails before
+application selection, and invalid public index/count values fail before
+authentication or I/O. The catalog result remains one complete bounded task
+result with no `AgentContract.Pagination` binding. The SCIM-derived public
+vocabulary does not manufacture a provider cursor or snapshot guarantee.
 
 Candidate C (`cwk-context-capsule/1`) is the first stable public presentation baseline and retains that historical evidence. Competition 1 was inconclusive because benchmark defects made its promotion result non-authoritative. A P-derived task projection (`cwk-task-projection/1`) was selected afterward by an explicit owner compatibility decision, then hardened beyond the frozen candidate. The current default further removes its in-band schema/task preamble and standalone provider coverage line through a second explicit pre-1.0 compatibility decision. Neither decision describes P as the benchmark winner. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code, and raw experimental evidence remains immutable decision input.
 

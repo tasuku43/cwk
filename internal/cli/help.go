@@ -17,13 +17,14 @@ type helpFormat uint8
 const (
 	helpFormatText helpFormat = iota
 	helpFormatAgent
-	agentHelpSchemaVersion = 3
+	agentHelpSchemaVersion = 4
 )
 
 type agentIndexDocument struct {
 	SchemaVersion int                 `json:"schema_version"`
 	View          string              `json:"view"`
 	Program       string              `json:"program"`
+	Scope         *agentScope         `json:"scope,omitempty"`
 	ScopeRequest  agentScopeRequest   `json:"scope_request"`
 	Commands      []agentIndexCommand `json:"commands"`
 }
@@ -150,6 +151,8 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 		var output []byte
 		if selector == "" {
 			output, err = c.renderAgentIndex(commands)
+		} else if !exact {
+			output, err = c.renderAgentNamespaceIndex(selector, commands)
 		} else {
 			output, err = c.renderAgentHelp(selector, exact, commands)
 		}
@@ -257,7 +260,7 @@ func (c *CLI) renderRootHelp() []byte {
 	fmt.Fprintln(&output)
 	fmt.Fprintf(&output, "コマンドを選ぶには '%s <namespace> --help' を実行してください。\n", ProgramName)
 	fmt.Fprintln(&output, "詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。")
-	fmt.Fprintf(&output, "範囲を限定した機械可読契約を確認するには '%s help <command-or-namespace> --format agent' を実行してください。\n", ProgramName)
+	fmt.Fprintf(&output, "結果・エラー・復旧を含む機械可読契約には '%s help <exact-command> --format agent' を実行してください。\n", ProgramName)
 	return output.Bytes()
 }
 
@@ -338,7 +341,7 @@ func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
 	fmt.Fprintln(&output)
 	fmt.Fprintf(&output, "正確なコマンドの詳細には '%s %s <command> --help' を実行してください。\n", ProgramName, selector)
 	fmt.Fprintf(&output, "1コマンドの機械可読契約には '%s help %s <command> --format agent' を実行してください。\n", ProgramName, selector)
-	fmt.Fprintf(&output, "この名前空間にある全機械可読契約には '%s help %s --format agent' を実行してください。\n", ProgramName, selector)
+	fmt.Fprintf(&output, "この名前空間の機械可読索引には '%s help %s --format agent' を実行してください。\n", ProgramName, selector)
 	fmt.Fprintf(&output, "全コマンドと名前空間には '%s --help' を実行してください。\n", ProgramName)
 	return output.Bytes()
 }
@@ -415,13 +418,23 @@ func renderCommandInputs(inputs []CommandInput) []byte {
 }
 
 func (c *CLI) renderAgentIndex(commands []CommandSpec) ([]byte, error) {
+	return c.renderAgentIndexScope(nil, commands)
+}
+
+func (c *CLI) renderAgentNamespaceIndex(selector string, commands []CommandSpec) ([]byte, error) {
+	scope := agentScope{Selector: selector, Kind: "namespace"}
+	return c.renderAgentIndexScope(&scope, commands)
+}
+
+func (c *CLI) renderAgentIndexScope(scope *agentScope, commands []CommandSpec) ([]byte, error) {
 	document := agentIndexDocument{
 		SchemaVersion: agentHelpSchemaVersion,
 		View:          "index",
 		Program:       ProgramName,
+		Scope:         scope,
 		ScopeRequest: agentScopeRequest{
-			InvocationTemplate:           ProgramName + " help <command-or-namespace> --format agent",
-			SelectorFields:               []string{"commands[].path", "commands[].namespace"},
+			InvocationTemplate:           ProgramName + " help <exact-command> --format agent",
+			SelectorFields:               []string{"commands[].path"},
 			UnknownOutcomeMaxInvocations: 2,
 			KnownPathMaxInvocations:      1,
 		},
@@ -457,16 +470,15 @@ func commandNamespace(path string) string {
 }
 
 func (c *CLI) renderAgentHelp(selector string, exact bool, commands []CommandSpec) ([]byte, error) {
-	workflows := c.catalog.referenceWorkflows()
-	scopeKind := "namespace"
-	if exact {
-		scopeKind = "command"
+	if !exact || len(commands) != 1 {
+		return nil, fault.New(fault.KindContract, "invalid_agent_help_scope", "完全な agent help 契約には正確なコマンドを一つ指定してください。", false)
 	}
+	workflows := c.catalog.referenceWorkflows()
 	document := agentDocument{
 		SchemaVersion: agentHelpSchemaVersion,
 		View:          "scope",
 		Program:       ProgramName,
-		Scope:         agentScope{Selector: selector, Kind: scopeKind},
+		Scope:         agentScope{Selector: selector, Kind: "command"},
 		GlobalInputs: []CommandInput{{
 			Name: "--error-format", Source: InputSourceFlag, Required: false,
 			Description:   "stderr を text または安定した JSON で表示します。このグローバルオプションはコマンドより前に置いてください。",
