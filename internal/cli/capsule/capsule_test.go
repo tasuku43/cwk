@@ -90,6 +90,29 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 	t.Fatal("filtered anchor record was not rendered")
 }
 
+func TestRenderPeriodSelectionExposesEffectiveHalfOpenBounds(t *testing.T) {
+	result := messageFixture()
+	result.MessageSelection = &chatwork.MessageSelection{
+		Filter: chatwork.MessageFilter{
+			Period:  chatwork.MessagePeriod{Since: 1720000000, Until: 1720000011},
+			Context: chatwork.MessageContextNone,
+		},
+		SourceCount:     2,
+		CandidateCount:  2,
+		SourceSequences: []int{1, 2},
+		AnchorSequences: []int{1, 2},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "selection source-count=2 since=1720000000 until=1720000011 candidate-count=2 anchors=[#1,#2]\n"
+	if !strings.Contains(got, want) {
+		t.Fatalf("period selection output does not contain %q:\n%s", want, got)
+	}
+}
+
 func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 	result := chatwork.Result{
 		Task: chatwork.TaskMessagesList, MessageRoom: reference(chatwork.ReferenceRoom, "42"),

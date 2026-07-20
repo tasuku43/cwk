@@ -211,8 +211,20 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		coverage.Complete, accessValue, countUnresolved(messages), countUnknownRelations(messages))
 	if selection != nil {
 		fmt.Fprintf(output, "selection source-count=%d", selection.SourceCount)
+		if selection.Filter.Period.Since > 0 {
+			fmt.Fprintf(output, " since=%d", selection.Filter.Period.Since)
+		}
+		if selection.Filter.Period.Until > 0 {
+			fmt.Fprintf(output, " until=%d", selection.Filter.Period.Until)
+		}
+		if selection.Filter.Period.Day != "" {
+			fmt.Fprintf(output, " on=%s time-zone=%s", selection.Filter.Period.Day, selection.Filter.Period.TimeZone)
+		}
+		if selection.Filter.Period != (chatwork.MessagePeriod{}) || selection.Filter.StartIndex > 0 || selection.Filter.Count > 0 {
+			fmt.Fprintf(output, " candidate-count=%d", selection.CandidateCount)
+		}
 		if selection.Filter.StartIndex > 0 || selection.Filter.Count > 0 {
-			fmt.Fprintf(output, " candidate-count=%d start-index=%d", selection.CandidateCount, selection.Filter.StartIndex)
+			fmt.Fprintf(output, " start-index=%d", selection.Filter.StartIndex)
 		}
 		if selection.Filter.Count > 0 {
 			fmt.Fprintf(output, " count=%d", selection.Filter.Count)

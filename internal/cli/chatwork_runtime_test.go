@@ -237,6 +237,80 @@ func TestRunChatworkCountsNewestCandidatesAndKeepsProviderOrder(t *testing.T) {
 	}
 }
 
+func TestRunChatworkResolvesTokyoTodayOnceAndFiltersBeforeContext(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	account := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1"), Name: "Aki"}
+	period, err := chatwork.NewMessageDayPeriod("2026-07-17")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		message := func(ref string, sent int64) chatwork.Message {
+			return chatwork.Message{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, ref), Room: room, Sender: account, Body: ref, SendTime: sent}
+		}
+		parent := message("10", period.Since-1)
+		child := message("11", period.Since)
+		child.Reply = &chatwork.Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: request.Room,
+			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{
+				parent,
+				child,
+				message("12", period.Until-1),
+				message("13", period.Until),
+			},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+	clockCalls := 0
+	cli.now = func() time.Time {
+		clockCalls++
+		return time.Date(2026, 7, 17, 14, 59, 0, 0, time.UTC)
+	}
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", "7", "--on", "today", "--context", "replies",
+	})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if clockCalls != 1 || authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = clock %d, auth %d, port %d", clockCalls, authenticator.calls, port.calls)
+	}
+	if !reflect.DeepEqual(port.request.MessageFilter, chatwork.MessageFilter{}) {
+		t.Fatalf("local period leaked to provider: %+v", port.request.MessageFilter)
+	}
+	for _, want := range []string{
+		"selection source-count=4 since=" + strconv.FormatInt(period.Since, 10),
+		" until=" + strconv.FormatInt(period.Until, 10),
+		" on=2026-07-17 time-zone=Asia/Tokyo candidate-count=2 context=replies anchors=[#2,#3]",
+		"#1 10 ", "#2 11 ", "reply=#1", "#3 12 ",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("period output does not contain %q:\n%s", want, stdout.String())
+		}
+	}
+	if strings.Contains(stdout.String(), "#4 13 ") {
+		t.Fatalf("exclusive until record was rendered:\n%s", stdout.String())
+	}
+}
+
+func TestBuildMessagePeriodResolvesYesterdayWithFixedTokyoClock(t *testing.T) {
+	calls := 0
+	period, err := buildMessagePeriod(chatworkArguments{"--on": {"yesterday"}}, func() time.Time {
+		calls++
+		return time.Date(2026, 7, 17, 15, 0, 0, 0, time.UTC)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || period.Day != "2026-07-17" || period.TimeZone != chatwork.MessageDayTimeZone {
+		t.Fatalf("calls=%d period=%+v", calls, period)
+	}
+}
+
 func TestRunChatworkStartIndexAndCountSelectAnUnambiguousOrdinalSlice(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
@@ -280,7 +354,7 @@ func TestBuildChatworkMessageFilterDefaultsContextAndPreservesSenderOrder(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := buildChatworkRequest(spec, parsed)
+	request, err := buildChatworkRequest(spec, parsed, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +380,7 @@ func TestBuildChatworkMessageWindowDefaultsRecentAndAcceptsExplicitValues(t *tes
 			if err != nil {
 				t.Fatal(err)
 			}
-			request, err := buildChatworkRequest(spec, parsed)
+			request, err := buildChatworkRequest(spec, parsed, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -324,7 +398,7 @@ func TestBuildChatworkMessageCountAcceptsInclusiveBoundsAndDefaultsStartIndexAnd
 		if err != nil {
 			t.Fatalf("count %s parse error = %v", value, err)
 		}
-		request, err := buildChatworkRequest(spec, parsed)
+		request, err := buildChatworkRequest(spec, parsed, nil)
 		if err != nil {
 			t.Fatalf("count %s build error = %v", value, err)
 		}
@@ -338,7 +412,7 @@ func TestBuildChatworkMessageCountAcceptsInclusiveBoundsAndDefaultsStartIndexAnd
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := buildChatworkRequest(spec, parsed)
+	request, err := buildChatworkRequest(spec, parsed, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +429,7 @@ func TestBuildChatworkStartIndexAcceptsInclusiveBoundsAndStatesCountSemantics(t 
 		if err != nil {
 			t.Fatalf("start-index %s parse error = %v", value, err)
 		}
-		request, err := buildChatworkRequest(spec, parsed)
+		request, err := buildChatworkRequest(spec, parsed, nil)
 		if err != nil {
 			t.Fatalf("start-index %s build error = %v", value, err)
 		}
@@ -375,7 +449,7 @@ func TestBuildRoomTaskDeadlineRemainsIndependentFromMessageIndexSelection(t *tes
 	if err != nil {
 		t.Fatal(err)
 	}
-	request, err := buildChatworkRequest(spec, parsed)
+	request, err := buildChatworkRequest(spec, parsed, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -403,6 +477,16 @@ func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T
 		{"--room", "7", "--start-index", "101"},
 		{"--room", "7", "--start-index", "ten"},
 		{"--room", "7", "--start-index", "10", "--start-index", "20"},
+		{"--room", "7", "--on", "today"},
+		{"--room", "7", "--on", "7/17"},
+		{"--room", "7", "--on", "2026-02-30"},
+		{"--room", "7", "--on", "2026-07-17", "--since", "2026-07-17T00:00:00+09:00"},
+		{"--room", "7", "--on", "2026-07-17", "--until", "2026-07-18T00:00:00+09:00"},
+		{"--room", "7", "--since", "2026-07-17"},
+		{"--room", "7", "--since", "2026-07-17T00:00:00"},
+		{"--room", "7", "--since", "2026-07-17T00:00:00.5+09:00"},
+		{"--room", "7", "--since", "2026-07-18T00:00:00+09:00", "--until", "2026-07-17T00:00:00+09:00"},
+		{"--room", "7", "--since", "2026-07-17T00:00:00+09:00", "--until", "2026-07-17T00:00:00+09:00"},
 		{"--room", "7", "--limit", "10"},
 	}
 	excessive := []string{"--room", "7"}
@@ -446,7 +530,7 @@ func TestBuildChatworkRequestCoversEveryCatalogTask(t *testing.T) {
 			t.Errorf("%s parse error = %v", spec.Path, err)
 			continue
 		}
-		request, err := buildChatworkRequest(spec, parsed)
+		request, err := buildChatworkRequest(spec, parsed, nil)
 		if err != nil {
 			t.Errorf("%s build error = %v", spec.Path, err)
 			continue

@@ -8,16 +8,16 @@ import (
 )
 
 // assembleMessageWindow resolves one complete bounded source window before
-// selecting newest primary messages. Sender matching forms one OR candidate
-// set, StartIndex and Count select candidates by typed send time without
-// reordering output, and reply context is exactly one hop from the selected
-// anchors.
+// selecting newest primary messages. Sender matching forms one OR predicate,
+// period membership forms an AND predicate, StartIndex and Count select the
+// resulting candidates by typed send time without reordering output, and reply
+// context is exactly one hop from the selected anchors.
 func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageFilter) ([]chatwork.Message, *chatwork.MessageSelection, error) {
 	resolvedSource, err := ResolveMessageRelations(messages)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(filter.Senders) == 0 && filter.StartIndex == 0 && filter.Count == 0 {
+	if len(filter.Senders) == 0 && filter.Period == (chatwork.MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
 		return resolvedSource, nil, nil
 	}
 
@@ -35,6 +35,7 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 		if !matches {
 			_, matches = senders[message.Sender.Ref.Value]
 		}
+		matches = matches && filter.Period.Contains(message.SendTime)
 		if matches {
 			candidates[index] = true
 			candidateIndexes = append(candidateIndexes, index)

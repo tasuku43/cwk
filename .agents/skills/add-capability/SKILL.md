@@ -121,6 +121,20 @@ stability across calls. Reject invalid values before authentication/I/O and
 reject a provider result above declared coverage before local selection can
 hide it.
 
+For the reviewed Chatwork message period selection, declare optional inclusive
+`--since <RFC3339>`, exclusive `--until <RFC3339>`, or their mutually exclusive
+`--on <YYYY-MM-DD|today|yesterday>` shorthand. Exact bounds require an explicit
+offset and whole seconds. `--on` uses the fixed `Asia/Tokyo` calendar; resolve
+an injected clock once and carry only the effective concrete day/zone and
+half-open Unix bounds into the typed request/result. Exact-sender OR and period
+membership form the candidate predicate before typed-time rank/index/count;
+direct reply context follows and may add an out-of-period record only as
+explicit context. Clear every period field before the one `force`-only provider
+call, retain `source-limit=100`, and never claim fewer response bytes, provider
+date filtering, pagination, or older-history access. Reject ambiguous dates,
+offset-free or fractional timestamps, conflicting selectors, and empty or
+reversed intervals before authentication/I/O. Use fixed clocks in tests.
+
 For the reviewed message-window default, omitted or explicit
 `--window recent` selects the latest bounded provider window; only explicit
 `--window changes` selects differential retrieval. Keep both modes at one

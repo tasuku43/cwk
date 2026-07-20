@@ -312,6 +312,14 @@ the application port, and a provider result above `source-limit=100` fails
 before local selection can conceal it. A derived next start index carries no
 credential, opaque provider state, or snapshot-stability claim.
 
+Message `--since`, `--until`, and `--on` are also local read selectors, never
+network controls or authorization boundaries. Exact bounds require explicit
+offsets and whole seconds; `--on` uses fixed Tokyo calendar rules and a single
+injected clock observation rather than ambient host-local time. Invalid,
+conflicting, or reversed periods fail before authentication/I/O. Infrastructure
+rejects leaked period fields, and selection retains the original source bound
+so a smaller output cannot claim older-history or provider-filter completeness.
+
 Rate-limit headers and error envelopes are untrusted external data. Chatwork
 reset timing is accepted only as one bounded strict-decimal
 `x-ratelimit-reset` Unix timestamp in the official five-minute window;

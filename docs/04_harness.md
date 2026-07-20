@@ -231,7 +231,8 @@ The test suite has complementary levels:
 - Exact human-help tests derive required, repeatable, source, allowed-value,
   reference-kind, and description facts from catalog inputs, including the
   multi-sender message selection contract and the inclusive 1..100 start-index
-  and count bounds.
+  and count bounds, plus inclusive-since/exclusive-until and fixed-Tokyo
+  `YYYY-MM-DD|today|yesterday` day selection.
 - Catalog hostile-input tests reject invalid UTF-8, terminal controls, Unicode
   format controls, line separators, and whitespace in non-argv input names
   before exact help can render them.
@@ -274,7 +275,8 @@ The test suite has complementary levels:
   manual release-owner review.
 - Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges.
-- Bounded message-selection tests prove sender OR precedes typed-time ranking,
+- Bounded message-selection tests prove sender OR and half-open period
+  membership precede typed-time ranking,
   later provider position breaks equal-time ties, one-based start index and
   maximum count choose primary anchors, reply context follows that selection,
   and rendered records retain provider order and source sequences. They
@@ -283,6 +285,10 @@ The test suite has complementary levels:
   explicit context to exceed the requested count, reject invalid values before
   authentication/I/O, reject a source above declared
   coverage before selection, and keep local policy out of the one documented
+  provider request. Fixed-clock tests prove Tokyo `today`/`yesterday`, exact
+  effective day/bounds, and pre-I/O rejection of offset-free, fractional,
+  conflicting, empty, or reversed periods. Context may cross the primary period
+  only through an explicit direct reply edge while anchors remain distinct.
   `force` request. CLI/runtime tests additionally prove omitted and explicit
   `recent` emit the latest-window request while explicit `changes` retains the
   differential request and output.
@@ -329,7 +335,7 @@ Every strong statement should identify its enforcement path.
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
 | Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header with the provider bound named `source-limit`, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, and flat provider-order adjacency records. Tests preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. Message actor aliases are allowed only as document-local compression with canonical dictionary entries; semantic raw-notation records, wire extras, derived thread metadata, and non-contract defaults fail |
-| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional one-based `--start-index` and maximum `--count` 1..100; sender predicate then typed-send-time ranking with later-position tie-break then index/count selection then direct typed one-hop reply expansion; context allowed beyond requested count; provider-order gapped source sequences; source/candidate/start/requested-count/items-per-page/next-start and anchor/context distinction; one documented `force` request with no provider pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
+| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, fixed clocks, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional inclusive whole-second offset-bearing RFC3339 `since`, exclusive `until`, or fixed-Tokyo exact/`today`/`yesterday` day; optional one-based `--start-index` and maximum `--count` 1..100; sender-and-period predicate then typed-send-time ranking with later-position tie-break then index/count selection then direct typed one-hop reply expansion; context allowed beyond requested count/period with explicit anchors; provider-order gapped source sequences; source/effective-period/candidate/start/requested-count/items-per-page/next-start and anchor/context distinction; one documented `force` request with no provider pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |
 | Fixed Chatwork API coverage | Strict 32-operation snapshot plus bidirectional operation-to-public-capability validation |

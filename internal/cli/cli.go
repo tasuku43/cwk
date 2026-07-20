@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	appauthn "github.com/tasuku43/cwk/internal/app/authn"
 	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
@@ -39,6 +40,7 @@ type CLI struct {
 	chatworkAuth     *appauthn.Gate
 	chatworkInitErr  error
 	chatworkFactory  func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error)
+	now              func() time.Time
 }
 
 // New builds the production CLI with a lazy PAT adapter. Help and local
@@ -108,6 +110,7 @@ func newCLIWithSamples(
 		terminal:    terminalui.New(),
 		doctor:      doctorcmd.New(inspector),
 		samples:     samplecmd.New(repository),
+		now:         time.Now,
 	}
 }
 

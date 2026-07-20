@@ -143,7 +143,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies]"
+	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -184,6 +184,20 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 		!strings.Contains(window.Description, "recent") || !strings.Contains(window.Description, "既定値") ||
 		!strings.Contains(window.Description, "差分") {
 		t.Fatalf("window input contract = %+v", window)
+	}
+	since, until, on := inputs["--since"], inputs["--until"], inputs["--on"]
+	if since.Required || since.Repeatable || !strings.Contains(since.Description, "含む") ||
+		!strings.Contains(since.Description, "RFC3339") || !strings.Contains(since.Description, "明示オフセット") {
+		t.Fatalf("since input contract = %+v", since)
+	}
+	if until.Required || until.Repeatable || !strings.Contains(until.Description, "含まない") ||
+		!strings.Contains(until.Description, "RFC3339") || !strings.Contains(until.Description, "明示オフセット") {
+		t.Fatalf("until input contract = %+v", until)
+	}
+	if on.Required || on.Repeatable || !strings.Contains(on.Description, "Asia/Tokyo") ||
+		!strings.Contains(on.Description, "YYYY-MM-DD") || !strings.Contains(on.Description, "today") ||
+		!strings.Contains(on.Description, "yesterday") || !strings.Contains(on.Description, "一度だけ") {
+		t.Fatalf("on input contract = %+v", on)
 	}
 	if strings.Contains(count.Description, "Use --window recent") {
 		t.Fatalf("count input repeats the new default window: %+v", count)

@@ -111,6 +111,16 @@ documented `force`, no provider cursor or offset, and zero external
 post-processing calls. Invalid index/count values and an over-coverage source
 must fail before provider I/O or local selection, respectively.
 
+The active message-period probe asks one question whose complete answer lies on
+one Tokyo calendar day inside a synthetic maximum-100 source window. The agent
+must choose `--on` without calculating or externally filtering timestamps,
+interpret effective inclusive-since/exclusive-until bounds, retain only
+in-period primary anchors, and understand that an explicitly requested direct
+reply neighbor may lie outside that period. A fixed-clock variant proves
+`today` and `yesterday` around Tokyo midnight. The budget is one unchanged
+provider task call and zero external post-processing; semantic answer quality
+must match the full source before token reduction is credited.
+
 For a future replacement, before experimental implementation the competition work packet pins:
 
 - fixture corpus and exact semantic answer keys;
@@ -308,7 +318,7 @@ go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailin
 go test ./internal/infra/terminalui
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
-go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex)'
+go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex|MessagePeriod)'
 ```
 
 These prove the bounded human root-to-namespace-to-command navigation, the
@@ -326,6 +336,10 @@ continuation without repeated ranks, context beyond requested count, two
 provider calls, the omitted-window recent default, canonical-reference reuse,
 and zero external post-processing. A separate runtime fixture preserves exact
 `--window changes` differential behavior.
+The active message-period scenario proves sender-and-period composition,
+fixed-clock Tokyo day resolution, concrete effective bounds, unchanged source
+coverage/provider calls, context outside the primary period only through typed
+reply edges, semantic-answer retention, and zero external post-processing.
 
 ## Review record
 

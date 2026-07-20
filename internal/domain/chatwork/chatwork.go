@@ -5,6 +5,7 @@ package chatwork
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -108,6 +109,7 @@ type MessageContext string
 const (
 	MessageContextNone    MessageContext = "none"
 	MessageContextReplies MessageContext = "replies"
+	MessageDayTimeZone                   = "Asia/Tokyo"
 
 	// MaxMessageSelectionCount matches the largest provider message window. A
 	// smaller public count narrows primary messages only; it does not increase
@@ -115,12 +117,53 @@ const (
 	MaxMessageSelectionCount = 100
 )
 
-// MessageFilter selects primary messages authored by any of the exact
-// canonical accounts, or every source message when Senders is empty. StartIndex
-// is the 1-based newest-first primary rank, Count keeps at most that many
-// primary messages, and Context then adds direct reply neighbors.
+var messageDayLocation = time.FixedZone(MessageDayTimeZone, 9*60*60)
+
+// MessagePeriod is one concrete half-open Unix-second interval used only to
+// select primary messages from a bounded provider window. Day and TimeZone are
+// present only when CLI day vocabulary resolved to this interval.
+type MessagePeriod struct {
+	Since    int64
+	Until    int64
+	Day      string
+	TimeZone string
+}
+
+// NewMessagePeriod validates one explicit half-open interval. A zero bound is
+// absent so callers can express since-only and until-only selection.
+func NewMessagePeriod(since, until int64) (MessagePeriod, error) {
+	period := MessagePeriod{Since: since, Until: until}
+	if err := validateMessagePeriod(period); err != nil {
+		return MessagePeriod{}, err
+	}
+	return period, nil
+}
+
+// NewMessageDayPeriod converts one exact Japanese calendar day to concrete
+// half-open Unix bounds without consulting ambient host time-zone state.
+func NewMessageDayPeriod(day string) (MessagePeriod, error) {
+	return messageDayPeriod(day)
+}
+
+// Contains reports membership in the concrete half-open period. The zero
+// period contains every timestamp.
+func (p MessagePeriod) Contains(sendTime int64) bool {
+	if p.Since > 0 && sendTime < p.Since {
+		return false
+	}
+	if p.Until > 0 && sendTime >= p.Until {
+		return false
+	}
+	return true
+}
+
+// MessageFilter selects primary messages authored by any exact canonical
+// account and inside the concrete period, with either predicate omitted when
+// zero. StartIndex is the 1-based newest-first primary rank, Count keeps at most
+// that many primary messages, and Context then adds direct reply neighbors.
 type MessageFilter struct {
 	Senders    []Reference
+	Period     MessagePeriod
 	Context    MessageContext
 	StartIndex int
 	Count      int
@@ -296,7 +339,50 @@ func validRoomIconPreset(value string) bool {
 	return false
 }
 
+func validateMessagePeriod(period MessagePeriod) error {
+	if period.Since < 0 || period.Until < 0 {
+		return fmt.Errorf("message period bounds must be positive Unix times when present")
+	}
+	if period.Since > 0 && period.Until > 0 && period.Since >= period.Until {
+		return fmt.Errorf("message period must be a non-empty half-open interval")
+	}
+	if period.Day == "" && period.TimeZone == "" {
+		return nil
+	}
+	if period.Day == "" || period.TimeZone != MessageDayTimeZone {
+		return fmt.Errorf("message day period requires an exact day and the fixed time zone")
+	}
+	expected, err := messageDayPeriod(period.Day)
+	if err != nil {
+		return err
+	}
+	if period != expected {
+		return fmt.Errorf("message day period bounds do not match its calendar day")
+	}
+	return nil
+}
+
+func messageDayPeriod(day string) (MessagePeriod, error) {
+	start, err := time.ParseInLocation("2006-01-02", day, messageDayLocation)
+	if err != nil || start.Format("2006-01-02") != day {
+		return MessagePeriod{}, fmt.Errorf("message day must use a valid YYYY-MM-DD date")
+	}
+	period := MessagePeriod{
+		Since:    start.Unix(),
+		Until:    start.AddDate(0, 0, 1).Unix(),
+		Day:      day,
+		TimeZone: MessageDayTimeZone,
+	}
+	if period.Since <= 0 || period.Until <= period.Since {
+		return MessagePeriod{}, fmt.Errorf("message day must resolve to a positive non-empty interval")
+	}
+	return period, nil
+}
+
 func validateMessageFilter(filter MessageFilter) error {
+	if err := validateMessagePeriod(filter.Period); err != nil {
+		return fmt.Errorf("message selection period is invalid: %w", err)
+	}
 	if filter.StartIndex < 0 || filter.StartIndex > MaxMessageSelectionCount {
 		return fmt.Errorf("message selection start index must be between 1 and %d when present", MaxMessageSelectionCount)
 	}
@@ -306,9 +392,9 @@ func validateMessageFilter(filter MessageFilter) error {
 	if filter.Count > 0 && filter.StartIndex == 0 {
 		return fmt.Errorf("message selection count requires an explicit or defaulted start index")
 	}
-	if len(filter.Senders) == 0 && filter.StartIndex == 0 && filter.Count == 0 {
+	if len(filter.Senders) == 0 && filter.Period == (MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
 		if filter.Context != "" {
-			return fmt.Errorf("message context requires a sender filter or message index selection")
+			return fmt.Errorf("message context requires a sender, period, or message index selection")
 		}
 		return nil
 	}
@@ -335,7 +421,7 @@ func validateMessageFilter(filter MessageFilter) error {
 }
 
 func messageFilterActive(filter MessageFilter) bool {
-	return len(filter.Senders) > 0 || filter.Context != "" || filter.StartIndex > 0 || filter.Count > 0
+	return len(filter.Senders) > 0 || filter.Period != (MessagePeriod{}) || filter.Context != "" || filter.StartIndex > 0 || filter.Count > 0
 }
 
 func (t Task) Valid() bool {
@@ -900,8 +986,8 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 	if selection.CandidateCount < 0 || selection.CandidateCount > selection.SourceCount {
 		return fmt.Errorf("Chatwork message selection candidate count is outside its source window")
 	}
-	if len(selection.Filter.Senders) == 0 && selection.CandidateCount != selection.SourceCount {
-		return fmt.Errorf("Chatwork message selection without senders must consider every source message")
+	if len(selection.Filter.Senders) == 0 && selection.Filter.Period == (MessagePeriod{}) && selection.CandidateCount != selection.SourceCount {
+		return fmt.Errorf("Chatwork message selection without primary predicates must consider every source message")
 	}
 	if selection.SourceSequences == nil || selection.AnchorSequences == nil {
 		return fmt.Errorf("Chatwork message selection provenance must be explicit")
@@ -974,6 +1060,9 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 		if markedAnchor && len(senderSet) > 0 && !senderMatches {
 			return fmt.Errorf("Chatwork message selection anchor does not match its sender filter")
 		}
+		if markedAnchor && !selection.Filter.Period.Contains(message.SendTime) {
+			return fmt.Errorf("Chatwork message selection anchor does not match its period filter")
+		}
 		if markedAnchor {
 			anchorRefs[message.Ref] = struct{}{}
 			anchorMessages = append(anchorMessages, message)
@@ -1017,7 +1106,7 @@ func equalSequences(left, right []int) bool {
 }
 
 func equalMessageFilters(left, right MessageFilter) bool {
-	if left.Context != right.Context || left.StartIndex != right.StartIndex || left.Count != right.Count || len(left.Senders) != len(right.Senders) {
+	if left.Period != right.Period || left.Context != right.Context || left.StartIndex != right.StartIndex || left.Count != right.Count || len(left.Senders) != len(right.Senders) {
 		return false
 	}
 	for index := range left.Senders {

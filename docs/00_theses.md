@@ -184,19 +184,30 @@ sequence, including gaps, distinguishes sender matches from added context once
 per document, and does not claim that two selected speakers form an exclusive
 conversation.
 
+Message periods are likewise finite typed selection over that same bounded
+provider result. Inclusive `--since` and exclusive `--until` accept only
+whole-second RFC3339 values with an explicit offset. `--on` instead accepts one
+exact `YYYY-MM-DD` or the relative task words `today` and `yesterday`; it uses
+the fixed `Asia/Tokyo` calendar, resolves an injected clock exactly once, and
+publishes the effective concrete day and half-open Unix interval. `--on` cannot
+be combined with explicit bounds. This selection neither becomes an
+undocumented provider query nor claims access outside the returned window.
+
 Optional `messages list --start-index` and `--count` use SCIM-derived index
 semantics over the one bounded provider result without becoming provider
 pagination. `start-index` is the one-based first primary-message rank and
 defaults to 1; `count` is the requested maximum number of primary anchors, not
 an inclusive end rank. Thus `--start-index 11 --count 20` selects ranks 11
-through 30. The candidate set is all source messages, or the exact-sender OR
-matches when `--sender` is present. Typed send time establishes candidate rank;
+through 30. The candidate set contains messages that satisfy the exact-sender
+OR predicate when present and the half-open period predicate when present.
+Typed send time establishes candidate rank;
 equal times prefer the later provider position. Selected records are still
 emitted in their original provider order with original source sequences.
 Explicit `replies` context runs afterward and may therefore make displayed
-count exceed `count`. Selection metadata keeps candidate count, start index,
-requested count, actual items per page, and optional next start index separate
-from the provider's 100-message `source-limit`. A source that exceeds its
+count exceed `count` or add a direct neighbor outside the primary period.
+Selection metadata keeps effective period bounds, candidate count, start
+index, requested count, actual items per page, and optional next start index
+separate from the provider's 100-message `source-limit`. A source that exceeds its
 declared coverage fails before selection can hide the violation. Because this
 is a stateless rank over separate provider snapshots, intervening source changes
 may shift later ranks; the command does not claim snapshot stability.

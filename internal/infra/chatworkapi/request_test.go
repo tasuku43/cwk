@@ -217,6 +217,7 @@ func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) 
 		},
 		"count":       {StartIndex: 1, Count: 10},
 		"start index": {StartIndex: 10},
+		"period":      {Period: chatwork.MessagePeriod{Since: 100, Until: 200}, Context: chatwork.MessageContextNone},
 	} {
 		t.Run(name, func(t *testing.T) {
 			input := completeRequest(chatwork.TaskMessagesList)
@@ -247,6 +248,7 @@ func TestBuildMessageListRequestEmitsOnlyDocumentedForceQuery(t *testing.T) {
 				t.Fatalf("request = %s %s, want GET %s", spec.method, spec.path, test.path)
 			}
 			if strings.Contains(spec.path, "limit=") || strings.Contains(spec.path, "count=") ||
+				strings.Contains(spec.path, "since=") || strings.Contains(spec.path, "until=") || strings.Contains(spec.path, "on=") ||
 				strings.Contains(spec.path, "start") || strings.Contains(spec.path, "skip") || strings.Contains(spec.path, "offset") {
 				t.Fatalf("application selection leaked into provider query %q", spec.path)
 			}

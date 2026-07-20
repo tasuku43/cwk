@@ -161,16 +161,22 @@ Primary sources: Chatwork's
 [limitation notice](https://developer.chatwork.com/changelog/2022-09-06-notice),
 and [notation guide](https://developer.chatwork.com/docs/message-notation).
 
-`messages list --sender`, `--start-index`, `--count`, and `--context` are
-application-owned selection inputs over that single bounded message response.
+`messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
+`--count`, and `--context` are application-owned selection inputs over that
+single bounded message response.
 Start index and count accept 1 through 100; count alone defaults start index to
-1. Exact-sender OR matching runs first; typed `send_time` then establishes
+1. Since is inclusive and until exclusive; both are whole-second RFC3339 with
+explicit offsets. `--on` is their mutually exclusive fixed-`Asia/Tokyo`
+calendar shorthand for an exact day, `today`, or `yesterday`; relative words
+resolve once to concrete bounds through an injected command clock. Exact-sender
+OR and period membership form the candidate predicate; typed `send_time` then establishes
 newest-first candidate rank, with later provider position breaking equal-time
 ties; the one-based start index and requested maximum count select primary
 anchors; direct typed reply context runs last and may increase displayed count
 beyond the requested count. Membership selection does not reorder the
 provider records or their original sequences. These inputs never become
-Chatwork query parameters, trigger a second request, or fetch a referenced
+Chatwork query parameters, trigger a second request, reduce provider response
+bytes, retrieve older history, or fetch a referenced
 message outside the returned window. Adapter request construction rejects them
 if they cross the application port boundary, and the one provider request
 continues to use only the documented `force` query. There is no provider cursor,
@@ -179,8 +185,9 @@ separately as `source-limit`; candidate count, applied start index, requested
 count, actual items per page, optional next start index, and anchors belong to
 selection provenance. The one-based/count vocabulary derives from SCIM index
 pagination, but separate calls remain stateless over separate Chatwork results
-and source mutations can shift ranks. Invalid values fail before authentication
-or provider I/O.
+and source mutations can shift ranks. Invalid ranks, ambiguous dates,
+offset-free/fractional timestamps, conflicting selectors, and empty or reversed
+periods fail before authentication or provider I/O.
 
 For keyed mutation retry, create one key only after the complete logical intent and payload have been validated. Reuse that key for transport attempts of the same logical operation, never reuse it for a different target or payload, and never regenerate it merely because the transport result is uncertain. Adapter tests must prove same-operation reuse and cross-operation separation; `apicall.Policy` validates the generic declaration but cannot infer provider-specific key binding.
 

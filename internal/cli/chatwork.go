@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	appauthn "github.com/tasuku43/cwk/internal/app/authn"
 	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
@@ -26,7 +27,11 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	if err != nil {
 		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
-	request, err := buildChatworkRequest(command, arguments)
+	var now func() time.Time
+	if c != nil {
+		now = c.now
+	}
+	request, err := buildChatworkRequest(command, arguments, now)
 	if err != nil {
 		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
@@ -177,7 +182,7 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 	return parsed, nil
 }
 
-func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (chatwork.Request, error) {
+func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now func() time.Time) (chatwork.Request, error) {
 	if command.chatwork == nil || !command.chatwork.Task.Valid() {
 		return chatwork.Request{}, fmt.Errorf("Chatwork タスク宣言は無効です")
 	}
@@ -285,6 +290,9 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 			request.ForceRecent = value == "recent"
 		case "--context":
 			request.MessageFilter.Context = chatwork.MessageContext(value)
+		case "--since", "--until", "--on":
+			// Period syntax is normalized together after all flags have been bound
+			// so mutually exclusive and two-bound invariants are order independent.
 		case "--self-unread":
 			request.SelfUnread = true
 		case "--create-download-url":
@@ -313,12 +321,77 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments) (cha
 		request.MessageFilter.Count > 0 && request.MessageFilter.StartIndex == 0 {
 		request.MessageFilter.StartIndex = 1
 	}
+	if request.Task == chatwork.TaskMessagesList {
+		period, periodErr := buildMessagePeriod(arguments, now)
+		if periodErr != nil {
+			return chatwork.Request{}, periodErr
+		}
+		request.MessageFilter.Period = period
+	}
 	if request.Task == chatwork.TaskMessagesList &&
-		(len(request.MessageFilter.Senders) > 0 || request.MessageFilter.StartIndex > 0 || request.MessageFilter.Count > 0) &&
+		(len(request.MessageFilter.Senders) > 0 || request.MessageFilter.Period != (chatwork.MessagePeriod{}) || request.MessageFilter.StartIndex > 0 || request.MessageFilter.Count > 0) &&
 		request.MessageFilter.Context == "" {
 		request.MessageFilter.Context = chatwork.MessageContextNone
 	}
 	return request, nil
+}
+
+func buildMessagePeriod(arguments chatworkArguments, now func() time.Time) (chatwork.MessagePeriod, error) {
+	sinceValue := arguments.first("--since")
+	untilValue := arguments.first("--until")
+	onValue := arguments.first("--on")
+	if onValue != "" && (sinceValue != "" || untilValue != "") {
+		return chatwork.MessagePeriod{}, fmt.Errorf("--on は --since または --until と同時に指定できません")
+	}
+	if onValue != "" {
+		day := onValue
+		switch onValue {
+		case "today", "yesterday":
+			if now == nil {
+				return chatwork.MessagePeriod{}, fmt.Errorf("相対日の解決に必要なコマンド時計が設定されていません")
+			}
+			current := now()
+			if current.IsZero() {
+				return chatwork.MessagePeriod{}, fmt.Errorf("相対日の解決に必要なコマンド時計が無効です")
+			}
+			location := time.FixedZone(chatwork.MessageDayTimeZone, 9*60*60)
+			current = current.In(location)
+			if onValue == "yesterday" {
+				current = current.AddDate(0, 0, -1)
+			}
+			day = current.Format("2006-01-02")
+		}
+		period, err := chatwork.NewMessageDayPeriod(day)
+		if err != nil {
+			return chatwork.MessagePeriod{}, fmt.Errorf("--on は YYYY-MM-DD、today、yesterday のいずれかで指定してください")
+		}
+		return period, nil
+	}
+
+	since, err := parseMessagePeriodBound("--since", sinceValue)
+	if err != nil {
+		return chatwork.MessagePeriod{}, err
+	}
+	until, err := parseMessagePeriodBound("--until", untilValue)
+	if err != nil {
+		return chatwork.MessagePeriod{}, err
+	}
+	period, err := chatwork.NewMessagePeriod(since, until)
+	if err != nil {
+		return chatwork.MessagePeriod{}, fmt.Errorf("--since と --until は空でない昇順の期間を指定してください")
+	}
+	return period, nil
+}
+
+func parseMessagePeriodBound(name, value string) (int64, error) {
+	if value == "" {
+		return 0, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil || parsed.Nanosecond() != 0 || parsed.Unix() <= 0 {
+		return 0, fmt.Errorf("%s は明示的なオフセットを持つ秒精度の RFC3339 時刻で指定してください", name)
+	}
+	return parsed.Unix(), nil
 }
 
 func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, arguments chatworkArguments) (execution.Request, error) {

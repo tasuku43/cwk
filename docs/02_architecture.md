@@ -146,9 +146,9 @@ For Chatwork output, including relationship-aware message results and the curren
   and requested count select primary anchors; optional reply context then adds
   only direct typed in-window parents/children. Source sequences and final
   physical order remain those of the unfiltered provider window.
-  Application-only sender/context/start-index/count fields are removed before the
-  infrastructure port is called.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+  Application-only sender/period/context/start-index/count fields are removed
+  before the infrastructure port is called.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved replies become `reply=#N`, unresolved targets remain explicit, unknown relation sets remain distinct from absent relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -371,22 +371,32 @@ an omitted `messages list --window` to recent before the application boundary;
 explicit `recent` preserves that value and explicit `changes` selects the
 differential request. Infrastructure remains a policy-free boolean-to-query
 mapping: recent emits `force=1`, while changes omits `force`. In particular,
-`messages list`
-evaluates exact-sender OR selection once over the bounded typed provider result,
-then ranks candidates by typed send time, applies optional one-based
+`messages list` evaluates exact-sender OR and optional half-open period
+membership once over the bounded typed provider result, then ranks candidates
+by typed send time, applies optional one-based
 `--start-index` and maximum `--count` 1..100, and only then expands
 direct non-transitive `replies` context. A timestamp selects membership but
 never changes provider-order output; equal timestamps prefer the later provider
 position. Omitted targets remain explicit unresolved canonical references
 instead of being guessed or fetched. Selection metadata carries source and
-candidate counts, start index, requested count, actual items per page, optional
-next start index, original source sequences, and primary anchors so presentation
-need not reconstruct policy. Explicit reply context may make displayed count
-exceed the requested primary count.
+candidate counts, concrete period bounds/day, start index, requested count,
+actual items per page, optional next start index, original source sequences,
+and primary anchors so presentation need not reconstruct policy. Explicit reply
+context may make displayed count exceed the requested primary count or include
+a direct neighbor outside the primary period.
+
+CLI request assembly parses whole-second offset-bearing RFC3339 bounds and
+resolves `--on YYYY-MM-DD|today|yesterday` once with its injected clock and the
+fixed `Asia/Tokyo` calendar. Only the effective Unix interval and optional
+concrete day/zone cross the application boundary; the relative word and host
+local zone do not. Missing clocks and invalid or conflicting period syntax fail
+before authentication. Application removes those period fields together with
+sender/context/index fields before calling infrastructure.
 
 Chatwork documents no limit, cursor, or offset for this endpoint. Infrastructure
 continues to issue exactly one request with only the documented `force` query,
-and rejects application-only selection state if it crosses the port. The
+and rejects application-only sender/period/index/context state if it crosses
+the port. The
 provider's maximum-100 coverage is a `source-limit`, not the public requested
 count or a provider page size. An over-bound source result fails before
 application selection, and invalid public index/count values fail before
