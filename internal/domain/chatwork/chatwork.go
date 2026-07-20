@@ -581,7 +581,7 @@ type Message struct {
 	UpdateTime    int64
 	RelationState MessageRelationState
 	Recipients    []Reference
-	Reply         *Relation
+	Replies       []Relation
 	Quotes        []Relation
 }
 
@@ -1215,14 +1215,24 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 			if _, anchor := anchorSet[selection.SourceSequences[index]]; anchor {
 				continue
 			}
-			direct := message.Reply != nil && message.Reply.Resolved
-			if direct {
-				_, direct = anchorRefs[message.Reply.Target]
+			direct := false
+			for _, reply := range message.Replies {
+				if reply.Resolved {
+					_, direct = anchorRefs[reply.Target]
+				}
+				if direct {
+					break
+				}
 			}
 			if !direct {
 				for _, anchor := range anchorMessages {
-					if anchor.Reply != nil && anchor.Reply.Resolved && anchor.Reply.Target == message.Ref {
-						direct = true
+					for _, reply := range anchor.Replies {
+						if reply.Resolved && reply.Target == message.Ref {
+							direct = true
+							break
+						}
+					}
+					if direct {
 						break
 					}
 				}
@@ -1336,12 +1346,14 @@ func validateMessageRelationResolution(resolution MessageRelationResolution, mes
 		wantedSet[ref] = struct{}{}
 	}
 	appendWanted := func(message Message) {
-		if message.Reply == nil || message.Reply.Kind != "reply" || message.Reply.ExternalID != room.Value {
-			return
-		}
-		if _, seen := wantedSet[message.Reply.Target]; !seen {
-			wantedSet[message.Reply.Target] = struct{}{}
-			wanted = append(wanted, message.Reply.Target)
+		for _, reply := range message.Replies {
+			if reply.Kind != "reply" || reply.ExternalID != room.Value {
+				continue
+			}
+			if _, seen := wantedSet[reply.Target]; !seen {
+				wantedSet[reply.Target] = struct{}{}
+				wanted = append(wanted, reply.Target)
+			}
 		}
 	}
 	for _, message := range messages {
@@ -1401,12 +1413,14 @@ func validateMessageRelationResolution(resolution MessageRelationResolution, mes
 		return fmt.Errorf("Chatwork message relation fetch attempt count does not match target outcomes")
 	}
 	checkReplyState := func(message Message) error {
-		if message.Reply == nil || message.Reply.Kind != "reply" || message.Reply.ExternalID != room.Value {
-			return nil
-		}
-		_, resolved := available[message.Reply.Target]
-		if message.Reply.Resolved != resolved {
-			return fmt.Errorf("Chatwork reply state does not match relation resolution evidence")
+		for _, reply := range message.Replies {
+			if reply.Kind != "reply" || reply.ExternalID != room.Value {
+				continue
+			}
+			_, resolved := available[reply.Target]
+			if reply.Resolved != resolved {
+				return fmt.Errorf("Chatwork reply state does not match relation resolution evidence")
+			}
 		}
 		return nil
 	}
@@ -1487,7 +1501,7 @@ func validateResultMessage(field string, message Message) error {
 		return fmt.Errorf("Chatwork result %s relation state is invalid", field)
 	}
 	if message.RelationState == MessageRelationsUnknown &&
-		(len(message.Recipients) != 0 || message.Reply != nil || len(message.Quotes) != 0) {
+		(len(message.Recipients) != 0 || len(message.Replies) != 0 || len(message.Quotes) != 0) {
 		return fmt.Errorf("Chatwork result %s has partial facts for an unknown relation set", field)
 	}
 	for index, recipient := range message.Recipients {
@@ -1495,11 +1509,11 @@ func validateResultMessage(field string, message Message) error {
 			return err
 		}
 	}
-	if message.Reply != nil {
-		if message.Reply.Kind != "reply" {
-			return fmt.Errorf("Chatwork result %s reply relation kind is %q, want %q", field, message.Reply.Kind, "reply")
+	for index, reply := range message.Replies {
+		if reply.Kind != "reply" {
+			return fmt.Errorf("Chatwork result %s reply[%d] relation kind is %q, want %q", field, index, reply.Kind, "reply")
 		}
-		if err := validateResultReference(field+" reply target", message.Reply.Target, ReferenceMessage, !message.Reply.Resolved); err != nil {
+		if err := validateResultReference(fmt.Sprintf("%s reply[%d] target", field, index), reply.Target, ReferenceMessage, !reply.Resolved); err != nil {
 			return err
 		}
 	}

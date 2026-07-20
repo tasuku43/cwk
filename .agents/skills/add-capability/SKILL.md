@@ -147,8 +147,9 @@ reversed intervals before authentication/I/O. Use fixed clocks in tests.
 For the reviewed Chatwork reply-relation closure, declare optional
 `--resolve-relations <count>` in 0..100 with public default five and zero as the
 explicit opt-out. After local selection, traverse only typed explicit
-same-room reply parents in breadth-first first-reference order. Reuse parents
-from the original source without spending a slot; otherwise make at most one
+same-room reply edges in breadth-first first-reference order. Preserve every
+explicit reply in provider order, reuse unique targets from the original
+source without spending a slot; otherwise make at most one
 exact read per unique target, and enqueue the same relation kind from attached
 context until the budget is consumed. Use a visited set for duplicates and
 cycles. Preserve supplemental context outside source sequences, publish fetch
@@ -457,7 +458,7 @@ Add the smallest set that proves the capability:
   active compatibility fixtures only after reviewed evidence and an explicit
   compatibility decision;
 - command-attention tests proving a new configurable leaf stays off in a saved
-  profile, appears in missing-state defaults, participates in active
+  profile, is absent from the unconfigured control-only view, participates in active
   reference/recovery closure, and cannot leak through any human/agent help or
   routing projection while disabled. Prove disabled execution performs zero
   PAT/provider calls and re-enabling retains the leaf's original security

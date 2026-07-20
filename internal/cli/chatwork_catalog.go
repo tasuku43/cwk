@@ -98,7 +98,7 @@ func chatworkCommandSpecs() []CommandSpec {
 				integerFlag("--count", false, "--start-index から返す主要メッセージの最大件数（1〜100）です。終了順位ではありません。--start-index 11 --count 20 は順位11〜30を選びます。直接の返信コンテキストにより、表示件数はこの値を超えることがあります。"),
 				repeatedRefFlag("--sender", false, account, "プロバイダーの上限付き範囲内で、完全一致の送信者アカウントに絞り込みます。表示名しか分からない場合は先に members find で候補を取得し、選んだ account_ref を変更せず渡します。列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件です。"),
 				enumFlag("--context", false, "送信者、期間、順位のいずれかの選択とともに使用し、関連レコードを含めない（none、既定値）か、上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）かを選択します。返信コンテキストは主要期間外を含む場合があります。", "none", "replies"),
-				integerFlag("--resolve-relations", false, "表示対象と補足メッセージが参照する同一ルームの未解決返信元を、正規 message_ref による追加の一件取得で再帰的に補う最大件数（0〜100）です。既定値は5、0は追加取得を無効化します。元の100件内にある返信元と重複IDは枠を消費せず、循環は一度だけ扱います。"),
+				integerFlag("--resolve-relations", false, "表示対象と補足メッセージが持つすべての同一ルーム未解決返信先を、正規 message_ref による追加の一件取得で再帰的に補う最大件数（0〜100）です。既定値は5、0は追加取得を無効化します。元の100件内にある返信先と重複IDは枠を消費せず、循環は一度だけ扱います。"),
 			}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
 		chatworkMutation("messages send", "完全一致するルームへメッセージを送信する", "--room <room-ref> --body <text> [--self-unread]", RoleAct,
 			"chatwork.messages.manage", "選択したルームへ、指定したメッセージ本文を一件送信する",
@@ -413,7 +413,7 @@ func messageFields(room, message, account string, collection bool) []OutputField
 		sendDescription = "位置レコードの4番目にあるUnix送信時刻。"
 		bodyDescription = "位置レコードの末尾にある、ターミナルで安全な引用済みメッセージ本文。"
 	}
-	result := fields(refField("message_ref", message, messageDescription), refField("room_ref", room, "親ルームの正規参照。"), refField("sender_ref", account, "送信者アカウントの正規参照。"), textField("sender_name", "構造を安全に区切った、信頼されていないテキストとしての送信者表示名。"), textField("body", bodyDescription), integerField("send_time", sendDescription), textField("relation_state", "不完全な公式記法により関係集合を証明できない場合だけ unknown。省略時は reviewed relation set が完全です。"), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "relation_state が unknown の場合は省略する、解決済みまたは未解決の型付きTo・返信・引用関係。"})
+	result := fields(refField("message_ref", message, messageDescription), refField("room_ref", room, "親ルームの正規参照。"), refField("sender_ref", account, "送信者アカウントの正規参照。"), textField("sender_name", "構造を安全に区切った、信頼されていないテキストとしての送信者表示名。"), textField("body", bodyDescription), integerField("send_time", sendDescription), textField("relation_state", "不完全な公式記法により関係集合を証明できない場合だけ unknown。完全な複数返信は unknown ではなく、省略時は reviewed relation set が完全です。"), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "relation_state が unknown の場合は省略する、解決済みまたは未解決の型付きTo・返信・引用関係。返信は公式記法の順序を保ち、1件は reply=#N、複数は reply=[#N,#M] のように表します。各値は既存の解決済み・未解決文法を使います。"})
 	if collection {
 		result = append(result,
 			integerField("sequence", "プロバイダーが返した元のメッセージ範囲内での1始まりの位置。選択後の出力では連番にならない場合があります。"),
@@ -428,7 +428,7 @@ func messageFields(room, message, account string, collection bool) []OutputField
 			textField("period_reachability", "期間指定が最古到達境界内、境界を一部超過、全体が境界外、または判定不能のいずれか。期間を指定しなかった場合は存在しません。"),
 			integerField("relation_fetch_limit", "返信連鎖を補う追加の一件取得上限。既定値は5で、--resolve-relations 0 は無効化します。"),
 			integerField("relation_fetch_attempts", "実際に行った追加の一件取得回数。元の取得範囲内での解決は含みません。"),
-			OutputField{Name: "relation_resolution_targets", Type: OutputFieldTypeArray, Description: "表示対象から再帰的に到達した同一ルーム返信元ごとの正規 message_ref、source・fetched・not-found・restricted・budget-exhausted 状態、および解決できた補足メッセージ。"},
+			OutputField{Name: "relation_resolution_targets", Type: OutputFieldTypeArray, Description: "表示対象のすべての返信辺から再帰的に到達した同一ルーム返信先ごとの正規 message_ref、source・fetched・not-found・restricted・budget-exhausted 状態、および解決できた補足メッセージ。"},
 			integerField("source_count", "有効なローカル選択を適用する前にプロバイダーが返したメッセージ数。選択を要求しなかった場合は存在しません。"),
 			integerField("candidate_count", "任意の送信者・期間照合後かつ start-index/count 適用前にある、上限付き取得範囲内の主要メッセージ候補数。選択を要求しなかった場合は存在しません。"),
 			integerField("filter_since", "主要メッセージに含める最初のUnix秒。下限を指定しなかった場合は存在しません。"),

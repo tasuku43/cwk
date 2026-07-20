@@ -20,11 +20,11 @@ func TestResolveMessageRelationsResolvesOnlyExplicitSameRoomWindowTarget(t *test
 		Ref:        relationshipReference(t, chatwork.ReferenceMessage, "102"),
 		Room:       room,
 		Recipients: []chatwork.Reference{relationshipReference(t, chatwork.ReferenceAccount, "7")},
-		Reply: &chatwork.Relation{
+		Replies: []chatwork.Relation{{
 			Kind:       "reply",
 			Target:     parent.Ref,
 			ExternalID: room.Value,
-		},
+		}},
 		Quotes: []chatwork.Relation{{
 			Kind:       "quote",
 			Target:     relationshipReference(t, chatwork.ReferenceAccount, "8"),
@@ -39,10 +39,10 @@ func TestResolveMessageRelationsResolvesOnlyExplicitSameRoomWindowTarget(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got[1].Reply == nil || !got[1].Reply.Resolved {
-		t.Fatalf("reply = %#v", got[1].Reply)
+	if len(got[1].Replies) != 1 || !got[1].Replies[0].Resolved {
+		t.Fatalf("reply = %#v", got[1].Replies[0])
 	}
-	if got[1].Reply.Target != parent.Ref || got[1].Room != room ||
+	if got[1].Replies[0].Target != parent.Ref || got[1].Room != room ||
 		!reflect.DeepEqual(got[1].Quotes, reply.Quotes) {
 		t.Fatalf("canonical or quote facts changed: %#v", got[1])
 	}
@@ -51,10 +51,32 @@ func TestResolveMessageRelationsResolvesOnlyExplicitSameRoomWindowTarget(t *test
 	}
 
 	got[1].Recipients[0].Value = "99"
-	got[1].Reply.Target.Value = "99"
+	got[1].Replies[0].Target.Value = "99"
 	got[1].Quotes[0].ExternalID = "changed"
 	if !reflect.DeepEqual(input, wantInput) {
 		t.Fatal("output aliases relationship-bearing input storage")
+	}
+}
+
+func TestResolveMessageRelationsResolvesEveryExplicitReply(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	first := chatwork.Message{Ref: relationshipReference(t, chatwork.ReferenceMessage, "101"), Room: room}
+	second := chatwork.Message{Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room}
+	child := chatwork.Message{
+		Ref: relationshipReference(t, chatwork.ReferenceMessage, "103"), Room: room,
+		Replies: []chatwork.Relation{
+			{Kind: "reply", Target: first.Ref, ExternalID: room.Value},
+			{Kind: "reply", Target: second.Ref, ExternalID: room.Value},
+		},
+	}
+
+	got, err := ResolveMessageRelations([]chatwork.Message{first, second, child})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got[2].Replies) != 2 || !got[2].Replies[0].Resolved || !got[2].Replies[1].Resolved ||
+		got[2].Replies[0].Target != first.Ref || got[2].Replies[1].Target != second.Ref {
+		t.Fatalf("replies = %+v, want both resolved in provider order", got[2].Replies)
 	}
 }
 
@@ -83,14 +105,14 @@ func TestResolveMessageRelationsKeepsUnprovenExplicitRepliesUnresolved(t *testin
 		t.Run(name, func(t *testing.T) {
 			messages := []chatwork.Message{
 				{Ref: relationshipReference(t, chatwork.ReferenceMessage, "101"), Room: room},
-				{Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room, Reply: &relation},
+				{Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room, Replies: []chatwork.Relation{relation}},
 			}
 			got, err := ResolveMessageRelations(messages)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got[1].Reply.Resolved {
-				t.Fatalf("reply was fabricated: %#v", got[1].Reply)
+			if got[1].Replies[0].Resolved {
+				t.Fatalf("reply was fabricated: %#v", got[1].Replies[0])
 			}
 		})
 	}
@@ -124,8 +146,8 @@ func TestResolveMessageRelationsIgnoresNonRelationAndHostileText(t *testing.T) {
 		t.Fatal(err)
 	}
 	for index := range got {
-		if got[index].Reply != nil {
-			t.Fatalf("message %d gained a reply: %#v", index, got[index].Reply)
+		if len(got[index].Replies) != 0 {
+			t.Fatalf("message %d gained a reply: %#v", index, got[index].Replies[0])
 		}
 	}
 	if !reflect.DeepEqual(got[1].Quotes, messages[1].Quotes) {
@@ -148,12 +170,12 @@ func TestResolveMessageRelationsRejectsDuplicateAndInconsistentFactsSafely(t *te
 			messages: []chatwork.Message{{
 				Ref:  relationshipReference(t, chatwork.ReferenceMessage, "102"),
 				Room: room,
-				Reply: &chatwork.Relation{
+				Replies: []chatwork.Relation{{
 					Kind:       "reply",
 					Target:     relationshipReference(t, chatwork.ReferenceMessage, "987654321"),
 					Resolved:   true,
 					ExternalID: room.Value,
-				},
+				}},
 			}},
 			code: "inconsistent_chatwork_message_relation",
 		},
@@ -161,12 +183,12 @@ func TestResolveMessageRelationsRejectsDuplicateAndInconsistentFactsSafely(t *te
 			messages: []chatwork.Message{message, {
 				Ref:  relationshipReference(t, chatwork.ReferenceMessage, "102"),
 				Room: room,
-				Reply: &chatwork.Relation{
+				Replies: []chatwork.Relation{{
 					Kind:       "reply",
 					Target:     message.Ref,
 					Resolved:   true,
 					ExternalID: "999999999",
-				},
+				}},
 			}},
 			code: "inconsistent_chatwork_message_relation",
 		},
@@ -174,12 +196,12 @@ func TestResolveMessageRelationsRejectsDuplicateAndInconsistentFactsSafely(t *te
 			messages: []chatwork.Message{message, {
 				Ref:  relationshipReference(t, chatwork.ReferenceMessage, "102"),
 				Room: room,
-				Reply: &chatwork.Relation{
+				Replies: []chatwork.Relation{{
 					Kind:       "quote",
 					Target:     message.Ref,
 					Resolved:   true,
 					ExternalID: room.Value,
-				},
+				}},
 			}},
 			code: "inconsistent_chatwork_message_relation",
 		},
@@ -214,9 +236,9 @@ func TestResolveMessageRelationsPreservesProviderOrderAcrossDeepInterleavedRepli
 		}
 		if index > 0 {
 			parent := (index - 1) / 2
-			messages[index].Reply = &chatwork.Relation{
+			messages[index].Replies = []chatwork.Relation{{
 				Kind: "reply", Target: messages[parent].Ref, ExternalID: room.Value,
-			}
+			}}
 		}
 	}
 
@@ -228,8 +250,8 @@ func TestResolveMessageRelationsPreservesProviderOrderAcrossDeepInterleavedRepli
 		if got[index].Ref != messages[index].Ref {
 			t.Fatalf("provider order changed at %d: got %s, want %s", index, got[index].Ref.Value, messages[index].Ref.Value)
 		}
-		if index > 0 && (got[index].Reply == nil || !got[index].Reply.Resolved) {
-			t.Fatalf("reply %d was not resolved: %+v", index, got[index].Reply)
+		if index > 0 && (len(got[index].Replies) != 1 || !got[index].Replies[0].Resolved) {
+			t.Fatalf("reply %d was not resolved: %+v", index, got[index].Replies[0])
 		}
 	}
 }

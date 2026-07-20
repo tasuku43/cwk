@@ -56,8 +56,8 @@ func TestActiveMessagePeriodContextCanCrossOnlyOneTypedReplyEdge(t *testing.T) {
 		result.MessageSelection.SourceSequences[0] != 30 || result.MessageSelection.AnchorSequences[0] != 31 {
 		t.Fatalf("period reply context = %+v messages=%d", result.MessageSelection, len(result.Messages))
 	}
-	if result.Messages[1].Reply == nil || !result.Messages[1].Reply.Resolved || result.Messages[1].Reply.Target != result.Messages[0].Ref {
-		t.Fatalf("cross-boundary typed reply = %+v", result.Messages[1].Reply)
+	if len(result.Messages[1].Replies) != 1 || !result.Messages[1].Replies[0].Resolved || result.Messages[1].Replies[0].Target != result.Messages[0].Ref {
+		t.Fatalf("cross-boundary typed reply = %+v", result.Messages[1].Replies[0])
 	}
 	for _, sequence := range result.MessageSelection.AnchorSequences {
 		if sequence == 30 {

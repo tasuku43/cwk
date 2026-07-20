@@ -131,8 +131,8 @@ func TestExecuteResolvesUnfilteredMessageWindowWithoutSelection(t *testing.T) {
 			{Ref: parent, Room: room, Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "7")}},
 			{
 				Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room,
-				Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8")},
-				Reply:  &chatwork.Relation{Kind: "reply", Target: parent, ExternalID: room.Value},
+				Sender:  chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8")},
+				Replies: []chatwork.Relation{{Kind: "reply", Target: parent, ExternalID: room.Value}},
 			},
 		},
 	}}
@@ -144,8 +144,8 @@ func TestExecuteResolvesUnfilteredMessageWindowWithoutSelection(t *testing.T) {
 	if result.MessageSelection != nil {
 		t.Fatalf("unfiltered selection = %+v, want nil", result.MessageSelection)
 	}
-	if result.Messages[1].Reply == nil || !result.Messages[1].Reply.Resolved {
-		t.Fatalf("unfiltered reply = %+v, want resolved", result.Messages[1].Reply)
+	if len(result.Messages[1].Replies) != 1 || !result.Messages[1].Replies[0].Resolved {
+		t.Fatalf("unfiltered reply = %+v, want resolved", result.Messages[1].Replies[0])
 	}
 }
 
@@ -171,7 +171,7 @@ func TestExecutePreservesUnknownRelationsBodyAndAccessLimitation(t *testing.T) {
 		result.Messages[0].Body != body || result.Messages[0].RelationState != chatwork.MessageRelationsUnknown {
 		t.Fatalf("result = %+v", result)
 	}
-	if result.Messages[0].Reply != nil || len(result.Messages[0].Recipients) != 0 || len(result.Messages[0].Quotes) != 0 {
+	if len(result.Messages[0].Replies) != 0 || len(result.Messages[0].Recipients) != 0 || len(result.Messages[0].Quotes) != 0 {
 		t.Fatalf("unknown relation set gained facts: %+v", result.Messages[0])
 	}
 }
@@ -181,10 +181,10 @@ func TestExecuteKeepsMessagesShowRelationValidationAfterCLIOwnershipMove(t *test
 	message := chatwork.Message{
 		Ref: relationshipReference(t, chatwork.ReferenceMessage, "102"), Room: room,
 		Sender: chatwork.Account{Ref: relationshipReference(t, chatwork.ReferenceAccount, "8")},
-		Reply: &chatwork.Relation{
+		Replies: []chatwork.Relation{{
 			Kind: "reply", Target: relationshipReference(t, chatwork.ReferenceMessage, "101"),
 			ExternalID: room.Value, Resolved: true,
-		},
+		}},
 	}
 	port := &fakePort{result: chatwork.Result{Messages: []chatwork.Message{message}}}
 	request := chatwork.Request{

@@ -103,7 +103,7 @@ An agent that knows the user's desired outcome should reach the exact command co
   window, matching the common conversation-understanding task. Provider-stateful
   differential retrieval is an explicit `--window changes` choice.
 - The shortest `messages list` also owns five declared exact-message fetch slots
-  for explicit same-room reply parents missing from that bounded source.
+  for every unique explicit same-room reply target missing from that bounded source.
   `--resolve-relations 0` is the opt-out and 1..100 is a deliberate alternate
   call budget; every result reports the limit, attempts, and target outcomes.
 - Structured recovery names an exact next command rather than prose that the agent must reinterpret.
@@ -200,6 +200,9 @@ The message header separately exposes `access-limitation=none|partial|all` and
 the count of unknown relation sets. Only an affected record adds the optional
 `relation-state=unknown`; omitting it means the reviewed relation set was
 complete, not that external text contained no relation-like notation.
+Every complete explicit `[rp]` is a typed reply edge in provider notation
+order. One reply uses the compatible scalar form `reply=#N`; two or more use
+the compact form `reply=[#N,#M]`. A valid multiple-reply set is not unknown.
 Supplemental reply parents use distinct `relation-context` records with
 `source` or `fetched` provenance; unavailable or budget-exhausted parents use
 `relation-gap`. Neither form receives a provider source sequence. The separate

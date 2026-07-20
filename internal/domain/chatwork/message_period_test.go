@@ -69,7 +69,7 @@ func TestMessagePeriodFilterAndSelectionBindExactAnchors(t *testing.T) {
 	child := Message{
 		Ref: Reference{Kind: ReferenceMessage, Value: "202"}, Room: room,
 		Sender: Account{Ref: sender}, SendTime: 200,
-		Reply: &Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value, Resolved: true},
+		Replies: []Relation{{Kind: "reply", Target: parent.Ref, ExternalID: room.Value, Resolved: true}},
 	}
 	result := Result{
 		Task: TaskMessagesList, MessageRoom: room,

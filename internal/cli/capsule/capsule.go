@@ -282,12 +282,16 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	}
 	for index, message := range messages {
 		fmt.Fprintf(output, "#%d %s %s %d", sequences[index], ref(message.Ref), actorByRef[message.Sender.Ref.Value], message.SendTime)
-		if message.Reply != nil {
-			value, relationErr := messageReply(*message.Reply, sequenceByRef, resolvedContextByRef)
-			if relationErr != nil {
-				return relationErr
+		if len(message.Replies) > 0 {
+			values := make([]string, 0, len(message.Replies))
+			for _, reply := range message.Replies {
+				value, relationErr := messageReply(reply, sequenceByRef, resolvedContextByRef)
+				if relationErr != nil {
+					return relationErr
+				}
+				values = append(values, value)
 			}
-			fmt.Fprintf(output, " reply=%s", value)
+			fmt.Fprintf(output, " reply=%s", compactValues(values))
 		}
 		if len(message.Recipients) > 0 {
 			fmt.Fprintf(output, " to=%s", accountTargets(message.Recipients, actorByRef))
@@ -445,12 +449,12 @@ func relations(message chatwork.Message) string {
 	if message.RelationState == chatwork.MessageRelationsUnknown {
 		return "unknown"
 	}
-	values := make([]string, 0, len(message.Recipients)+1+len(message.Quotes))
+	values := make([]string, 0, len(message.Recipients)+len(message.Replies)+len(message.Quotes))
 	for _, recipient := range message.Recipients {
 		values = append(values, fmt.Sprintf("to{target-ref=%s}", ref(recipient)))
 	}
-	if message.Reply != nil {
-		values = append(values, relation("reply", *message.Reply))
+	for _, reply := range message.Replies {
+		values = append(values, relation("reply", reply))
 	}
 	for _, quote := range message.Quotes {
 		values = append(values, relation("quote", quote))
@@ -594,8 +598,10 @@ func ref(value chatwork.Reference) string {
 func countUnresolved(messages []chatwork.Message) int {
 	count := 0
 	for _, message := range messages {
-		if message.Reply != nil && !message.Reply.Resolved {
-			count++
+		for _, reply := range message.Replies {
+			if !reply.Resolved {
+				count++
+			}
 		}
 		for _, quote := range message.Quotes {
 			if !quote.Resolved {
@@ -672,8 +678,8 @@ func validateReferences(result chatwork.Result) error {
 				return err
 			}
 		}
-		if message.Reply != nil {
-			if err := add(message.Reply.Target); err != nil {
+		for _, reply := range message.Replies {
+			if err := add(reply.Target); err != nil {
 				return err
 			}
 		}
@@ -755,8 +761,8 @@ func validateExternalText(result chatwork.Result) error {
 	for _, message := range result.Messages {
 		addAccount(message.Sender)
 		values = append(values, message.Body)
-		if message.Reply != nil {
-			values = append(values, message.Reply.Kind, message.Reply.ExternalID)
+		for _, reply := range message.Replies {
+			values = append(values, reply.Kind, reply.ExternalID)
 		}
 		for _, quote := range message.Quotes {
 			values = append(values, quote.Kind, quote.ExternalID)

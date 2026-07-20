@@ -218,7 +218,7 @@ func withTo(value chatwork.Message, target chatwork.Reference) chatwork.Message 
 }
 
 func withReply(value chatwork.Message, target string, resolved bool) chatwork.Message {
-	value.Reply = &chatwork.Relation{Kind: "reply", Target: ref(chatwork.ReferenceMessage, target), Resolved: resolved, ExternalID: value.Room.Value}
+	value.Replies = []chatwork.Relation{{Kind: "reply", Target: ref(chatwork.ReferenceMessage, target), Resolved: resolved, ExternalID: value.Room.Value}}
 	return value
 }
 

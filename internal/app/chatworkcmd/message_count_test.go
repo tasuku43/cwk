@@ -119,8 +119,8 @@ func TestAssembleMessageWindowAppliesReplyContextAfterCount(t *testing.T) {
 	if len(selected) <= selection.Filter.Count {
 		t.Fatalf("displayed count = %d, want reply context allowed beyond primary count %d", len(selected), selection.Filter.Count)
 	}
-	if selected[1].Reply == nil || !selected[1].Reply.Resolved || selected[1].Reply.Target.Value != "201" {
-		t.Fatalf("child reply = %+v, want resolved context parent", selected[1].Reply)
+	if len(selected[1].Replies) != 1 || !selected[1].Replies[0].Resolved || selected[1].Replies[0].Target.Value != "201" {
+		t.Fatalf("child reply = %+v, want resolved context parent", selected[1].Replies[0])
 	}
 }
 
@@ -168,8 +168,8 @@ func TestAssembleMessageWindowCountRebasesOmittedParentAsUnresolved(t *testing.T
 	if selection == nil || selection.CandidateCount != 1 || !reflect.DeepEqual(selection.AnchorSequences, []int{2}) {
 		t.Fatalf("selection = %+v", selection)
 	}
-	if selected[0].Reply == nil || selected[0].Reply.Resolved || selected[0].Reply.Target.Value != "201" {
-		t.Fatalf("selected reply = %+v, want canonical omitted parent unresolved", selected[0].Reply)
+	if len(selected[0].Replies) != 1 || selected[0].Replies[0].Resolved || selected[0].Replies[0].Target.Value != "201" {
+		t.Fatalf("selected reply = %+v, want canonical omitted parent unresolved", selected[0].Replies[0])
 	}
 }
 

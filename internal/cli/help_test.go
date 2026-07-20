@@ -657,6 +657,23 @@ func TestMessageListScopedAgentHelpPublishesSelectionDefaults(t *testing.T) {
 		!strings.Contains(window.Description, "差分") {
 		t.Fatalf("agent window contract = %+v", window)
 	}
+	var relations, relationState *OutputField
+	for index := range document.Commands[0].Contract.Output.Fields {
+		field := &document.Commands[0].Contract.Output.Fields[index]
+		switch field.Name {
+		case "relations":
+			relations = field
+		case "relation_state":
+			relationState = field
+		}
+	}
+	if relations == nil || !strings.Contains(relations.Description, "reply=#N") ||
+		!strings.Contains(relations.Description, "reply=[#N,#M]") || !strings.Contains(relations.Description, "公式記法の順序") {
+		t.Fatalf("agent relations contract = %+v", relations)
+	}
+	if relationState == nil || !strings.Contains(relationState.Description, "完全な複数返信は unknown ではなく") {
+		t.Fatalf("agent relation_state contract = %+v", relationState)
+	}
 }
 
 func TestEveryCatalogInputIsProjectedIntoExactHumanHelp(t *testing.T) {

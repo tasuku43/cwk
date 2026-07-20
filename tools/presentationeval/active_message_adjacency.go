@@ -74,6 +74,6 @@ func activeMessageAdjacencyScenario() situation {
 
 func messageWithUnknownReply(id string, room chatwork.Reference, sender chatwork.Account, body string, sent int64) chatwork.Message {
 	value := message(id, room, sender, body, sent)
-	value.Reply = &chatwork.Relation{Kind: "reply", ExternalID: room.Value}
+	value.Replies = []chatwork.Relation{{Kind: "reply", ExternalID: room.Value}}
 	return value
 }

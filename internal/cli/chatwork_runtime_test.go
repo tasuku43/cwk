@@ -114,7 +114,7 @@ func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testin
 			Coverage:    chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false, Description: "latest bounded window"},
 			Messages: []chatwork.Message{
 				{Ref: parent, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1")}, Body: "parent"},
-				{Ref: child, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2")}, Body: "child", Reply: &chatwork.Relation{Kind: "reply", Target: parent, ExternalID: room.Value}},
+				{Ref: child, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2")}, Body: "child", Replies: []chatwork.Relation{{Kind: "reply", Target: parent, ExternalID: room.Value}}},
 			},
 		}, nil
 	}}
@@ -189,9 +189,9 @@ func TestRunChatworkFiltersRepeatedSendersWithBoundedReplyContext(t *testing.T) 
 		unrelated := message("9", account("4", "Omitted"), "unrelated before")
 		parent := message("10", account("1", "Aki"), "anchor parent")
 		child := message("11", account("2", "Beni"), "anchor reply")
-		child.Reply = &chatwork.Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}
+		child.Replies = []chatwork.Relation{{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}}
 		contextChild := message("12", account("3", "Chika"), "direct reply context")
-		contextChild.Reply = &chatwork.Relation{Kind: "reply", Target: child.Ref, ExternalID: room.Value}
+		contextChild.Replies = []chatwork.Relation{{Kind: "reply", Target: child.Ref, ExternalID: room.Value}}
 		trailing := message("13", account("4", "Omitted"), "unrelated after")
 		return chatwork.Result{
 			Task: request.Task, MessageRoom: request.Room,
@@ -292,7 +292,7 @@ func TestRunChatworkResolvesTokyoTodayOnceAndFiltersBeforeContext(t *testing.T) 
 		}
 		parent := message("10", period.Since-1)
 		child := message("11", period.Since)
-		child.Reply = &chatwork.Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}
+		child.Replies = []chatwork.Relation{{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}}
 		return chatwork.Result{
 			Task: request.Task, MessageRoom: request.Room,
 			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
@@ -370,7 +370,7 @@ func TestRunChatworkDefaultsFiveRelationFetchesAndSupportsExplicitZero(t *testin
 			child := chatwork.Message{
 				Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10"), Room: room,
 				Sender: account, Body: "child", SendTime: 200,
-				Reply: &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value},
+				Replies: []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}},
 			}
 			parent := chatwork.Message{Ref: target, Room: room, Sender: account, Body: "parent", SendTime: 100}
 			port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {

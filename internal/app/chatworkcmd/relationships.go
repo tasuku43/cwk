@@ -32,26 +32,24 @@ func ResolveMessageRelations(messages []chatwork.Message) ([]chatwork.Message, e
 
 	for index := range resolved {
 		message := &resolved[index]
-		if message.Reply == nil {
-			continue
-		}
+		for replyIndex := range message.Replies {
+			reply := &message.Replies[replyIndex]
+			targetIndex, targetExists := messageIndex[reply.Target.Value]
+			targetInRoom := targetExists && resolved[targetIndex].Room == message.Room
+			canResolve := reply.Kind == "reply" &&
+				reply.ExternalID == message.Room.Value &&
+				validReference(reply.Target, chatwork.ReferenceMessage) &&
+				targetInRoom
 
-		reply := message.Reply
-		targetIndex, targetExists := messageIndex[reply.Target.Value]
-		targetInRoom := targetExists && resolved[targetIndex].Room == message.Room
-		canResolve := reply.Kind == "reply" &&
-			reply.ExternalID == message.Room.Value &&
-			validReference(reply.Target, chatwork.ReferenceMessage) &&
-			targetInRoom
-
-		if reply.Resolved && !canResolve {
-			return nil, relationshipContractFault(
-				"inconsistent_chatwork_message_relation",
-				"Chatwork メッセージウィンドウに整合しない解決済み関係があります",
-			)
-		}
-		if canResolve {
-			reply.Resolved = true
+			if reply.Resolved && !canResolve {
+				return nil, relationshipContractFault(
+					"inconsistent_chatwork_message_relation",
+					"Chatwork メッセージウィンドウに整合しない解決済み関係があります",
+				)
+			}
+			if canResolve {
+				reply.Resolved = true
+			}
 		}
 	}
 
@@ -71,9 +69,8 @@ func cloneMessages(messages []chatwork.Message) []chatwork.Message {
 		if messages[index].Quotes != nil {
 			cloned[index].Quotes = append([]chatwork.Relation{}, messages[index].Quotes...)
 		}
-		if messages[index].Reply != nil {
-			reply := *messages[index].Reply
-			cloned[index].Reply = &reply
+		if messages[index].Replies != nil {
+			cloned[index].Replies = append([]chatwork.Relation{}, messages[index].Replies...)
 		}
 	}
 	return cloned

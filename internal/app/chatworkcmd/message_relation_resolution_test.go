@@ -25,7 +25,7 @@ func TestMessageRelationResolutionReusesCountOmittedSourceWithoutFetch(t *testin
 	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	parent := relationMessage(t, room, account, "101", 100)
 	child := relationMessage(t, room, account, "102", 200)
-	child.Reply = &chatwork.Relation{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}
+	child.Replies = []chatwork.Relation{{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}}
 	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
 		if request.Task != chatwork.TaskMessagesList {
 			t.Fatalf("unexpected task %s", request.Task)
@@ -44,7 +44,7 @@ func TestMessageRelationResolutionReusesCountOmittedSourceWithoutFetch(t *testin
 	if len(port.requests) != 1 {
 		t.Fatalf("provider calls = %d, want list only", len(port.requests))
 	}
-	if len(result.Messages) != 1 || result.Messages[0].Ref != child.Ref || result.Messages[0].Reply == nil || !result.Messages[0].Reply.Resolved {
+	if len(result.Messages) != 1 || result.Messages[0].Ref != child.Ref || len(result.Messages[0].Replies) != 1 || !result.Messages[0].Replies[0].Resolved {
 		t.Fatalf("selected child = %+v", result.Messages)
 	}
 	resolution := result.MessageRelationResolution
@@ -61,12 +61,12 @@ func TestMessageRelationResolutionRecursivelyFetchesUniqueChainWithinBudget(t *t
 	grandparent := relationshipReference(t, chatwork.ReferenceMessage, "888")
 	first := relationMessage(t, room, account, "101", 200)
 	second := relationMessage(t, room, account, "102", 300)
-	first.Reply = &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value}
-	second.Reply = &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value}
+	first.Replies = []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}}
+	second.Replies = []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}}
 	parent := relationMessage(t, room, account, target.Value, 100)
-	parent.Reply = &chatwork.Relation{Kind: "reply", Target: grandparent, ExternalID: room.Value}
+	parent.Replies = []chatwork.Relation{{Kind: "reply", Target: grandparent, ExternalID: room.Value}}
 	root := relationMessage(t, room, account, grandparent.Value, 50)
-	root.Reply = &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value}
+	root.Replies = []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}}
 	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
 		switch request.Task {
 		case chatwork.TaskMessagesList:
@@ -96,7 +96,7 @@ func TestMessageRelationResolutionRecursivelyFetchesUniqueChainWithinBudget(t *t
 		t.Fatalf("provider calls = %+v, want breadth-first chain", port.requests)
 	}
 	for _, message := range result.Messages {
-		if message.Reply == nil || !message.Reply.Resolved {
+		if len(message.Replies) != 1 || !message.Replies[0].Resolved {
 			t.Fatalf("reply not resolved: %+v", message)
 		}
 	}
@@ -106,9 +106,50 @@ func TestMessageRelationResolutionRecursivelyFetchesUniqueChainWithinBudget(t *t
 		resolution.Targets[1].State != chatwork.MessageRelationResolvedByFetch {
 		t.Fatalf("resolution = %+v", resolution)
 	}
-	if resolution.Targets[0].Message.Reply == nil || !resolution.Targets[0].Message.Reply.Resolved ||
-		resolution.Targets[1].Message.Reply == nil || !resolution.Targets[1].Message.Reply.Resolved {
+	if len(resolution.Targets[0].Message.Replies) != 1 || !resolution.Targets[0].Message.Replies[0].Resolved ||
+		len(resolution.Targets[1].Message.Replies) != 1 || !resolution.Targets[1].Message.Replies[0].Resolved {
 		t.Fatalf("chain or cycle state is wrong: %+v", resolution.Targets)
+	}
+}
+
+func TestMessageRelationResolutionFetchesEveryMultiReplyBranchInOrder(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	firstTarget := relationshipReference(t, chatwork.ReferenceMessage, "901")
+	secondTarget := relationshipReference(t, chatwork.ReferenceMessage, "902")
+	child := relationMessage(t, room, account, "101", 300)
+	child.Replies = []chatwork.Relation{
+		{Kind: "reply", Target: firstTarget, ExternalID: room.Value},
+		{Kind: "reply", Target: secondTarget, ExternalID: room.Value},
+	}
+	first := relationMessage(t, room, account, firstTarget.Value, 100)
+	second := relationMessage(t, room, account, secondTarget.Value, 200)
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesList {
+			return relationListResult(request, []chatwork.Message{child}), nil
+		}
+		switch request.Message {
+		case firstTarget:
+			return relationShowResult(first), nil
+		case secondTarget:
+			return relationShowResult(second), nil
+		default:
+			t.Fatalf("unexpected target %v", request.Message)
+			return chatwork.Result{}, nil
+		}
+	}}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesList, Room: room, ForceRecent: true, MessageRelationFetchLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(port.requests) != 3 || port.requests[1].Message != firstTarget || port.requests[2].Message != secondTarget {
+		t.Fatalf("provider calls = %+v, want both branches in provider order", port.requests)
+	}
+	if len(result.Messages[0].Replies) != 2 || !result.Messages[0].Replies[0].Resolved || !result.Messages[0].Replies[1].Resolved {
+		t.Fatalf("replies = %+v", result.Messages[0].Replies)
 	}
 }
 
@@ -123,7 +164,7 @@ func TestMessageRelationResolutionReportsUnavailableAndBudgetExhaustedTargets(t 
 	messages := make([]chatwork.Message, len(refs))
 	for index, target := range refs {
 		messages[index] = relationMessage(t, room, account, string(rune('1'+index))+"01", int64(200+index))
-		messages[index].Reply = &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value}
+		messages[index].Replies = []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}}
 	}
 	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
 		if request.Task == chatwork.TaskMessagesList {
@@ -166,7 +207,7 @@ func TestMessageRelationResolutionAbortsOnTransientFetchFailure(t *testing.T) {
 	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	target := relationshipReference(t, chatwork.ReferenceMessage, "999")
 	child := relationMessage(t, room, account, "101", 200)
-	child.Reply = &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value}
+	child.Replies = []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value}}
 	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
 		if request.Task == chatwork.TaskMessagesList {
 			return relationListResult(request, []chatwork.Message{child}), nil

@@ -89,14 +89,41 @@ func TestAssembleMessageWindowAddsOnlyDirectReplyNeighborsAndRebasesRelations(t 
 	if !reflect.DeepEqual(selection.SourceSequences, []int{2, 3, 4}) || !reflect.DeepEqual(selection.AnchorSequences, []int{3}) {
 		t.Fatalf("selection = %+v", selection)
 	}
-	if selected[0].Reply == nil || selected[0].Reply.Resolved || selected[0].Reply.Target.Value != "101" {
-		t.Fatalf("context parent relation = %+v, want canonical omitted grandparent unresolved", selected[0].Reply)
+	if len(selected[0].Replies) != 1 || selected[0].Replies[0].Resolved || selected[0].Replies[0].Target.Value != "101" {
+		t.Fatalf("context parent relation = %+v, want canonical omitted grandparent unresolved", selected[0].Replies[0])
 	}
-	if selected[1].Reply == nil || !selected[1].Reply.Resolved || selected[1].Reply.Target.Value != "102" {
-		t.Fatalf("anchor relation = %+v, want resolved direct parent", selected[1].Reply)
+	if len(selected[1].Replies) != 1 || !selected[1].Replies[0].Resolved || selected[1].Replies[0].Target.Value != "102" {
+		t.Fatalf("anchor relation = %+v, want resolved direct parent", selected[1].Replies[0])
 	}
-	if selected[2].Reply == nil || !selected[2].Reply.Resolved || selected[2].Reply.Target.Value != "103" {
-		t.Fatalf("context child relation = %+v, want resolved anchor", selected[2].Reply)
+	if len(selected[2].Replies) != 1 || !selected[2].Replies[0].Resolved || selected[2].Replies[0].Target.Value != "103" {
+		t.Fatalf("context child relation = %+v, want resolved anchor", selected[2].Replies[0])
+	}
+}
+
+func TestAssembleMessageWindowIncludesEveryDirectParentOfMultiReplyAnchor(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	a := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	b := relationshipReference(t, chatwork.ReferenceAccount, "8")
+	first := selectionMessage(t, "101", room, b)
+	second := selectionMessage(t, "102", room, b)
+	anchor := selectionMessage(t, "103", room, a)
+	anchor.Replies = []chatwork.Relation{
+		{Kind: "reply", Target: first.Ref, ExternalID: room.Value},
+		{Kind: "reply", Target: second.Ref, ExternalID: room.Value},
+	}
+
+	selected, selection, err := assembleMessageWindow([]chatwork.Message{first, second, anchor}, chatwork.MessageFilter{
+		Senders: []chatwork.Reference{a}, Context: chatwork.MessageContextReplies,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := messageValues(selected); !reflect.DeepEqual(got, []string{"101", "102", "103"}) {
+		t.Fatalf("selected refs = %v, want both parents and anchor", got)
+	}
+	if !reflect.DeepEqual(selection.AnchorSequences, []int{3}) || len(selected[2].Replies) != 2 ||
+		!selected[2].Replies[0].Resolved || !selected[2].Replies[1].Resolved {
+		t.Fatalf("selection=%+v replies=%+v", selection, selected[2].Replies)
 	}
 }
 
@@ -136,7 +163,7 @@ func TestAssembleMessageWindowKeepsUnfilteredWindowResolvedWithoutMetadata(t *te
 	if selection != nil {
 		t.Fatalf("selection = %+v, want nil", selection)
 	}
-	if len(selected) != 2 || selected[1].Reply == nil || !selected[1].Reply.Resolved {
+	if len(selected) != 2 || len(selected[1].Replies) != 1 || !selected[1].Replies[0].Resolved {
 		t.Fatalf("unfiltered messages = %+v", selected)
 	}
 }
@@ -152,9 +179,9 @@ func selectionMessage(t *testing.T, id string, room chatwork.Reference, sender c
 func selectionReply(t *testing.T, id string, room chatwork.Reference, sender chatwork.Reference, parent string) chatwork.Message {
 	t.Helper()
 	message := selectionMessage(t, id, room, sender)
-	message.Reply = &chatwork.Relation{
+	message.Replies = []chatwork.Relation{{
 		Kind: "reply", Target: relationshipReference(t, chatwork.ReferenceMessage, parent), ExternalID: room.Value,
-	}
+	}}
 	return message
 }
 

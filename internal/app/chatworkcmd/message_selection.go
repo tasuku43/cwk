@@ -73,18 +73,20 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 		// Sender matches are the complete selected result.
 	case chatwork.MessageContextReplies:
 		for index, message := range resolvedSource {
-			if message.Reply == nil || !message.Reply.Resolved {
-				continue
-			}
-			parentIndex, found := messageIndex[message.Reply.Target.Value]
-			if !found {
-				return nil, nil, fmt.Errorf("resolved Chatwork reply target is absent from its source window")
-			}
-			if anchors[index] {
-				included[parentIndex] = true
-			}
-			if anchors[parentIndex] {
-				included[index] = true
+			for _, reply := range message.Replies {
+				if !reply.Resolved {
+					continue
+				}
+				parentIndex, found := messageIndex[reply.Target.Value]
+				if !found {
+					return nil, nil, fmt.Errorf("resolved Chatwork reply target is absent from its source window")
+				}
+				if anchors[index] {
+					included[parentIndex] = true
+				}
+				if anchors[parentIndex] {
+					included[index] = true
+				}
 			}
 		}
 	default:
@@ -110,8 +112,8 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 	// as unresolved instead of retaining a false in-result edge.
 	selected = cloneMessages(selected)
 	for index := range selected {
-		if selected[index].Reply != nil {
-			selected[index].Reply.Resolved = false
+		for replyIndex := range selected[index].Replies {
+			selected[index].Replies[replyIndex].Resolved = false
 		}
 	}
 	selected, err = ResolveMessageRelations(selected)

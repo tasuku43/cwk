@@ -50,8 +50,8 @@ func TestActiveMessageIndexSelectsNewestByTypedTimeAndPreservesProviderOrder(t *
 	if got := messageValuesForIndex(result.Messages); !reflect.DeepEqual(got, []string{"1201", "1203"}) {
 		t.Fatalf("newest primary refs in provider order = %v", got)
 	}
-	if result.Messages[0].Reply == nil || result.Messages[0].Reply.Resolved || result.Messages[0].Reply.Target.Value != "1202" {
-		t.Fatalf("omitted parent was not preserved as canonical unresolved relation: %+v", result.Messages[0].Reply)
+	if len(result.Messages[0].Replies) != 1 || result.Messages[0].Replies[0].Resolved || result.Messages[0].Replies[0].Target.Value != "1202" {
+		t.Fatalf("omitted parent was not preserved as canonical unresolved relation: %+v", result.Messages[0].Replies[0])
 	}
 
 	output, err := capsule.Render(result)
@@ -85,8 +85,8 @@ func TestActiveMessageIndexAddsReplyContextAfterPrimaryCount(t *testing.T) {
 	}
 	for messageRef, parentRef := range map[string]string{"1201": "1202", "1204": "1203"} {
 		message := messageByRef(t, result.Messages, messageRef)
-		if message.Reply == nil || !message.Reply.Resolved || message.Reply.Target.Value != parentRef {
-			t.Errorf("typed reply %s -> %s = %+v", messageRef, parentRef, message.Reply)
+		if len(message.Replies) != 1 || !message.Replies[0].Resolved || message.Replies[0].Target.Value != parentRef {
+			t.Errorf("typed reply %s -> %s = %+v", messageRef, parentRef, message.Replies[0])
 		}
 	}
 

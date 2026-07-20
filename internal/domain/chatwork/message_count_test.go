@@ -97,9 +97,9 @@ func TestMessageCountAllowsMatchingSenderToReappearOnlyAsDirectContext(t *testin
 	child := Message{
 		Ref: Reference{Kind: ReferenceMessage, Value: "202"}, Room: room,
 		Sender: Account{Ref: sender}, SendTime: 200,
-		Reply: &Relation{
+		Replies: []Relation{{
 			Kind: "reply", Target: parent.Ref, ExternalID: room.Value, Resolved: true,
-		},
+		}},
 	}
 	result := Result{
 		Task: TaskMessagesList, MessageRoom: room,
@@ -121,7 +121,7 @@ func TestMessageCountAllowsMatchingSenderToReappearOnlyAsDirectContext(t *testin
 
 	unrelated := result
 	unrelated.Messages = append([]Message(nil), result.Messages...)
-	unrelated.Messages[1].Reply = nil
+	unrelated.Messages[1].Replies = nil
 	if err := unrelated.Validate(); err == nil {
 		t.Fatal("same-sender non-anchor without a direct reply edge passed")
 	}

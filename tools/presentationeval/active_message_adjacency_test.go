@@ -74,20 +74,20 @@ func TestActiveMessageAdjacencyFixtureKeepsNegativeInferenceCanaries(t *testing.
 	fixture := messageAdjacencyFixture()
 	messages := fixture.Result.Messages
 
-	if messages[1].Reply != nil || len(messages[1].Recipients) != 1 {
+	if len(messages[1].Replies) != 0 || len(messages[1].Recipients) != 1 {
 		t.Fatalf("To-only message gained a reply: %#v", messages[1])
 	}
-	if messages[5].Reply == nil || len(messages[5].Recipients) != 1 {
+	if len(messages[5].Replies) != 1 || len(messages[5].Recipients) != 1 {
 		t.Fatalf("coexisting To and reply were not both typed: %#v", messages[5])
 	}
-	if messages[6].Reply != nil || len(messages[6].Recipients) != 0 || len(messages[6].Quotes) != 0 {
+	if len(messages[6].Replies) != 0 || len(messages[6].Recipients) != 0 || len(messages[6].Quotes) != 0 {
 		t.Fatalf("raw reply tag fabricated a relation: %#v", messages[6])
 	}
-	if messages[3].Reply == nil || messages[3].Reply.Resolved || messages[3].Reply.Target.Value != "999" {
-		t.Fatalf("out-of-window parent is not explicit: %#v", messages[3].Reply)
+	if len(messages[3].Replies) != 1 || messages[3].Replies[0].Resolved || messages[3].Replies[0].Target.Value != "999" {
+		t.Fatalf("out-of-window parent is not explicit: %#v", messages[3].Replies[0])
 	}
-	if messages[8].Reply == nil || messages[8].Reply.Resolved || messages[8].Reply.Target != (chatwork.Reference{}) {
-		t.Fatalf("unknown unresolved parent invented a reference: %#v", messages[8].Reply)
+	if len(messages[8].Replies) != 1 || messages[8].Replies[0].Resolved || messages[8].Replies[0].Target != (chatwork.Reference{}) {
+		t.Fatalf("unknown unresolved parent invented a reference: %#v", messages[8].Replies[0])
 	}
 	if messages[2].Sender.Name != messages[4].Sender.Name || messages[2].Sender.Ref == messages[4].Sender.Ref {
 		t.Fatalf("same-name actors are not distinct canonical accounts")
@@ -232,8 +232,10 @@ func renderLegacyRepeatedMessageList(result chatwork.Result) (string, error) {
 
 	unresolved := 0
 	for _, message := range result.Messages {
-		if message.Reply != nil && !message.Reply.Resolved {
-			unresolved++
+		for _, reply := range message.Replies {
+			if !reply.Resolved {
+				unresolved++
+			}
 		}
 		for _, quote := range message.Quotes {
 			if !quote.Resolved {

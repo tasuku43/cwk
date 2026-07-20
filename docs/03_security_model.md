@@ -104,7 +104,7 @@ A presentation candidate may introduce shorthand, positions, labels, grouping, o
 Chatwork notation is untrusted provider data with a documented syntax, not executable instruction. Infrastructure parses only reviewed bounded forms into typed facts.
 
 - To establishes recipient identity but not a reply edge.
-- Reply notation establishes a provider-declared room/message relation only after identifier validation.
+- Every complete reply tag establishes one provider-declared room/message relation after identifier validation; multiple tags remain separate ordered facts.
 - Quote metadata remains a quote relation; missing message identity is not reconstructed from author, timestamp, or text.
 - Malformed, nested, contradictory, or unsupported recognized notation keeps the bounded external body, drops every partial relation fact for that message, and marks the whole relation set unknown; malformed wire identity, UTF-8, JSON, or response bounds still fail closed. One malformed body never discards otherwise valid list records.
 - Message access-limitation headers are untrusted protocol evidence. Only the official `true` value on its documented list/exact-message status is promoted; malformed or contradictory combinations fail closed, and the provider summary is neither exposed nor parsed into policy.

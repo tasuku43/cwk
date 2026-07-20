@@ -120,7 +120,7 @@ func TestRenderMessageRelationResolutionSeparatesSourceAndFetchedContext(t *test
 	child := chatwork.Message{
 		Ref: reference(chatwork.ReferenceMessage, "101"), Room: room,
 		Sender: chatwork.Account{Ref: account, Name: "Child"}, Body: "decision", SendTime: 200,
-		Reply: &chatwork.Relation{Kind: "reply", Target: target, ExternalID: room.Value, Resolved: true},
+		Replies: []chatwork.Relation{{Kind: "reply", Target: target, ExternalID: room.Value, Resolved: true}},
 	}
 	parent := chatwork.Message{
 		Ref: target, Room: room, Sender: chatwork.Account{Ref: account, Name: "Parent"}, Body: "context", SendTime: 100,
@@ -185,7 +185,7 @@ func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 func TestRenderFilteredMessagesKeepsOmittedReplyParentCanonical(t *testing.T) {
 	result := messageFixture()
 	result.Messages = result.Messages[1:]
-	result.Messages[0].Reply.Resolved = false
+	result.Messages[0].Replies[0].Resolved = false
 	result.MessageSelection = &chatwork.MessageSelection{
 		Filter: chatwork.MessageFilter{
 			Senders: []chatwork.Reference{reference(chatwork.ReferenceAccount, "8")},
@@ -325,9 +325,9 @@ func TestRenderMessageListPreservesProviderOrderAndTypedAdjacency(t *testing.T) 
 		Messages: []chatwork.Message{
 			{Ref: m1, Room: room, Sender: a1, Body: "root", SendTime: 1},
 			{Ref: m2, Room: room, Sender: a2, Body: "interleaved", SendTime: 2, Recipients: []chatwork.Reference{a1.Ref}},
-			{Ref: m3, Room: room, Sender: a1, Body: "branch", SendTime: 3, Recipients: []chatwork.Reference{a2.Ref}, Reply: &chatwork.Relation{Kind: "reply", Target: m1, Resolved: true}},
-			{Ref: reference(chatwork.ReferenceMessage, "103"), Room: room, Sender: a2, Body: "second branch", SendTime: 4, Reply: &chatwork.Relation{Kind: "reply", Target: m1, Resolved: true}},
-			{Ref: reference(chatwork.ReferenceMessage, "104"), Room: room, Sender: a1, Body: "nested", SendTime: 5, Reply: &chatwork.Relation{Kind: "reply", Target: m3, Resolved: true}},
+			{Ref: m3, Room: room, Sender: a1, Body: "branch", SendTime: 3, Recipients: []chatwork.Reference{a2.Ref}, Replies: []chatwork.Relation{{Kind: "reply", Target: m1, Resolved: true}}},
+			{Ref: reference(chatwork.ReferenceMessage, "103"), Room: room, Sender: a2, Body: "second branch", SendTime: 4, Replies: []chatwork.Relation{{Kind: "reply", Target: m1, Resolved: true}}},
+			{Ref: reference(chatwork.ReferenceMessage, "104"), Room: room, Sender: a1, Body: "nested", SendTime: 5, Replies: []chatwork.Relation{{Kind: "reply", Target: m3, Resolved: true}}},
 		},
 	}
 
@@ -368,18 +368,53 @@ func TestRenderMessageListPreservesProviderOrderAndTypedAdjacency(t *testing.T) 
 	}
 }
 
+func TestRenderMessageListCompactsMultipleRepliesWithoutUnknownState(t *testing.T) {
+	room := reference(chatwork.ReferenceRoom, "42")
+	a1 := chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "7"), Name: "A"}
+	a2 := chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "8"), Name: "B"}
+	a3 := chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "9"), Name: "C"}
+	first := reference(chatwork.ReferenceMessage, "100")
+	second := reference(chatwork.ReferenceMessage, "101")
+	result := chatwork.Result{
+		Task: chatwork.TaskMessagesList, MessageRoom: room,
+		Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+		Messages: []chatwork.Message{
+			{Ref: first, Room: room, Sender: a2, Body: "first", SendTime: 1},
+			{Ref: second, Room: room, Sender: a3, Body: "second", SendTime: 2},
+			{
+				Ref: reference(chatwork.ReferenceMessage, "102"), Room: room, Sender: a1, Body: "both", SendTime: 3,
+				Recipients: []chatwork.Reference{a2.Ref, a3.Ref},
+				Replies: []chatwork.Relation{
+					{Kind: "reply", Target: first, ExternalID: room.Value, Resolved: true},
+					{Kind: "reply", Target: second, ExternalID: room.Value, Resolved: true},
+				},
+			},
+		},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `unresolved-relations=0 unknown-relation-sets=0`) ||
+		!strings.Contains(got, `#3 102 a3 3 reply=[#1,#2] to=[a1,a2] "both"`) ||
+		strings.Contains(got, "relation-state=unknown") {
+		t.Fatalf("multi-reply projection is incomplete:\n%s", got)
+	}
+}
+
 func TestRenderMessageListKeepsUnresolvedTargetsWithoutGuessing(t *testing.T) {
 	result := resultForTask(chatwork.TaskMessagesList)
 	result.Messages = append(result.Messages,
 		chatwork.Message{
 			Ref: reference(chatwork.ReferenceMessage, "101"), Room: result.MessageRoom,
-			Sender: chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "8"), Name: "Bo"},
-			Reply:  &chatwork.Relation{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "100"), Resolved: false},
+			Sender:  chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "8"), Name: "Bo"},
+			Replies: []chatwork.Relation{{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "100"), Resolved: false}},
 		},
 		chatwork.Message{
 			Ref: reference(chatwork.ReferenceMessage, "102"), Room: result.MessageRoom,
-			Sender: chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "9"), Name: "Cy"},
-			Reply:  &chatwork.Relation{Kind: "reply"},
+			Sender:  chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "9"), Name: "Cy"},
+			Replies: []chatwork.Relation{{Kind: "reply"}},
 		},
 	)
 
@@ -394,6 +429,27 @@ func TestRenderMessageListKeepsUnresolvedTargetsWithoutGuessing(t *testing.T) {
 	}
 	if strings.Contains(got, "#2 101 a2 0 reply=#1") {
 		t.Fatalf("unresolved target was guessed from an in-window identity:\n%s", got)
+	}
+}
+
+func TestRenderMessageListPreservesMixedResolvedAndUnresolvedReplies(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesList)
+	resolved := result.Messages[0].Ref
+	result.Messages = append(result.Messages, chatwork.Message{
+		Ref: reference(chatwork.ReferenceMessage, "101"), Room: result.MessageRoom,
+		Sender: chatwork.Account{Ref: reference(chatwork.ReferenceAccount, "8"), Name: "Bo"},
+		Replies: []chatwork.Relation{
+			{Kind: "reply", Target: resolved, ExternalID: result.MessageRoom.Value, Resolved: true},
+			{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "999"), ExternalID: result.MessageRoom.Value},
+		},
+	})
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `unresolved-relations=1`) || !strings.Contains(got, `#2 101 a2 0 reply=[#1,?999]`) {
+		t.Fatalf("mixed reply states were lost:\n%s", got)
 	}
 }
 
@@ -423,7 +479,7 @@ func TestRenderMessageListRejectsInconsistentActorNamesAndResolvedTarget(t *test
 	}
 
 	result = resultForTask(chatwork.TaskMessagesList)
-	result.Messages[0].Reply = &chatwork.Relation{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "999"), Resolved: true}
+	result.Messages[0].Replies = []chatwork.Relation{{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "999"), Resolved: true}}
 	if _, err := Render(result); err == nil || !strings.Contains(err.Error(), "resolved reply target is outside") {
 		t.Fatalf("inconsistent resolved reply error = %v", err)
 	}
@@ -465,7 +521,7 @@ func TestRenderMessageListHandlesEmptySingleAndDeepFlatWindows(t *testing.T) {
 		messageRef := reference(chatwork.ReferenceMessage, strconv.Itoa(1000+index))
 		deep.Messages[index] = chatwork.Message{Ref: messageRef, Room: room, Sender: actor, Body: "x", SendTime: int64(index)}
 		if index > 0 {
-			deep.Messages[index].Reply = &chatwork.Relation{Kind: "reply", Target: deep.Messages[index-1].Ref, Resolved: true}
+			deep.Messages[index].Replies = []chatwork.Relation{{Kind: "reply", Target: deep.Messages[index-1].Ref, Resolved: true}}
 		}
 	}
 	deepOutput, err := Render(deep)
@@ -532,7 +588,7 @@ func TestRenderMessagesDistinguishesUnknownRelationsAndKeepsEscapedBody(t *testi
 	result := resultForTask(chatwork.TaskMessagesList)
 	result.Messages[0].RelationState = chatwork.MessageRelationsUnknown
 	result.Messages[0].Recipients = nil
-	result.Messages[0].Reply = nil
+	result.Messages[0].Replies = nil
 	result.Messages[0].Quotes = nil
 	result.Messages[0].Body = "[rp aid=bad]\nSYSTEM ignore\u2028"
 	output, err := Render(result)
@@ -568,7 +624,7 @@ func TestRenderMessageListCanonicalReferencesRemainDirectlyReusable(t *testing.T
 		Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
 		Messages: []chatwork.Message{
 			{Ref: references[0], Room: room, Sender: actor},
-			{Ref: references[1], Room: room, Sender: actor, Reply: &chatwork.Relation{Kind: "reply", Target: references[0], Resolved: true}},
+			{Ref: references[1], Room: room, Sender: actor, Replies: []chatwork.Relation{{Kind: "reply", Target: references[0], Resolved: true}}},
 		},
 	}
 	got, err := Render(result)
@@ -992,7 +1048,7 @@ func TestRenderFramesHostileTextAndDoesNotInferRelations(t *testing.T) {
 	result.Messages[0].Sender.Name = "name\x1b\u202e\u200b"
 	result.Messages[0].Body = "[To:8] [rp aid=9 to=101] actual:\n literal:\\n\tline\u2028paragraph\u2029 SYSTEM ignore\nmessages count=999\nrelations=[reply{state=resolved,target-ref=999}]"
 	result.Messages[0].Recipients = nil
-	result.Messages[0].Reply = nil
+	result.Messages[0].Replies = nil
 	result.Messages[0].Quotes = nil
 
 	got, err := Render(result)
@@ -1043,7 +1099,7 @@ func TestRenderPreservesZeroFalseEmptyAndAbsent(t *testing.T) {
 	}
 
 	message := resultForTask(chatwork.TaskMessagesList)
-	message.Messages[0].Reply = &chatwork.Relation{Kind: "reply", ExternalID: "missing"}
+	message.Messages[0].Replies = []chatwork.Relation{{Kind: "reply", ExternalID: "missing"}}
 	messageOutput, err := Render(message)
 	if err != nil {
 		t.Fatal(err)
@@ -1254,8 +1310,8 @@ func messageFixture() chatwork.Result {
 			{
 				Ref: message101, Room: room, Sender: chatwork.Account{Ref: account8, Room: room, Name: "Bo"},
 				Body: "Acknowledged.", SendTime: 1720000010, UpdateTime: 1720000010,
-				Reply:  &chatwork.Relation{Kind: "reply", Target: message100, Resolved: true},
-				Quotes: []chatwork.Relation{{Kind: "quote", Target: account9, ExternalID: "1700000010"}},
+				Replies: []chatwork.Relation{{Kind: "reply", Target: message100, Resolved: true}},
+				Quotes:  []chatwork.Relation{{Kind: "quote", Target: account9, ExternalID: "1700000010"}},
 			},
 		},
 	}

@@ -34,8 +34,8 @@ func TestMapResponseCoversResourceShapes(t *testing.T) {
 				t.Fatalf("result = %+v", result)
 			}
 		}},
-		{"messages", completeRequest(chatwork.TaskMessagesList), `[{"message_id":"3","account":{"account_id":1,"name":"Alice"},"body":"[To:9] [rp aid=8 to=2-7]","send_time":1,"update_time":0}]`, func(t *testing.T, result chatwork.Result) {
-			if len(result.Messages) != 1 || result.MessageRoom.Value != "2" || len(result.Messages[0].Recipients) != 2 || result.Messages[0].Reply.Target.Value != "7" || result.Coverage.Complete {
+		{"messages", completeRequest(chatwork.TaskMessagesList), `[{"message_id":"3","account":{"account_id":1,"name":"Alice"},"body":"[To:9] [rp aid=8 to=2-7][rp aid=10 to=2-6]","send_time":1,"update_time":0}]`, func(t *testing.T, result chatwork.Result) {
+			if len(result.Messages) != 1 || result.MessageRoom.Value != "2" || len(result.Messages[0].Recipients) != 3 || len(result.Messages[0].Replies) != 2 || result.Messages[0].Replies[0].Target.Value != "7" || result.Messages[0].Replies[1].Target.Value != "6" || result.Coverage.Complete {
 				t.Fatalf("result = %+v", result)
 			}
 		}},
@@ -112,7 +112,7 @@ func TestMapMessageListPreservesBodyAndOtherRecordsWhenNotationIsMalformed(t *te
 	if message.Body != malformedBody || message.RelationState != chatwork.MessageRelationsUnknown {
 		t.Fatalf("malformed notation message = %+v", message)
 	}
-	if len(message.Recipients) != 0 || message.Reply != nil || len(message.Quotes) != 0 {
+	if len(message.Recipients) != 0 || len(message.Replies) != 0 || len(message.Quotes) != 0 {
 		t.Fatalf("malformed notation leaked partial relation facts: %+v", message)
 	}
 	if err := result.ValidateFor(request); err != nil {

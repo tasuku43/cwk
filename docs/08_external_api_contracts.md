@@ -172,7 +172,7 @@ provenance. Infrastructure must reject or remain unreachable for a leaked
 `messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
 `--count`, and `--context` are application-owned selection inputs over the
 single bounded message-list response. `--resolve-relations` is a separate
-application-owned exact-read budget over canonical reply targets.
+application-owned exact-read budget over every unique canonical reply target.
 Start index and count accept 1 through 100; count alone defaults start index to
 1. Since is inclusive and until exclusive; both are whole-second RFC3339 with
 explicit offsets. `--on` is their mutually exclusive fixed-`Asia/Tokyo`
@@ -305,7 +305,7 @@ The first message-context semantic fixture must declare:
 - whether the upstream request returns a latest window, a differential window, or another bounded snapshot;
 - the maximum messages, bytes, and provider calls;
 - stable ordering and duplicate handling;
-- explicit To, reply, and quote mapping rules;
+- explicit To, ordered one-or-many reply, and quote mapping rules, including scalar/list projection and malformed-set handling;
 - behavior when a reply parent is outside the returned window;
 - task-relevant completeness, coverage, uncertainty, and canonical references;
 - rate-limit, authentication, permission, notation uncertainty,

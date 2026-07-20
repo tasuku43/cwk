@@ -109,11 +109,11 @@ func TestActiveMessageSenderSelectionContextNoneAndReplies(t *testing.T) {
 		[]int{1, 2, 3, 6, 7, 8, 9, 11, 13}, []int{2, 6, 9, 13},
 	)
 
-	if none.Messages[0].Reply == nil || none.Messages[0].Reply.Resolved || none.Messages[0].Reply.Target.Value != "1101" {
-		t.Fatalf("context=none did not retain omitted parent canonically: %+v", none.Messages[0].Reply)
+	if len(none.Messages[0].Replies) != 1 || none.Messages[0].Replies[0].Resolved || none.Messages[0].Replies[0].Target.Value != "1101" {
+		t.Fatalf("context=none did not retain omitted parent canonically: %+v", none.Messages[0].Replies[0])
 	}
-	if none.Messages[2].Reply == nil || none.Messages[2].Reply.Resolved || none.Messages[2].Reply.Target.Value != "1108" {
-		t.Fatalf("context=none did not retain second omitted parent canonically: %+v", none.Messages[2].Reply)
+	if len(none.Messages[2].Replies) != 1 || none.Messages[2].Replies[0].Resolved || none.Messages[2].Replies[0].Target.Value != "1108" {
+		t.Fatalf("context=none did not retain second omitted parent canonically: %+v", none.Messages[2].Replies[0])
 	}
 	noneOutput, err := capsule.Render(none)
 	if err != nil {
@@ -150,8 +150,8 @@ func TestActiveMessageSenderSelectionContextNoneAndReplies(t *testing.T) {
 		"1102": "1101", "1103": "1102", "1107": "1106", "1109": "1108", "1111": "1102",
 	} {
 		message := messageByRef(t, replies.Messages, messageRef)
-		if message.Reply == nil || !message.Reply.Resolved || message.Reply.Target.Value != parentRef {
-			t.Errorf("typed reply %s -> %s = %+v", messageRef, parentRef, message.Reply)
+		if len(message.Replies) != 1 || !message.Replies[0].Resolved || message.Replies[0].Target.Value != parentRef {
+			t.Errorf("typed reply %s -> %s = %+v", messageRef, parentRef, message.Replies[0])
 		}
 	}
 	for _, excluded := range []string{"1104", "1105", "1110", "1112", "1114"} {
@@ -160,7 +160,7 @@ func TestActiveMessageSenderSelectionContextNoneAndReplies(t *testing.T) {
 		}
 	}
 	rawAnchor := messageByRef(t, replies.Messages, "1113")
-	if rawAnchor.Reply != nil || len(rawAnchor.Recipients) != 0 || len(rawAnchor.Quotes) != 0 {
+	if len(rawAnchor.Replies) != 0 || len(rawAnchor.Recipients) != 0 || len(rawAnchor.Quotes) != 0 {
 		t.Fatalf("raw [rp]/[To] body fabricated a relation: %+v", rawAnchor)
 	}
 }

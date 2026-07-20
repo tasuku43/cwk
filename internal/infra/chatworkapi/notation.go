@@ -16,11 +16,11 @@ var (
 // parseNotation recognizes only the reviewed provider forms needed by the
 // semantic boundary. It does not infer relations from prose, names, layout, or
 // time proximity, and it does not interpret copied tags inside quote/code data.
-func parseNotation(body string) ([]chatwork.Reference, *chatwork.Relation, []chatwork.Relation, chatwork.MessageRelationState) {
+func parseNotation(body string) ([]chatwork.Reference, []chatwork.Relation, []chatwork.Relation, chatwork.MessageRelationState) {
 	recipients := make([]chatwork.Reference, 0)
 	seenRecipients := map[string]struct{}{}
 	quotes := make([]chatwork.Relation, 0)
-	var reply *chatwork.Relation
+	replies := make([]chatwork.Relation, 0)
 
 	for index := 0; index < len(body); {
 		rest := body[index:]
@@ -67,7 +67,7 @@ func parseNotation(body string) ([]chatwork.Reference, *chatwork.Relation, []cha
 		}
 		if strings.HasPrefix(rest, "[rp") {
 			match := replyTag.FindStringSubmatch(rest)
-			if match == nil || reply != nil {
+			if match == nil {
 				return unknownNotation()
 			}
 			account, err := chatwork.NewReference(chatwork.ReferenceAccount, match[1])
@@ -85,7 +85,7 @@ func parseNotation(body string) ([]chatwork.Reference, *chatwork.Relation, []cha
 				recipients = append(recipients, account)
 				seenRecipients[account.Value] = struct{}{}
 			}
-			reply = &chatwork.Relation{Kind: "reply", Target: message, Resolved: false, ExternalID: match[2]}
+			replies = append(replies, chatwork.Relation{Kind: "reply", Target: message, Resolved: false, ExternalID: match[2]})
 			index += len(match[0])
 			continue
 		}
@@ -96,9 +96,9 @@ func parseNotation(body string) ([]chatwork.Reference, *chatwork.Relation, []cha
 		}
 		index++
 	}
-	return recipients, reply, quotes, chatwork.MessageRelationsComplete
+	return recipients, replies, quotes, chatwork.MessageRelationsComplete
 }
 
-func unknownNotation() ([]chatwork.Reference, *chatwork.Relation, []chatwork.Relation, chatwork.MessageRelationState) {
+func unknownNotation() ([]chatwork.Reference, []chatwork.Relation, []chatwork.Relation, chatwork.MessageRelationState) {
 	return nil, nil, nil, chatwork.MessageRelationsUnknown
 }

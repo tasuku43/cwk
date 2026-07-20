@@ -453,8 +453,8 @@ func mapMessages(room chatwork.Reference, wire []messageDTO) ([]chatwork.Message
 		if err != nil {
 			return nil, err
 		}
-		recipients, reply, quotes, relationState := parseNotation(item.Body)
-		messages = append(messages, chatwork.Message{Ref: ref, Room: room, Sender: sender, Body: item.Body, SendTime: item.SendTime, UpdateTime: item.UpdateTime, RelationState: relationState, Recipients: recipients, Reply: reply, Quotes: quotes})
+		recipients, replies, quotes, relationState := parseNotation(item.Body)
+		messages = append(messages, chatwork.Message{Ref: ref, Room: room, Sender: sender, Body: item.Body, SendTime: item.SendTime, UpdateTime: item.UpdateTime, RelationState: relationState, Recipients: recipients, Replies: replies, Quotes: quotes})
 	}
 	return messages, nil
 }

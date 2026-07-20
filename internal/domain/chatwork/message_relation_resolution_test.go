@@ -60,7 +60,7 @@ func TestMessageRelationResolutionValidatesBudgetEvidenceAndReplyState(t *testin
 	child := Message{
 		Ref: Reference{Kind: ReferenceMessage, Value: "102"}, Room: room,
 		Sender: Account{Ref: account}, SendTime: 200,
-		Reply: &Relation{Kind: "reply", Target: target, ExternalID: room.Value, Resolved: true},
+		Replies: []Relation{{Kind: "reply", Target: target, ExternalID: room.Value, Resolved: true}},
 	}
 	contextMessage := Message{Ref: target, Room: room, Sender: Account{Ref: account}, SendTime: 100}
 	request := Request{Task: TaskMessagesList, Room: room, MessageRelationFetchLimit: 1}
@@ -89,7 +89,7 @@ func TestMessageRelationResolutionValidatesBudgetEvidenceAndReplyState(t *testin
 			value.MessageRelationResolution.Targets[0].Message = nil
 		},
 		"reply state mismatch": func(value *Result) {
-			value.Messages[0].Reply.Resolved = false
+			value.Messages[0].Replies[0].Resolved = false
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -114,11 +114,11 @@ func TestMessageRelationResolutionValidatesRecursiveContextOrder(t *testing.T) {
 	child := Message{
 		Ref: Reference{Kind: ReferenceMessage, Value: "102"}, Room: room,
 		Sender: Account{Ref: account}, SendTime: 200,
-		Reply: &Relation{Kind: "reply", Target: parentRef, ExternalID: room.Value, Resolved: true},
+		Replies: []Relation{{Kind: "reply", Target: parentRef, ExternalID: room.Value, Resolved: true}},
 	}
 	parent := Message{
 		Ref: parentRef, Room: room, Sender: Account{Ref: account}, SendTime: 100,
-		Reply: &Relation{Kind: "reply", Target: rootRef, ExternalID: room.Value, Resolved: true},
+		Replies: []Relation{{Kind: "reply", Target: rootRef, ExternalID: room.Value, Resolved: true}},
 	}
 	root := Message{Ref: rootRef, Room: room, Sender: Account{Ref: account}, SendTime: 50}
 	request := Request{Task: TaskMessagesList, Room: room, MessageRelationFetchLimit: 2}
@@ -167,9 +167,8 @@ func TestExactMessageResultBindsRequestedRoomAndMessage(t *testing.T) {
 func cloneDomainMessages(messages []Message) []Message {
 	cloned := append([]Message(nil), messages...)
 	for index := range cloned {
-		if cloned[index].Reply != nil {
-			reply := *cloned[index].Reply
-			cloned[index].Reply = &reply
+		if cloned[index].Replies != nil {
+			cloned[index].Replies = append([]Relation(nil), cloned[index].Replies...)
 		}
 	}
 	return cloned

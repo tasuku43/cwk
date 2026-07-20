@@ -337,8 +337,8 @@ func TestResultRejectsMessageRelationKindAndTargetMismatches(t *testing.T) {
 	valid := func() Result {
 		return Result{Task: TaskMessagesList, MessageRoom: room, Messages: []Message{{
 			Ref: message, Room: room, Sender: Account{Ref: account},
-			Reply:  &Relation{Kind: "reply", Target: message},
-			Quotes: []Relation{{Kind: "quote", Target: account}},
+			Replies: []Relation{{Kind: "reply", Target: message}, {Kind: "reply", Target: Reference{Kind: ReferenceMessage, Value: "4"}}},
+			Quotes:  []Relation{{Kind: "quote", Target: account}},
 		}}}
 	}
 
@@ -346,11 +346,12 @@ func TestResultRejectsMessageRelationKindAndTargetMismatches(t *testing.T) {
 		name   string
 		mutate func(*Result)
 	}{
-		{"reply relation kind", func(result *Result) { result.Messages[0].Reply.Kind = "quote" }},
-		{"reply target kind", func(result *Result) { result.Messages[0].Reply.Target = account }},
+		{"reply relation kind", func(result *Result) { result.Messages[0].Replies[0].Kind = "quote" }},
+		{"reply target kind", func(result *Result) { result.Messages[0].Replies[0].Target = account }},
+		{"second reply relation kind", func(result *Result) { result.Messages[0].Replies[1].Kind = "quote" }},
 		{"resolved reply without target", func(result *Result) {
-			result.Messages[0].Reply.Resolved = true
-			result.Messages[0].Reply.Target = Reference{}
+			result.Messages[0].Replies[0].Resolved = true
+			result.Messages[0].Replies[0].Target = Reference{}
 		}},
 		{"quote relation kind", func(result *Result) { result.Messages[0].Quotes[0].Kind = "reply" }},
 		{"quote target kind", func(result *Result) { result.Messages[0].Quotes[0].Target = message }},
@@ -443,7 +444,7 @@ func TestResultAllowsDeclaredOptionalZeroReferences(t *testing.T) {
 		{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{Ref: message, Room: room, Sender: Account{Ref: account}}}},
 		{Task: TaskMessagesList, MessageRoom: room, Coverage: Coverage{Limit: 100}, Messages: []Message{{
 			Ref: message, Room: room, Sender: Account{Ref: account},
-			Reply: &Relation{Kind: "reply"}, Quotes: []Relation{{Kind: "quote"}},
+			Replies: []Relation{{Kind: "reply"}}, Quotes: []Relation{{Kind: "quote"}},
 		}}},
 		{Task: TaskPersonalTasksList, Tasks: []WorkTask{{
 			Ref: task, Room: Room{Ref: room}, AssignedBy: Account{Ref: account}, Message: message,
@@ -650,7 +651,7 @@ func TestResultValidatesFilteredMessageSelection(t *testing.T) {
 			result.MessageSelection.AnchorSequences = []int{4}
 		},
 		"unrelated non-anchor context": func(result *Result) {
-			result.Messages[1].Reply = nil
+			result.Messages[1].Replies = nil
 		},
 	}
 	for name, mutate := range tests {
@@ -739,9 +740,9 @@ func validFilteredMessageResult() Result {
 			{
 				Ref: Reference{Kind: ReferenceMessage, Value: "102"}, Room: room,
 				Sender: Account{Ref: Reference{Kind: ReferenceAccount, Value: "8"}},
-				Reply: &Relation{
+				Replies: []Relation{{
 					Kind: "reply", Target: Reference{Kind: ReferenceMessage, Value: "101"}, ExternalID: "1", Resolved: true,
-				},
+				}},
 			},
 		},
 		MessageSelection: &MessageSelection{

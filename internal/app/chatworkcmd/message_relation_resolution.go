@@ -41,23 +41,26 @@ func (s *Service) resolveMessageRelations(
 		seen[ref] = struct{}{}
 		available[ref] = struct{}{}
 	}
-	enqueueReply := func(message *chatwork.Message) {
-		if message.Reply == nil || message.Reply.Kind != "reply" || message.Reply.ExternalID != room.Value {
-			return
+	enqueueReplies := func(message *chatwork.Message) {
+		for replyIndex := range message.Replies {
+			reply := &message.Replies[replyIndex]
+			if reply.Kind != "reply" || reply.ExternalID != room.Value {
+				continue
+			}
+			target := reply.Target
+			if _, present := available[target]; present {
+				reply.Resolved = true
+				continue
+			}
+			if _, duplicate := seen[target]; duplicate {
+				continue
+			}
+			seen[target] = struct{}{}
+			targets = append(targets, target)
 		}
-		target := message.Reply.Target
-		if _, present := available[target]; present {
-			message.Reply.Resolved = true
-			return
-		}
-		if _, duplicate := seen[target]; duplicate {
-			return
-		}
-		seen[target] = struct{}{}
-		targets = append(targets, target)
 	}
 	for index := range resolved {
-		enqueueReply(&resolved[index])
+		enqueueReplies(&resolved[index])
 	}
 
 	for targetIndex := 0; targetIndex < len(targets); targetIndex++ {
@@ -70,7 +73,7 @@ func (s *Service) resolveMessageRelations(
 			resolution.Targets = append(resolution.Targets, outcome)
 			available[target] = struct{}{}
 			markResolvedReplyTarget(resolved, resolution.Targets, room, target)
-			enqueueReply(resolution.Targets[len(resolution.Targets)-1].Message)
+			enqueueReplies(resolution.Targets[len(resolution.Targets)-1].Message)
 			continue
 		}
 		if resolution.FetchAttempts >= limit {
@@ -101,7 +104,7 @@ func (s *Service) resolveMessageRelations(
 		resolution.Targets = append(resolution.Targets, outcome)
 		available[target] = struct{}{}
 		markResolvedReplyTarget(resolved, resolution.Targets, room, target)
-		enqueueReply(resolution.Targets[len(resolution.Targets)-1].Message)
+		enqueueReplies(resolution.Targets[len(resolution.Targets)-1].Message)
 	}
 
 	return resolved, resolution, nil
@@ -109,18 +112,22 @@ func (s *Service) resolveMessageRelations(
 
 func markResolvedReplyTarget(messages []chatwork.Message, targets []chatwork.MessageRelationTarget, room, target chatwork.Reference) {
 	for index := range messages {
-		reply := messages[index].Reply
-		if reply != nil && reply.Kind == "reply" && reply.ExternalID == room.Value && reply.Target == target {
-			reply.Resolved = true
+		for replyIndex := range messages[index].Replies {
+			reply := &messages[index].Replies[replyIndex]
+			if reply.Kind == "reply" && reply.ExternalID == room.Value && reply.Target == target {
+				reply.Resolved = true
+			}
 		}
 	}
 	for index := range targets {
 		if targets[index].Message == nil {
 			continue
 		}
-		reply := targets[index].Message.Reply
-		if reply != nil && reply.Kind == "reply" && reply.ExternalID == room.Value && reply.Target == target {
-			reply.Resolved = true
+		for replyIndex := range targets[index].Message.Replies {
+			reply := &targets[index].Message.Replies[replyIndex]
+			if reply.Kind == "reply" && reply.ExternalID == room.Value && reply.Target == target {
+				reply.Resolved = true
+			}
 		}
 	}
 }
