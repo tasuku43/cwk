@@ -99,7 +99,19 @@ Archive creation uses the Go standard library rather than host-specific `tar`, `
 
 The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation and canonical header verification themselves have no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
 
-The workflow runs this canonical release profile once inside the Ubuntu preflight's full gate. The later macOS Formula job is deliberately narrower: it renders the checksum-pinned Formula, runs `ruby -c`, performs the real Homebrew strict audit, and uploads only that Formula. It does not repeat `check.sh release`, because that would rebuild the complete five-target verification matrix on a different host and would incorrectly make Formula publication depend on Linux preflight tools such as ShellCheck being installed on the macOS runner. The audit job consumes only artifacts produced after the preflight and build jobs succeed and receives no App credential. A dependent fresh Ubuntu runner downloads and validates the Formula as data before minting the App token; it checks out no tagged source and executes no checked-out source or Formula content. Static release lint fixes both job boundaries and proves that failures cannot be ignored.
+The workflow runs the canonical full, security, release, and public profiles
+explicitly in the Ubuntu preflight. The later macOS Formula job is deliberately
+narrower: it renders the checksum-pinned Formula, runs `ruby -c`, performs the
+real Homebrew strict audit, and uploads only that Formula. It does not repeat
+`check.sh release`, because that would rebuild the complete five-target
+verification matrix on a different host and would incorrectly make Formula
+publication depend on Linux preflight tools such as ShellCheck being installed
+on the macOS runner. The audit job consumes only artifacts produced after the
+preflight and build jobs succeed and receives no App credential. A dependent
+fresh Ubuntu runner downloads and validates the Formula as data before minting
+the App token; it checks out no tagged source and executes no checked-out source
+or Formula content. Static release lint fixes both job boundaries and proves
+that failures cannot be ignored.
 
 ## Release workflow
 
@@ -122,7 +134,7 @@ The release workflow follows this order:
 If GitHub Release publication succeeded but the Formula stages did not, a
 maintainer may dispatch the same `Release` workflow with the existing stable
 tag. That recovery path checks out the tag only in the read-only preflight,
-runs the canonical full gate, downloads the already-published six-file asset
+runs the four canonical required profiles, downloads the already-published six-file asset
 set, requires a non-draft/non-prerelease Release with the exact tag, verifies
 the exact filenames and all five checksums, and uploads only `checksums.txt` as
 Formula input. It never creates, uploads, replaces, or deletes Release assets.
@@ -212,7 +224,7 @@ publication and PR merge.
 
 ## Release preparation
 
-Create a work packet for a release and record:
+Create a temporary work packet for a release and record:
 
 - target version and rationale;
 - included changes and compatibility impact;
@@ -226,6 +238,13 @@ Create a work packet for a release and record:
   declaring the shared-tap rollout complete;
 - artifact and checksum verification;
 - public-boundary review.
+
+After rollout, promote stable procedure and policy into this document or an ADR.
+Delete the ordinary packet from the final tree. Retain it as
+`Retention: evidence` only when it contains unique manual rollout, incident, or
+external-system observations that cannot be reconstructed from the immutable
+Release, workflow run, tests, and commit; state its governing contract and
+review/delete trigger in `goal.md`.
 
 Before tagging, run:
 

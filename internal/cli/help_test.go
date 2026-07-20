@@ -12,8 +12,29 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
-func newInternalSampleHelpCLI(out, errOut *bytes.Buffer) *CLI {
-	commands := append(DefaultCatalog().Commands(), sampleTestCommandSpecs()...)
+func referenceTestCommandSpecs() []CommandSpec {
+	discover := discoverSpec("items list", "item")
+	discover.Args = "[--format tsv|json]"
+	discover.Agent.Inputs = []CommandInput{{
+		Name:          "--format",
+		Source:        InputSourceFlag,
+		Required:      false,
+		Description:   "Select the synthetic result representation.",
+		AllowedValues: []string{"tsv", "json"},
+	}}
+	act := actSpec("items read", "item", "--id")
+	act.Agent.Errors[0] = declaredCommandError(
+		fault.KindNotFound,
+		"item_not_found",
+		false,
+		"items list",
+		"Discover a current opaque item ID.",
+	)
+	return []CommandSpec{discover, act}
+}
+
+func newReferenceHelpCLI(out, errOut *bytes.Buffer) *CLI {
+	commands := append(DefaultCatalog().Commands(), referenceTestCommandSpecs()...)
 	return newCLI(strings.NewReader(""), out, errOut, NewCatalog(commands...), passingInspector("unused"))
 }
 
@@ -116,23 +137,21 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 
 func TestCommandHelpUsesCatalogMetadataAndDerivedReferences(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
-	if code := runCLI(command, []string{"sample", "read", "--help"}); code != ExitOK {
-		t.Fatalf("Run(sample read --help) code = %d, stderr = %q", code, stderr.String())
+	command := newReferenceHelpCLI(&stdout, &stderr)
+	if code := runCLI(command, []string{"items", "read", "--help"}); code != ExitOK {
+		t.Fatalf("Run(items read --help) code = %d, stderr = %q", code, stderr.String())
 	}
 	output := stdout.String()
 	for _, want := range []string{
-		"使い方:\n  cwk sample read --id <sample-id> [--format tsv|json]",
-		"Read exactly one offline sample by opaque ID.",
-		"入力:\n  --id      必須 flag, reference=sample",
-		"Pass an id from sample list byte-for-byte without parsing or transformation.",
-		"  --format  任意 flag, values=tsv|json",
-		"Select the single sample representation.",
+		"使い方:\n  cwk items read --id <item-id>",
+		"Read test items.",
+		"入力:\n  --id  必須 flag, reference=item",
+		"Opaque test item ID.",
 		"効果: read",
 		"役割: act",
-		"使用する参照: sample（入力 --id）",
-		"この名前空間の他のコマンドには 'cwk sample --help' を実行してください。",
-		"機械可読契約には 'cwk help sample read --format agent' を実行してください。",
+		"使用する参照: item（入力 --id）",
+		"この名前空間の他のコマンドには 'cwk items --help' を実行してください。",
+		"機械可読契約には 'cwk help items read --format agent' を実行してください。",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("command help lacks %q\n%s", want, output)
@@ -323,7 +342,7 @@ func TestAgentHelpRootNamespaceAndExactShapeSnapshots(t *testing.T) {
 	}
 	assertJSONKeys(t, scopeRequest, []string{"invocation_template", "known_path_max_invocations", "selector_fields", "unknown_outcome_max_invocations"})
 
-	namespace := runAgentHelpForTest(t, []string{"help", "sample", "--format=agent"})
+	namespace := runAgentHelpForTest(t, []string{"help", "items", "--format=agent"})
 	assertJSONKeys(t, namespace, []string{"commands", "program", "schema_version", "scope", "scope_request", "view"})
 	var namespaceCommands []map[string]json.RawMessage
 	if err := json.Unmarshal(namespace["commands"], &namespaceCommands); err != nil {
@@ -331,7 +350,7 @@ func TestAgentHelpRootNamespaceAndExactShapeSnapshots(t *testing.T) {
 	}
 	assertJSONKeys(t, namespaceCommands[0], []string{"capability_id", "effect", "namespace", "outcome", "path", "role", "summary"})
 
-	scoped := runAgentHelpForTest(t, []string{"help", "sample", "read", "--format=agent"})
+	scoped := runAgentHelpForTest(t, []string{"help", "items", "read", "--format=agent"})
 	assertJSONKeys(t, scoped, []string{"commands", "error_contract", "global_inputs", "io_contract", "program", "schema_version", "scope", "view", "workflows"})
 	var ioContract map[string]json.RawMessage
 	if err := json.Unmarshal(scoped["io_contract"], &ioContract); err != nil {
@@ -413,11 +432,11 @@ func TestRootAgentHelpSizeGrowthContainsOnlyIndexFields(t *testing.T) {
 }
 
 func TestCatalogSelectReturnsDeepCopiesForScopedProjection(t *testing.T) {
-	commands := append(DefaultCatalog().Commands(), sampleTestCommandSpecs()...)
+	commands := append(DefaultCatalog().Commands(), referenceTestCommandSpecs()...)
 	catalog := NewCatalog(commands...)
 	before := catalog.Commands()
 
-	namespace, exact := catalog.Select("sample")
+	namespace, exact := catalog.Select("items")
 	if exact || len(namespace) != 2 {
 		t.Fatalf("namespace selection exact=%t, commands=%+v", exact, namespace)
 	}
@@ -425,7 +444,7 @@ func TestCatalogSelectReturnsDeepCopiesForScopedProjection(t *testing.T) {
 	namespace[0].Agent.Output.Fields[0].Name = "changed"
 	namespace[0].Agent.Errors[0].NextActions[0].Command = "changed"
 
-	selected, exact := catalog.Select("sample read")
+	selected, exact := catalog.Select("items read")
 	if !exact || len(selected) != 1 {
 		t.Fatalf("exact selection exact=%t, commands=%+v", exact, selected)
 	}
@@ -446,8 +465,8 @@ func runAgentHelpForTest(t *testing.T, args []string) map[string]json.RawMessage
 	t.Helper()
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)
-	if len(args) > 1 && args[1] == "sample" {
-		command = newInternalSampleHelpCLI(&stdout, &stderr)
+	if len(args) > 1 && args[1] == "items" {
+		command = newReferenceHelpCLI(&stdout, &stderr)
 	}
 	if code := runCLI(command, args); code != ExitOK {
 		t.Fatalf("Run(%v) code = %d, stderr = %q", args, code, stderr.String())
@@ -459,10 +478,10 @@ func runAgentHelpForTest(t *testing.T, args []string) map[string]json.RawMessage
 	return document
 }
 
-func runSampleExactAgentHelp(t *testing.T, path string) agentDocument {
+func runReferenceExactAgentHelp(t *testing.T, path string) agentDocument {
 	t.Helper()
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
+	command := newReferenceHelpCLI(&stdout, &stderr)
 	args := append([]string{"help"}, strings.Fields(path)...)
 	args = append(args, "--format=agent")
 	if code := runCLI(command, args); code != ExitOK {
@@ -499,8 +518,8 @@ func containsOutputFormat(formats []OutputFormat, wanted OutputFormat) bool {
 
 func TestAgentHelpNamespaceIsACompactIndexWithExactCommandPointers(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
-	if code := runCLI(command, []string{"help", "sample", "--format=agent"}); code != ExitOK {
+	command := newReferenceHelpCLI(&stdout, &stderr)
+	if code := runCLI(command, []string{"help", "items", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(namespace agent help) code = %d, stderr = %q", code, stderr.String())
 	}
 	var document agentIndexDocument
@@ -508,10 +527,10 @@ func TestAgentHelpNamespaceIsACompactIndexWithExactCommandPointers(t *testing.T)
 		t.Fatal(err)
 	}
 	if document.SchemaVersion != agentHelpSchemaVersion || document.View != "index" || document.Program != ProgramName ||
-		document.Scope == nil || *document.Scope != (agentScope{Selector: "sample", Kind: "namespace"}) {
+		document.Scope == nil || *document.Scope != (agentScope{Selector: "items", Kind: "namespace"}) {
 		t.Fatalf("namespace index header = %+v", document)
 	}
-	if len(document.Commands) != 2 || document.Commands[0].Path != "sample list" || document.Commands[1].Path != "sample read" {
+	if len(document.Commands) != 2 || document.Commands[0].Path != "items list" || document.Commands[1].Path != "items read" {
 		t.Fatalf("namespace commands = %+v", document.Commands)
 	}
 	if document.ScopeRequest.InvocationTemplate != "cwk help <exact-command> --format agent" ||
@@ -520,19 +539,19 @@ func TestAgentHelpNamespaceIsACompactIndexWithExactCommandPointers(t *testing.T)
 		t.Fatalf("namespace scope request = %+v", document.ScopeRequest)
 	}
 	for _, entry := range document.Commands {
-		if !strings.HasPrefix(entry.Path, "sample ") {
+		if !strings.HasPrefix(entry.Path, "items ") {
 			t.Fatalf("unscoped command leaked into namespace help: %+v", entry)
 		}
 	}
 }
 
 func TestCompleteAgentHelpRejectsNamespaceAggregation(t *testing.T) {
-	command := newInternalSampleHelpCLI(&bytes.Buffer{}, &bytes.Buffer{})
-	commands, exact := command.catalog.Select("sample")
+	command := newReferenceHelpCLI(&bytes.Buffer{}, &bytes.Buffer{})
+	commands, exact := command.catalog.Select("items")
 	if exact || len(commands) != 2 {
-		t.Fatalf("sample namespace selection exact=%t commands=%d", exact, len(commands))
+		t.Fatalf("items namespace selection exact=%t commands=%d", exact, len(commands))
 	}
-	if _, err := command.renderAgentHelp("sample", exact, commands); err == nil ||
+	if _, err := command.renderAgentHelp("items", exact, commands); err == nil ||
 		!strings.Contains(err.Error(), "正確なコマンドを一つ") {
 		t.Fatalf("namespace complete-contract error = %v", err)
 	}
@@ -540,19 +559,19 @@ func TestCompleteAgentHelpRejectsNamespaceAggregation(t *testing.T) {
 
 func TestTextHelpCanSelectNamespace(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
-	if code := runCLI(command, []string{"help", "sample"}); code != ExitOK {
+	command := newReferenceHelpCLI(&stdout, &stderr)
+	if code := runCLI(command, []string{"help", "items"}); code != ExitOK {
 		t.Fatalf("Run(namespace help) code = %d, stderr = %q", code, stderr.String())
 	}
 	want := "Chatwork CLI\n\n" +
 		"使い方:\n" +
-		"  cwk sample <command> [arguments]\n\n" +
+		"  cwk items <command> [arguments]\n\n" +
 		"コマンド:\n" +
-		"  list  Discover offline samples and their opaque IDs\n" +
-		"  read  Read exactly one offline sample by opaque ID\n\n" +
-		"正確なコマンドの詳細には 'cwk sample <command> --help' を実行してください。\n" +
-		"1コマンドの機械可読契約には 'cwk help sample <command> --format agent' を実行してください。\n" +
-		"この名前空間の機械可読索引には 'cwk help sample --format agent' を実行してください。\n" +
+		"  list  Discover test items\n" +
+		"  read  Read test items\n\n" +
+		"正確なコマンドの詳細には 'cwk items <command> --help' を実行してください。\n" +
+		"1コマンドの機械可読契約には 'cwk help items <command> --format agent' を実行してください。\n" +
+		"この名前空間の機械可読索引には 'cwk help items --format agent' を実行してください。\n" +
 		"全コマンドと名前空間には 'cwk --help' を実行してください。\n"
 	if stdout.String() != want {
 		t.Fatalf("namespace text = %q, want %q", stdout.String(), want)
@@ -948,8 +967,8 @@ func TestHumanRootHelpGroupsKindsAndPreservesSectionRelativeCatalogOrder(t *test
 
 func TestAgentHelpPreservesTopLevelCompatibilityFields(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
-	if code := runCLI(command, []string{"help", "sample", "list", "--format=agent"}); code != ExitOK {
+	command := newReferenceHelpCLI(&stdout, &stderr)
+	if code := runCLI(command, []string{"help", "items", "list", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(selected agent help) code = %d, stderr = %q", code, stderr.String())
 	}
 	var raw struct {
@@ -970,57 +989,57 @@ func TestAgentHelpPreservesTopLevelCompatibilityFields(t *testing.T) {
 
 func TestAgentHelpCanSelectOneCatalogCommandWithItsWorkflow(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	command := newInternalSampleHelpCLI(&stdout, &stderr)
-	if code := runCLI(command, []string{"help", "sample", "read", "--format=agent"}); code != ExitOK {
+	command := newReferenceHelpCLI(&stdout, &stderr)
+	if code := runCLI(command, []string{"help", "items", "read", "--format=agent"}); code != ExitOK {
 		t.Fatalf("Run(selected agent help) code = %d, stderr = %q", code, stderr.String())
 	}
 	var document agentDocument
 	if err := json.Unmarshal(stdout.Bytes(), &document); err != nil {
 		t.Fatal(err)
 	}
-	if len(document.Commands) != 1 || document.Commands[0].Path != "sample read" ||
+	if len(document.Commands) != 1 || document.Commands[0].Path != "items read" ||
 		document.Commands[0].Effect != "read" || document.Commands[0].Role != "act" {
 		t.Fatalf("commands = %+v", document.Commands)
 	}
-	if len(document.Workflows) != 1 || document.Workflows[0].Producer.Path != "sample list" ||
-		document.Workflows[0].Consumer.Path != "sample read" {
+	if len(document.Workflows) != 1 || document.Workflows[0].Producer.Path != "items list" ||
+		document.Workflows[0].Consumer.Path != "items read" {
 		t.Fatalf("selected command workflows = %+v", document.Workflows)
 	}
 }
 
 func TestAgentHelpPublishesDiscoverToActReferenceFlow(t *testing.T) {
-	discoverDocument := runSampleExactAgentHelp(t, "sample list")
-	actDocument := runSampleExactAgentHelp(t, "sample read")
+	discoverDocument := runReferenceExactAgentHelp(t, "items list")
+	actDocument := runReferenceExactAgentHelp(t, "items read")
 	discover := discoverDocument.Commands[0]
 	if discover.Role != "discover" || discover.Effect != "read" ||
-		!reflect.DeepEqual(discover.ProducesRefs, []ProducedRef{{Kind: "sample", Field: "id"}}) ||
+		!reflect.DeepEqual(discover.ProducesRefs, []ProducedRef{{Kind: "item", Field: "id"}}) ||
 		len(discover.ConsumesRefs) != 0 || len(discover.NextActions) != 1 {
-		t.Fatalf("sample list agent contract = %+v", discover)
+		t.Fatalf("items list agent contract = %+v", discover)
 	}
 	act := actDocument.Commands[0]
 	if act.Role != "act" || act.Effect != "read" ||
-		!reflect.DeepEqual(act.ConsumesRefs, []ConsumedRef{{Kind: "sample", Argument: "--id"}}) ||
+		!reflect.DeepEqual(act.ConsumesRefs, []ConsumedRef{{Kind: "item", Argument: "--id"}}) ||
 		len(act.ProducesRefs) != 0 {
-		t.Fatalf("sample read agent contract = %+v", act)
+		t.Fatalf("items read agent contract = %+v", act)
 	}
 	action := discover.NextActions[0]
-	if action.Path != "sample read" || action.ReferenceKind != "sample" ||
+	if action.Path != "items read" || action.ReferenceKind != "item" ||
 		action.FromField != "id" || action.ToInput != "--id" {
 		t.Fatalf("derived next action = %+v", action)
 	}
 }
 
 func TestAgentRoundTripContractCoversDiscoveryActionAndRecovery(t *testing.T) {
-	discoverDocument := runSampleExactAgentHelp(t, "sample list")
-	actDocument := runSampleExactAgentHelp(t, "sample read")
+	discoverDocument := runReferenceExactAgentHelp(t, "items list")
+	actDocument := runReferenceExactAgentHelp(t, "items read")
 	discover := discoverDocument.Commands[0]
 	act := actDocument.Commands[0]
 	if discover.Contract.Output.Completeness != OutputCompletenessComplete ||
-		len(discover.ProducesRefs) != 1 || discover.ProducesRefs[0] != (ProducedRef{Kind: "sample", Field: "id"}) {
+		len(discover.ProducesRefs) != 1 || discover.ProducesRefs[0] != (ProducedRef{Kind: "item", Field: "id"}) {
 		t.Fatalf("discovery contract = %+v", discover)
 	}
 	if len(act.Contract.Inputs) < 1 || act.Contract.Inputs[0].Name != "--id" ||
-		act.Contract.Inputs[0].Source != InputSourceFlag || act.Contract.Inputs[0].ReferenceKind != "sample" ||
+		act.Contract.Inputs[0].Source != InputSourceFlag || act.Contract.Inputs[0].ReferenceKind != "item" ||
 		act.Contract.Inputs[0].Description == "" || act.Contract.Inputs[0].AllowedValues == nil {
 		t.Fatalf("action input contract = %+v", act.Contract.Inputs)
 	}
@@ -1030,7 +1049,7 @@ func TestAgentRoundTripContractCoversDiscoveryActionAndRecovery(t *testing.T) {
 	}
 	foundRecovery := false
 	for _, declared := range act.Contract.Errors {
-		if declared.Code == "sample_not_found" && declared.Kind == fault.KindNotFound &&
+		if declared.Code == "item_not_found" && declared.Kind == fault.KindNotFound &&
 			len(declared.NextActions) == 1 && declared.NextActions[0].Command == discover.Path {
 			foundRecovery = true
 		}

@@ -102,6 +102,77 @@ func TestRunChatworkFindsMemberCandidatesBeforeExactSenderUse(t *testing.T) {
 	}
 }
 
+func TestRunChatworkPassesDiscoveredAccountReferenceUnchangedIntoSenderSelection(t *testing.T) {
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "3501")
+	selected := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2501"), Name: "篠原 花子", Role: "member"}
+	other := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "2502"), Name: "山田 太郎", Role: "member"}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		switch request.Task {
+		case chatwork.TaskMembersList:
+			return chatwork.Result{
+				Task: request.Task, Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+				Accounts: []chatwork.Account{other, selected},
+			}, nil
+		case chatwork.TaskMessagesList:
+			return chatwork.Result{
+				Task: request.Task, MessageRoom: room,
+				Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false},
+				Messages: []chatwork.Message{
+					{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "1102"), Room: room, Sender: selected, Body: "selected"},
+					{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "1103"), Room: room, Sender: other, Body: "other"},
+				},
+			}, nil
+		default:
+			return chatwork.Result{}, errors.New("unexpected task")
+		}
+	}}
+
+	findSpec := chatworkRuntimeSpec(t, "members find")
+	findCLI, _, findOut, findErr := chatworkRuntimeCLI(t, findSpec, port)
+	if code := runChatwork(
+		chatworkRuntimeContext(findSpec),
+		findCLI,
+		findSpec,
+		chatworkRuntimeIntent(findSpec),
+		[]string{"--room", room.Value, "--query", selected.Name},
+	); code != ExitOK {
+		t.Fatalf("members find code = %d, stderr = %s", code, findErr.String())
+	}
+
+	discovered := ""
+	lines := strings.Split(strings.TrimSpace(findOut.String()), "\n")
+	for index, line := range lines {
+		if strings.HasPrefix(line, "schema: ") && index+1 < len(lines) {
+			fields := strings.Fields(lines[index+1])
+			if len(fields) > 0 {
+				discovered = fields[0]
+			}
+			break
+		}
+	}
+	if discovered != selected.Ref.Value {
+		t.Fatalf("discovered reference = %q, output = %q", discovered, findOut.String())
+	}
+
+	listSpec := chatworkRuntimeSpec(t, "messages list")
+	listCLI, _, listOut, listErr := chatworkRuntimeCLI(t, listSpec, port)
+	if code := runChatwork(
+		chatworkRuntimeContext(listSpec),
+		listCLI,
+		listSpec,
+		chatworkRuntimeIntent(listSpec),
+		[]string{"--room", room.Value, "--sender", discovered, "--resolve-relations", "0"},
+	); code != ExitOK {
+		t.Fatalf("messages list code = %d, stderr = %s", code, listErr.String())
+	}
+	if !strings.Contains(listOut.String(), "#1 1102 ") || strings.Contains(listOut.String(), "1103") {
+		t.Fatalf("sender-selected output = %s", listOut.String())
+	}
+	if port.calls != 2 {
+		t.Fatalf("provider calls = %d, want 2", port.calls)
+	}
+}
+
 func TestRunChatworkRendersResolvedMessageContextWithoutPostProcessing(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")

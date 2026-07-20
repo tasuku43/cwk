@@ -41,7 +41,11 @@ if ! awk -v current="$shellcheck_version" -v floor=0.9.0 'BEGIN {
   echo "release gate requires ShellCheck >= 0.9.0; running $shellcheck_version" >&2
   exit 1
 fi
-git ls-files -co --exclude-standard -z -- '*.sh' | xargs -0 shellcheck
+git ls-files -co --exclude-standard -z -- '*.sh' |
+  while IFS= read -r -d '' script; do
+    [[ -f $script ]] && printf '%s\0' "$script"
+  done |
+  xargs -0 shellcheck
 go test ./tools/archivepack ./tools/internal/releaseversion ./tools/releaseversion
 required_go=go$(awk '$1 == "go" { print $2 }' go.mod)
 actual_go=$(go env GOVERSION)

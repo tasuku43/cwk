@@ -12,7 +12,7 @@ The harness is the executable counterpart of the theses, product contract, archi
 | `full` | `task check` | Required pre-merge gate | Fast profile plus vet, race, generated-diff, and full test checks where applicable |
 | `security` | `task security` | Security and dependency changes | Repository guard, module integrity, pinned static and vulnerability analysis |
 | `release` | `task release:check` | Packaging and release changes | Artifact, metadata, checksum, Formula, and workflow contracts |
-| `public` | `task public:check` | Bootstrap completion and public publication | Ready-profile identity, forbidden-data, required-file, license, capability/schema contracts, and public-boundary checks |
+| `public` | `task public:check` | Public publication | Ready identity, forbidden-data, required-file, license, capability/schema contracts, and public-boundary checks |
 
 Direct invocation is supported for automation:
 
@@ -26,40 +26,28 @@ Direct invocation is supported for automation:
 
 The canonical gate and release packager force module mode and neutralize ambient Go workspace, toolchain, experiment, FIPS, and flag settings before invoking Go. This prevents a local or CI `GOFLAGS` value from silently selecting no tests and keeps agent, developer, and workflow evidence on the same checked command set. A release fixture launches the public profile with hostile values and proves that its first Go-backed check observes only the sanitized contract.
 
-CI is the completion authority. A local hook may run `fast` to reduce latency, but it must call this script and must not claim equivalence to `full`. The Codex `Stop` hook resolves its script from the Git root so it also works from a subdirectory; after the user completes [Codex's project-hook trust review](https://learn.chatgpt.com/docs/hooks), a failed fast gate returns a structured `continue: false` result that tells the agent to repair and rerun the canonical command.
+Profiles are composable entry points, not a nesting hierarchy. `full` includes
+`fast` and the additional implementation checks, but it does not invoke
+`security`, `release`, or `public`. Those profiles remain mandatory when the
+completion rules below select them. Release preflight invokes every required
+profile explicitly, so it cannot depend on an undocumented transitive check.
+
+CI is the completion authority. Pull-request CI runs `full` and the
+security/public boundary profiles in parallel. The repository installs no
+automatic Codex Stop hook: a per-turn fast run added latency, was sensitive to
+the PATH-selected Go binary, and did not prove completion. A contributor may
+configure local automation, but it must delegate to a named profile here and
+must not claim equivalence to a profile it did not run.
 
 ## Harness components
 
 ### `.harness/project.json`
 
-This file is the machine-readable source for template identity, bootstrap state, exact runnable defaults, and repository policy. The bootstrap tool validates it before replacement and changes its profile from `template` to `ready` only after successful application.
+This file is the machine-readable source for project identity, exact runnable defaults, and repository policy. The retained `ready` profile records that identity derivation completed; it is not a product, security, or release-readiness claim.
 
 `binary_name` is a portable lowercase executable basename. Validation rejects the case-insensitive Windows device names `CON`, `AUX`, `PRN`, `NUL`, `COM1` through `COM9`, and `LPT1` through `LPT9`; adding `.exe` does not make those names extractable on Windows. This is part of the default release-matrix contract, not a naming-style preference.
 
 Policy that must be reviewed by both humans and tools belongs here when it is finite and structural, such as forbidden private identifiers or expected module and binary names. Product reasoning remains in documentation.
-
-### `tools/bootstrap`
-
-Bootstrap performs validated exact replacement of `github.com/tasuku43/cwk`, `cwk`, and `Chatwork CLI`. It does not search-and-guess arbitrary names.
-
-Always preview first:
-
-```sh
-go run ./tools/bootstrap --dry-run
-go run ./tools/bootstrap
-```
-
-Bootstrap failure must leave the repository in a diagnosable state and must not claim the project is ready. Bootstrap changes identity; it cannot complete theses, threat models, or release promises.
-
-### `.agents/skills/bootstrap-derived-cli`
-
-`$bootstrap-derived-cli` is the first-run Codex workflow for a derived repository. It does not implement a second replacement engine: it resolves missing identity decisions, invokes `tools/bootstrap` in preview-then-apply order, verifies the resulting module/import/command paths and gates, then requires a project-specific thesis and security handoff before `$add-capability`. `tools/repoguard` requires both the Skill instructions and their Codex interface metadata, while the Skill's workflow delegates mechanical safety to the same bootstrap and check commands used by humans and CI.
-
-For a newly derived repository, the Skill leaves provider authentication,
-credential storage, side-effect approval, user tasks, and release ownership to
-that project's theses and security model. In this derived `cwk` product, ADR
-0003 has already selected process-local PAT only. A `ready` profile proves only
-that identity replacement completed.
 
 ### `tools/archlint`
 
@@ -69,7 +57,7 @@ The template also rejects every third-party import from `cmd` and `internal/cli`
 
 ### `tools/repoguard`
 
-Repository guard checks public-boundary and repository-shape policy, including bootstrap state, forbidden identifiers, likely secrets, invalid or leftover identity, and required public files. A derived project extends its policy when it adds credentials, private migrations, generated content, or publication constraints.
+Repository guard checks public-boundary and repository-shape policy, including the ready identity, forbidden identifiers, likely secrets, invalid or leftover template identity, required Codex guidance, and required public files. The template-only bootstrap implementation and Skill are intentionally absent after identity derivation.
 
 ### `tools/contractlint`
 
@@ -303,6 +291,10 @@ The test suite has complementary levels:
 - No-post-processing agent transcripts fail if a supported task requires `jq`, `grep`, a custom join, raw notation parsing, source inspection, or an exploratory provider call.
 - Presentation competitions pin fixtures, agent/model versions, prompts, repetitions, invocation budgets, answer scoring, token accounting, and latency measurement before candidate implementation.
 - Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, maintenance, benchmark-defect, and audit evidence. A selected presentation receives golden and compatibility tests only after an explicit compatibility decision; an inconclusive benchmark is never relabeled as a win.
+- The frozen Competition 1 runner/scorer is not part of the ongoing gate.
+  Current `tools/presentationeval` tests retain only active semantic fixtures;
+  the explicitly preserved raw reports remain immutable historical evidence,
+  and a future competition defines its own pinned runner in its work packet.
 
 A global coverage percentage is not a substitute for these contracts. Add tests at the boundary where a future regression would otherwise pass unnoticed.
 

@@ -82,13 +82,10 @@ func TestPagedOutputRequiresExactOpaqueCursorBinding(t *testing.T) {
 	}
 }
 
-func TestInternalSampleOutputRemainsCompleteAndUnpaged(t *testing.T) {
-	sampleList, found := NewCatalog(sampleTestCommandSpecs()...).Lookup("sample list")
-	if !found {
-		t.Fatal("internal sample catalog lacks sample list")
-	}
-	if sampleList.Agent.Output.Completeness != OutputCompletenessComplete || sampleList.Agent.Pagination != nil {
-		t.Fatalf("sample list output contract = %+v, pagination = %+v", sampleList.Agent.Output, sampleList.Agent.Pagination)
+func TestCompleteOutputRemainsUnpaged(t *testing.T) {
+	complete := discoverSpec("items list", "item")
+	if complete.Agent.Output.Completeness != OutputCompletenessComplete || complete.Agent.Pagination != nil {
+		t.Fatalf("complete output contract = %+v, pagination = %+v", complete.Agent.Output, complete.Agent.Pagination)
 	}
 }
 

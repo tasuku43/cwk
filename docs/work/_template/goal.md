@@ -1,6 +1,10 @@
 # Work Goal: Short outcome
 
 - Status: Draft
+- Retention: temporary
+- Retention reason: None
+- Governing contract: None
+- Review/delete trigger: Delete after durable conclusions are promoted and the change completes
 - Owner: Name or role
 - Target: Issue, milestone, or date
 - Related ADRs: None
@@ -35,4 +39,4 @@ Record the evidence, failure, request, or risk that makes this work valuable now
 
 ## Completion definition
 
-The work is complete when acceptance criteria have evidence, durable decisions have been promoted to numbered documentation or an ADR, required profiles pass, and temporary diagnostics or sensitive artifacts are removed.
+The work is complete when acceptance criteria have evidence, durable decisions have been promoted to numbered documentation or an ADR, required profiles pass, temporary diagnostics or sensitive artifacts are removed, and a temporary packet is removed from the final tree.

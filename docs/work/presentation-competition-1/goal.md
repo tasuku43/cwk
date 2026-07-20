@@ -1,6 +1,10 @@
 # Work Goal: Select the next agent presentation by evidence
 
 - Status: Complete
+- Retention: evidence
+- Retention reason: Preserve the frozen raw comparison results and benchmark defects required to interpret the inconclusive competition
+- Governing contract: `docs/00_theses.md` presentation replacement policy and `docs/09_agent_readiness_validation.md`
+- Review/delete trigger: Review when a later competition supersedes this evidence baseline and preserves equivalent provenance elsewhere
 - Owner: Project owner
 - Target: First post-completion presentation competition
 - Related ADRs: None

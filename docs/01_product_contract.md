@@ -48,10 +48,9 @@ Direct extraction of a declared field or canonical reference is allowed. Reconst
 
 The complete public catalog exposes the local `help`, `doctor`, `version`, and
 interactive `config` utilities plus the task-oriented Chatwork workflows
-defined below. The former `sample list` and `sample read` scaffold is
-retained only as an offline test fixture; it is absent from root help and cannot
-be invoked through the default catalog. Public opaque-reference and output
-contracts are proven by the Chatwork workflows themselves.
+defined below. Public opaque-reference and output contracts are proven by the
+Chatwork workflows themselves; the product carries no parallel runnable
+resource scaffold.
 
 Human text discovery is hierarchical. Root help shows the directly runnable
 single-word utilities and each canonical top-level task namespace once; it does

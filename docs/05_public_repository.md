@@ -1,46 +1,12 @@
 # Public Repository Boundary
 
-Public publication is irreversible in practice. Removing a secret, private URL, personal record, or proprietary file in a later commit does not remove it from clones, caches, logs, or forks. This guide treats repository creation, bootstrap, fixtures, history, licensing, and release metadata as one public boundary.
+Public publication is irreversible in practice. Removing a secret, private URL, personal record, or proprietary file in a later commit does not remove it from clones, caches, logs, or forks. This guide treats repository creation, derivation, fixtures, history, licensing, and release metadata as one public boundary.
 
 ## Clean-room derivation
 
 Create a derived public project from this public template or from an explicit allowlist of reviewed files. Never copy a private repository's `.git` directory. Do not preserve private commit messages, branches, tags, pull-request artifacts, or generated caches for convenience.
 
 If code or documentation is inspired by private work, rewrite it from approved requirements and confirm the rights to publish it. String replacement is not a legal or confidentiality review.
-
-## Safe bootstrap
-
-The template starts with runnable public defaults. In the derived repository:
-
-1. Edit `.harness/project.json`.
-2. Review the forbidden-identifier and public-policy fields.
-3. Preview exact changes:
-
-   ```sh
-   go run ./tools/bootstrap --dry-run
-   ```
-
-4. Apply bootstrap:
-
-   ```sh
-   go run ./tools/bootstrap
-   ```
-
-5. Inspect the diff rather than trusting the success message.
-6. Rewrite theses, product, security, and release documents with project facts.
-7. Run `task check`, `task security`, and `task public:check` before the first public push.
-
-Bootstrap's `ready` profile means identity replacement succeeded. It does not mean the project has completed product, security, legal, or release review.
-
-Bootstrap is deliberately fail-closed:
-
-- dry-run and apply build the same complete plan and perform the same path, collision, file-type, and symbolic-link checks;
-- no repository file is changed until every planned content update and rename has passed preflight and all updated content has been staged;
-- identity updates and the transition to `profile: ready` are committed as one transaction;
-- an unexpected commit error triggers reverse-order rollback, and a rollback failure is reported explicitly rather than being hidden;
-- symbolic links are rejected anywhere in the traversed repository, even when their target appears to remain inside the repository.
-
-A process or operating-system crash cannot make a multi-file filesystem update universally atomic. After any interrupted bootstrap, inspect the tree, rerun the dry-run, and restore from version control if the guard reports reserved bootstrap paths. Do not publish a repository merely because its profile says `ready`.
 
 ## Material that must not cross the boundary
 
@@ -56,7 +22,7 @@ Use `example.com`, synthetic identifiers, fixed timestamps, and invented content
 
 ## Executable public guard
 
-`task public:check` scans publishable regular files and fails before reading repository-controlled content when a symbolic link or special file is present. Under a `ready` profile it also rejects runnable template identity anywhere except `tools/internal/projectconfig/defaults.go`, which remains as the bootstrap provenance record.
+`task public:check` scans publishable regular files and fails before reading repository-controlled content when a symbolic link or special file is present. Under the retained `ready` profile it also rejects runnable template identity anywhere except `tools/internal/projectconfig/defaults.go`, which remains as the derivation provenance record.
 
 Repository shape checks also reject Claude-specific policy paths, interrupted bootstrap residue, and root-level binary build artifacts. The template has one canonical `AGENTS.md` policy and a Codex harness; a parallel `CLAUDE.md` or `.claude/` tree is a failed hygiene check. The full-tree shape walk does not treat deliberately ignored local files such as `.env` as publishable content, but symbolic links and special files still fail closed.
 
@@ -158,7 +124,7 @@ check rather than a pre-tag claim. After GitHub Release publication, verify
 that the macOS job strictly audited the exact Formula and that its shared-tap
 pull request changes only `Formula/cwk.rb`. After that pull request merges,
 perform a clean `brew install tasuku43/tap/cwk`, record the result in that
-release's work packet, and only then announce the Homebrew path as available.
+release's evidence record, and only then announce the Homebrew path as available.
 The GitHub Release and its public checksums must exist before the new Formula
 can be installed from the shared tap.
 
@@ -166,12 +132,11 @@ See [Release](06_release.md) for the artifact workflow.
 
 ## Automated and manual gates
 
-`task public:check` is required, but it cannot decide ownership, confidentiality context, trademark use, or whether an example reveals an internal process. The release owner records manual review evidence in the release work packet.
+`task public:check` is required, but it cannot decide ownership, confidentiality context, trademark use, or whether an example reveals an internal process. The release owner records manual review evidence in the release evidence record.
 
 Minimum first-public-push checklist:
 
 - [ ] Repository was created with clean public history.
-- [ ] Bootstrap diff was reviewed.
 - [ ] Theses and product contract are concrete.
 - [ ] Security model covers every real side effect and credential.
 - [ ] License and contribution terms were approved.

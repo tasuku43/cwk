@@ -55,8 +55,12 @@ jobs:
           echo "tag=${tag}" >>"${GITHUB_OUTPUT}"
           echo "revision=${revision}" >>"${GITHUB_OUTPUT}"
 
-      - name: canonical full gateを実行
-        run: ./scripts/check.sh full
+      - name: canonical required gateを実行
+        run: |
+          ./scripts/check.sh full
+          ./scripts/check.sh security
+          ./scripts/check.sh release
+          ./scripts/check.sh public
 
   build:
     name: ${{ matrix.goos }} ${{ matrix.goarch }}をbuild

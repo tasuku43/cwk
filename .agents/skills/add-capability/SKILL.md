@@ -8,16 +8,6 @@ description: >
 
 # Add a CLI Capability
 
-Before designing the change, run:
-
-```sh
-go run ./tools/projectmeta --field profile
-```
-
-If the profile is `template`, stop and use `$bootstrap-derived-cli`. Do not add
-a capability while the repository still has the foundry identity or generic
-product reasoning.
-
 Read `docs/00_theses.md` before designing the change. A capability is complete
 only when its user outcome, safety boundary, discoverability, and verification
 are explicit.

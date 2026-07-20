@@ -57,10 +57,10 @@ Unknown effects and incomplete mutation intent are invalid domain states at an e
 The application layer depends on domain values and primitive types. It does not import infrastructure, parse CLI arguments, render terminal output, or construct transport requests.
 
 `internal/app/doctorcmd` owns the local utility, while `internal/app/chatworkcmd`
-owns the public provider tasks. `internal/app/samplecmd` remains only as an
-explicitly constructed synthetic test fixture. Reusable application boundaries
-include authentication gating, complete-or-no-result pagination, and
-policy-neutral mutation invocation.
+owns the public provider tasks. Reusable application boundaries include
+authentication gating, complete-or-no-result pagination, and policy-neutral
+mutation invocation. Generic catalog fixtures remain test-local rather than
+introducing another application service beside the product workflows.
 
 ### Infrastructure
 
@@ -80,8 +80,8 @@ configuration, or credential-store behavior. [ADR 0003](decisions/0003-chatwork-
 pins this reduced boundary.
 
 `internal/infra/systemdoctor` is the diagnostic adapter. `chatworkapi` owns the
-production provider boundary. `internal/infra/sampledata` is a deterministic
-offline repository retained only for generic contract tests.
+production provider boundary. Generic contract tests use test-local fakes and
+do not add an offline production adapter.
 
 `internal/infra/terminalui` is the sole production terminal-mode adapter. It
 confines `golang.org/x/term` and platform-scoped `golang.org/x/sys` imports to
@@ -472,8 +472,8 @@ messages list --room <room-ref>
 The current task projection emits the exact canonical `room_ref` directly and
 defines no display alias; only that canonical value is accepted by the action.
 Historical candidate-C aliases were document-local and were never accepted by
-commands. The former sample graph is absent from `DefaultCatalog` and remains
-an offline test fixture for generic boundary checks.
+commands. Generic reference-graph tests use synthetic test-local catalog specs;
+the public Chatwork graph remains the only runnable discover-to-act evidence.
 
 ## Operation effect and intent
 

@@ -56,9 +56,6 @@ run_full() {
   go test -race ./...
   go mod tidy -diff
   git diff --check
-  run_security
-  run_release
-  run_public
 }
 
 case "$profile" in

@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   full:
-    name: repository全体のgate
+    name: 実装品質gate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -24,7 +24,25 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: false
+          cache: true
 
       - name: canonical full gateを実行
         run: ./scripts/check.sh full
+
+  boundary:
+    name: security・公開境界gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: canonical boundary gateを実行
+        run: |
+          ./scripts/check.sh security
+          ./scripts/check.sh public

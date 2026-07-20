@@ -278,29 +278,19 @@ func TestCheckFilesystemShapeDoesNotTreatIgnoredLocalFilesAsPublishable(t *testi
 	}
 }
 
-func TestCheckAgentHarnessValidatesCanonicalStopHook(t *testing.T) {
+func TestCheckAgentHarnessRequiresRepositorySkills(t *testing.T) {
 	root := t.TempDir()
-	writeRepositoryFixture(t, root, ".agents/skills/bootstrap-derived-cli/SKILL.md", "# Skill\n")
-	writeRepositoryFixture(t, root, ".agents/skills/bootstrap-derived-cli/agents/openai.yaml", "interface: {}\n")
 	writeRepositoryFixture(t, root, ".agents/skills/add-capability/SKILL.md", "# Skill\n")
-	validHooks := `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash \"$(git rev-parse --show-toplevel)/.codex/hooks/check.sh\"","timeout":180}]}]}}`
-	validScript := "#!/usr/bin/env bash\n./scripts/check.sh fast\nprintf '%s\\n' '{\"continue\":false}'\n"
-	writeRepositoryFixture(t, root, ".codex/hooks.json", validHooks)
-	writeRepositoryFixture(t, root, ".codex/hooks/check.sh", validScript)
 
 	if issues := checkAgentHarness(root); len(issues) != 0 {
 		t.Fatalf("valid harness issues = %#v", issues)
 	}
 
-	writeRepositoryFixture(t, root, ".codex/hooks.json", `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"bash .codex/hooks/check.sh","timeout":180}]}]}}`)
-	if issues := checkAgentHarness(root); len(issues) != 1 || !strings.Contains(issues[0].Message, "Git root") {
-		t.Fatalf("relative hook issues = %#v", issues)
+	if err := os.Remove(filepath.Join(root, ".agents", "skills", "add-capability", "SKILL.md")); err != nil {
+		t.Fatal(err)
 	}
-
-	writeRepositoryFixture(t, root, ".codex/hooks.json", validHooks)
-	writeRepositoryFixture(t, root, ".codex/hooks/check.sh", "#!/usr/bin/env bash\n./scripts/check.sh fast\n")
-	if issues := checkAgentHarness(root); len(issues) != 1 || !strings.Contains(issues[0].Message, "structured continuation") {
-		t.Fatalf("unstructured hook issues = %#v", issues)
+	if issues := checkAgentHarness(root); len(issues) != 1 || !strings.Contains(issues[0].Message, "required Codex harness file") {
+		t.Fatalf("missing skill issues = %#v", issues)
 	}
 }
 

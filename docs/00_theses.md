@@ -21,8 +21,11 @@ untrusted external data and is preserved rather than translated.
 
 This boundary is a product and compatibility decision, not an implementation
 shortcut. A future additional locale requires a reviewed fallback and message
-catalog contract. Historical work packets and experimental evidence remain in
-their original language so that localization cannot rewrite prior decisions.
+catalog contract. Explicitly retained experimental or release evidence remains
+in its original language so that localization cannot rewrite prior decisions.
+Ordinary work packets are temporary review artifacts: before completion, their
+durable conclusions move into numbered documents, ADRs, tests, or code, and the
+packet leaves the current tree while Git preserves its history.
 
 The product is not an endpoint mirror and is not measured by the compactness of one syntax. Its first complete implementation nevertheless has a finite coverage obligation: every operation in the official 2026-07-18 Chatwork API snapshot must be reachable through at least one reviewed user-task workflow. A smaller output is worse when it causes command mistakes, hides missing context, weakens identity, or makes an agent infer relationships.
 

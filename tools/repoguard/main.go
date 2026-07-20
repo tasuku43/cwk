@@ -4,7 +4,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -278,11 +277,7 @@ func checkRequired(root string, config projectconfig.Config, scope string) []iss
 
 func checkAgentHarness(root string) []issue {
 	paths := []string{
-		".agents/skills/bootstrap-derived-cli/SKILL.md",
-		".agents/skills/bootstrap-derived-cli/agents/openai.yaml",
 		".agents/skills/add-capability/SKILL.md",
-		".codex/hooks.json",
-		".codex/hooks/check.sh",
 	}
 	var issues []issue
 	for _, path := range paths {
@@ -290,62 +285,7 @@ func checkAgentHarness(root string) []issue {
 			issues = append(issues, issue{Path: path, Message: "required Codex harness file is missing"})
 		}
 	}
-	if len(issues) != 0 {
-		return issues
-	}
-	issues = append(issues, checkCodexStopHook(root)...)
 	return issues
-}
-
-type codexHookDocument struct {
-	Hooks map[string][]codexHookGroup `json:"hooks"`
-}
-
-type codexHookGroup struct {
-	Hooks []codexCommandHook `json:"hooks"`
-}
-
-type codexCommandHook struct {
-	Type    string `json:"type"`
-	Command string `json:"command"`
-	Timeout int    `json:"timeout"`
-}
-
-func checkCodexStopHook(root string) []issue {
-	hooksPath := filepath.Join(root, ".codex", "hooks.json")
-	data, err := os.ReadFile(hooksPath) // #nosec G304 -- path is fixed below the selected repository root.
-	if err != nil {
-		return []issue{{Path: ".codex/hooks.json", Message: "cannot read the Codex hook contract"}}
-	}
-	var document codexHookDocument
-	if err := json.Unmarshal(data, &document); err != nil {
-		return []issue{{Path: ".codex/hooks.json", Message: "Codex hook configuration is not valid JSON"}}
-	}
-	validStop := false
-	for _, group := range document.Hooks["Stop"] {
-		for _, hook := range group.Hooks {
-			if hook.Type == "command" && hook.Timeout > 0 &&
-				strings.Contains(hook.Command, "git rev-parse --show-toplevel") &&
-				strings.Contains(hook.Command, "/.codex/hooks/check.sh") {
-				validStop = true
-			}
-		}
-	}
-	if !validStop {
-		return []issue{{Path: ".codex/hooks.json", Message: "Stop hook must resolve the canonical check script from the Git root with a finite timeout"}}
-	}
-
-	scriptPath := filepath.Join(root, ".codex", "hooks", "check.sh")
-	script, err := os.ReadFile(scriptPath) // #nosec G304 -- path is fixed below the selected repository root.
-	if err != nil {
-		return []issue{{Path: ".codex/hooks/check.sh", Message: "cannot read the Codex check hook"}}
-	}
-	text := string(script)
-	if !strings.Contains(text, "./scripts/check.sh fast") ||
-		!strings.Contains(text, `"continue":false`) {
-		return []issue{{Path: ".codex/hooks/check.sh", Message: "Stop hook must delegate to the canonical fast gate and return structured continuation on failure"}}
-	}
-	return nil
 }
 
 func checkFilesystemShape(root string, config projectconfig.Config) ([]issue, error) {

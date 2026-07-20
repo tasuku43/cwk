@@ -150,20 +150,6 @@ func TestDefaultCatalogIsValidAndUnique(t *testing.T) {
 	}
 }
 
-func TestDefaultCatalogDoesNotExposeSampleScaffold(t *testing.T) {
-	catalog := DefaultCatalog()
-	for _, path := range []string{"sample list", "sample read"} {
-		if _, found := catalog.Lookup(path); found {
-			t.Fatalf("default catalog exposes internal scaffold command %q", path)
-		}
-	}
-	for _, spec := range catalog.Commands() {
-		if spec.Agent.CapabilityID == "sample.inspect" {
-			t.Fatalf("default catalog exposes internal scaffold capability through %q", spec.Path)
-		}
-	}
-}
-
 func TestCatalogRejectsIncompleteDeclarations(t *testing.T) {
 	valid := utilitySpec("valid")
 	missingEffect := utilitySpec("missing-effect")
@@ -948,12 +934,12 @@ func TestCatalogValidatesExecutableRecoveryCommandGrammar(t *testing.T) {
 	if !found {
 		t.Fatal("default catalog lacks help")
 	}
-	sampleList := utilitySpec("sample list")
-	for _, action := range []string{"help", "sample list", "help sample", "help sample list"} {
+	itemsList := utilitySpec("items list")
+	for _, action := range []string{"help", "items list", "help items", "help items list"} {
 		t.Run("valid_"+strings.ReplaceAll(action, " ", "_"), func(t *testing.T) {
 			spec := utilitySpec("test")
 			spec.Agent.Errors[0].NextActions[0].Command = action
-			if err := NewCatalog(help, sampleList, spec).Validate(); err != nil {
+			if err := NewCatalog(help, itemsList, spec).Validate(); err != nil {
 				t.Fatalf("valid recovery command %q: %v", action, err)
 			}
 		})
@@ -961,16 +947,16 @@ func TestCatalogValidatesExecutableRecoveryCommandGrammar(t *testing.T) {
 
 	for _, action := range []string{
 		"missing command",
-		"sample list --bogus",
+		"items list --bogus",
 		"help nonexistent",
-		"help sample list extra",
-		"help sample --format agent",
-		"sample  list",
+		"help items list extra",
+		"help items --format agent",
+		"items  list",
 	} {
 		t.Run("invalid_"+strings.ReplaceAll(action, " ", "_"), func(t *testing.T) {
 			spec := utilitySpec("test")
 			spec.Agent.Errors[0].NextActions[0].Command = action
-			if err := NewCatalog(help, sampleList, spec).Validate(); err == nil {
+			if err := NewCatalog(help, itemsList, spec).Validate(); err == nil {
 				t.Fatalf("invalid recovery command %q passed catalog validation", action)
 			}
 		})

@@ -1,6 +1,10 @@
 # Work Goal: Release cwk v0.1.1
 
 - Status: Complete
+- Retention: evidence
+- Retention reason: Preserve the only post-publication Formula rollout, clean-install, and symlink-compatibility incident observations for v0.1.1
+- Governing contract: `docs/05_public_repository.md`, `docs/06_release.md`, and ADR 0004
+- Review/delete trigger: Delete after the unique observations are promoted to a durable incident/release record or cease to inform a supported release path
 - Owner: Release maintainer
 - Target: v0.1.1 on 2026-07-19
 - Related ADRs: [ADR 0004](../../decisions/0004-shared-homebrew-tap.md)

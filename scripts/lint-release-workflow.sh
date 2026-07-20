@@ -129,7 +129,9 @@ grep -qF "github.event_name == 'workflow_dispatch'" "$workflow" ||
   fail "release workflow is missing the reviewed Formula recovery trigger"
 
 for required in \
-  './scripts/check.sh full' './scripts/package-release.sh' 'checksums.txt' \
+  './scripts/check.sh full' './scripts/check.sh security' \
+  './scripts/check.sh release' './scripts/check.sh public' \
+  './scripts/package-release.sh' 'checksums.txt' \
   'gh release create' 'Formula/' 'scripts/render-formula.sh' \
   'repository: tasuku43/homebrew-tap'; do
   grep -qF "$required" "$workflow" || fail "release workflow is missing: $required"

@@ -299,6 +299,18 @@ func TestExecuteRejectsBeforePort(t *testing.T) {
 	}
 }
 
+func TestExecuteFailsClosedForTypedNilPort(t *testing.T) {
+	result, err := New((*fakePort)(nil)).Execute(
+		context.Background(),
+		testBinding(t),
+		chatwork.Request{Task: chatwork.TaskRoomsList},
+	)
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "missing_chatwork_port" || result.Task != "" {
+		t.Fatalf("result = %+v, error = %#v", result, err)
+	}
+}
+
 func TestExecutePreservesStructuredFaultAndSanitizesRawError(t *testing.T) {
 	structured := fault.Wrap(fault.KindRateLimited, "chatwork_rate_limited", "Chatwork rate limit was reached", true, errors.New("secret body"))
 	for name, test := range map[string]struct {

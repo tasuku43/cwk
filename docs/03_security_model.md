@@ -93,7 +93,11 @@ provider object, cannot be selected from credential presence, and cannot be
 used once multiple possible instances exist. Catalog tests keep this path
 disjoint from opaque-reference flows and bind its mutation target explicitly.
 
-The internal sample test fixture accepts only `smp_` followed by twelve lowercase hexadecimal characters. Its negative tests remain as generic boundary evidence, but the fixture is not a public capability. Public Chatwork commands apply the same exact-byte rule to their typed canonical references.
+Public Chatwork commands apply the exact-byte rule to typed canonical
+references. Domain tests reject alternate and unsafe forms, catalog tests prove
+producer-to-consumer binding, and a CLI runtime test passes a discovered
+account reference unchanged into exact sender selection. Generic catalog
+fixtures remain test-local and do not introduce another resource identity.
 
 ### Presentation-derived identity
 

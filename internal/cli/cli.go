@@ -12,12 +12,10 @@ import (
 	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
 	"github.com/tasuku43/cwk/internal/app/configcmd"
 	"github.com/tasuku43/cwk/internal/app/doctorcmd"
-	"github.com/tasuku43/cwk/internal/app/samplecmd"
 	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/infra/chatworkapi"
 	"github.com/tasuku43/cwk/internal/infra/commandconfig"
-	"github.com/tasuku43/cwk/internal/infra/sampledata"
 	"github.com/tasuku43/cwk/internal/infra/systemdoctor"
 	"github.com/tasuku43/cwk/internal/infra/terminalui"
 )
@@ -37,7 +35,6 @@ type CLI struct {
 	selectionSaved   bool
 	terminal         terminalui.Opener
 	doctor           *doctorcmd.Service
-	samples          *samplecmd.Service
 	chatwork         *chatworkcmd.Service
 	chatworkAuth     *appauthn.Gate
 	chatworkInitErr  error
@@ -85,16 +82,6 @@ func (c *CLI) ensureChatwork(ctx context.Context) error {
 }
 
 func newCLI(in io.Reader, out, errOut io.Writer, catalog Catalog, inspector doctorcmd.InspectorPort) *CLI {
-	return newCLIWithSamples(in, out, errOut, catalog, inspector, sampledata.New())
-}
-
-func newCLIWithSamples(
-	in io.Reader,
-	out, errOut io.Writer,
-	catalog Catalog,
-	inspector doctorcmd.InspectorPort,
-	repository samplecmd.RepositoryPort,
-) *CLI {
 	if in == nil {
 		in = strings.NewReader("")
 	}
@@ -111,7 +98,6 @@ func newCLIWithSamples(
 		catalog:     catalog,
 		terminal:    terminalui.New(),
 		doctor:      doctorcmd.New(inspector),
-		samples:     samplecmd.New(repository),
 		now:         time.Now,
 	}
 }

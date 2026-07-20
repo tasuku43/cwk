@@ -65,7 +65,8 @@
 - Boundary tests: `internal/infra/commandconfig/store_test.go` and
   `resolver_unix_test.go`
 - User guidance: `README.md`
-- Fix packet: `docs/work/config-home-symlink-compat/`
+- Fix and regression boundary: `internal/infra/commandconfig/store.go`,
+  `store_test.go`, and `resolver_unix_test.go`
 - Release workflow: `.github/workflows/release.yml`
 - Package and Formula checks: `scripts/package-release.sh`,
   `scripts/render-formula.sh`, `scripts/audit-formula.sh`, and

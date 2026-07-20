@@ -140,7 +140,9 @@ separate decisions.
   strict-audit ownership and cleanup boundary with fake Homebrew. The stable
   macOS Formula job performs the real Homebrew strict audit before minting the
   App token.
-- `task check` includes release, security, and public-boundary profiles.
+- Release preflight runs `task check`, `task security`, `task release:check`,
+  and `task public:check` explicitly. ADR 0005 supersedes the former nested
+  profile composition.
 - The release owner manually confirms the App installation is limited to
   `homebrew-tap` with Contents read/write and Pull requests read/write.
 

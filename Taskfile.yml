@@ -30,7 +30,7 @@ tasks:
       - ./scripts/check.sh fast
 
   check:
-    desc: 品質、security、release、公開準備の全gateを実行します。
+    desc: 実装品質の必須gateを実行します。
     cmds:
       - ./scripts/check.sh full
 
@@ -48,13 +48,3 @@ tasks:
     desc: repositoryを安全に公開できることを検証します。
     cmds:
       - ./scripts/check.sh public
-
-  bootstrap:preview:
-    desc: fileを変更せずに正確なtemplate置換をpreviewします。
-    cmds:
-      - go run ./tools/bootstrap --dry-run
-
-  bootstrap:
-    desc: 検証済みtemplate置換を適用し、ready profileへ切り替えます。
-    cmds:
-      - go run ./tools/bootstrap

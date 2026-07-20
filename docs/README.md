@@ -1,8 +1,8 @@
 # ドキュメント案内
 
-このディレクトリには Chatwork CLI の継続的な設計判断を収録しています。製品、architecture、security、harness、公開、release の境界をまたぐ変更を行うときは、番号付き文書を順番に読んでください。
+このディレクトリには Chatwork CLI の継続的な設計判断を収録しています。常に `00` を読み、変更対象に応じて product (`01`)、architecture (`02`)、security (`03`)、harness (`04`)、公開・release (`05`–`06`)、external API (`07`–`09`) を追加で読みます。複数境界をまたぐ場合は番号順に読み、scopeが曖昧またはthesisを変更する場合は `00`–`04` をすべて読んでください。
 
-新しい派生 repository では、Codex は最初に [`$bootstrap-derived-cli`](../.agents/skills/bootstrap-derived-cli/SKILL.md) を使います。identity と初期の製品判断が具体化した後、通常の capability 変更には [`$add-capability`](../.agents/skills/add-capability/SKILL.md) を使います。
+通常の capability 変更には [`$add-capability`](../.agents/skills/add-capability/SKILL.md) を使います。
 
 | 文書 | 目的 | 主な読者 |
 |---|---|---|
@@ -20,8 +20,7 @@
 追加ディレクトリは、異なる寿命の情報を扱います。
 
 - [ADR template](decisions/0000-template.md) から永続的な architecture decision record を作成します。過去の判断を隠すために ADR を書き換えず、新しい ADR で supersede します。
-- [work packet の goal template](work/_template/goal.md) から期限付きの作業 packet を作成します。永続文書へ昇格しない限り、そこにある fact と plan は一時的です。
-- [repository design](plans/2026-07-18-cwk-design.md) は `plans/` に保存する実装設計の例です。
+- [work packet の goal template](work/_template/goal.md) から期限付きの作業 packet を作成します。通常packetは完了時にdurableな結論を昇格して削除し、保持理由と見直し条件を明示した `evidence` だけを現行treeに残します。
 
 root の community 文書は慣例的な固定場所にあります。
 
@@ -58,11 +57,11 @@ root の [AGENTS.md](../AGENTS.md) がこの順序を contribution policy とし
 
 対象利用者は日本です。README、community 文書、GitHub template、human help、TUI、公開 fault message と recovery reason は日本語を既定とします。一方、command path、flag、environment variable、JSON key、schema token、fault kind/code、capability/reference kind、opaque reference は automation の安定識別子なので翻訳しません。Chatwork から受け取る外部 text も意味を変えず、そのまま untrusted data として扱います。
 
-番号付きの engineering 文書は、厳密な contract 用語や既存 evidence を保持する必要がある箇所で英語を残せます。ただし、そこで新たに定める利用者向け instruction は日本語の active entry documentation からも到達可能でなければなりません。`docs/work/` の過去の判断証跡と実験 evidence は、後から履歴の意味を変えないため原文を保持します。
+番号付きの engineering 文書は、厳密な contract 用語や既存 evidence を保持する必要がある箇所で英語を残せます。ただし、そこで新たに定める利用者向け instruction は日本語の active entry documentation からも到達可能でなければなりません。`docs/work/` で明示的に保持する実験・release evidence は、後から観測の意味を変えないため原文を保持します。
 
-## 派生 project の文書 review
+## Product 文書の review
 
-Bootstrap は identity を変更しますが、intent は決めません。実際の capability を追加する前に、派生 project は次を行います。
+実際の capability を追加する前に、次を確認します。
 
 1. Generic な North Star と成功指標を具体化する。
 2. Primary user、対応 task、明示的な非目標を定める。

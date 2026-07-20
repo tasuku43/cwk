@@ -70,11 +70,6 @@
     "reason": ""
   },
   {
-    "id": "sample.inspect",
-    "status": "internal",
-    "reason": "Retained only as an offline test fixture; Chatwork task commands own the public reference workflows."
-  },
-  {
     "id": "system.diagnostics",
     "status": "public",
     "reason": ""
