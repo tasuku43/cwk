@@ -1,3 +1,5 @@
+![cwk — ノイズを削り、文脈を残すChatwork CLI](docs/assets/readme/cwk-hero.png)
+
 # cwk
 
 > エージェントのためのChatwork CLI。
