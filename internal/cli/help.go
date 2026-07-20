@@ -242,8 +242,16 @@ func (c Catalog) Select(selector string) ([]CommandSpec, bool) {
 func (c *CLI) renderRootHelp() []byte {
 	commands := c.catalog.Commands()
 	directCommands, namespaces := rootTextHelpEntries(commands)
+	unconfigured := c.selectionLoaded && !c.selectionSaved
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
+	if unconfigured {
+		fmt.Fprintln(&output)
+		fmt.Fprintln(&output, "初回設定:")
+		fmt.Fprintln(&output, "  config が未設定のため、現在は制御コマンドだけを表示しています。")
+		fmt.Fprintf(&output, "  '%s config' で使用するChatworkコマンドを選んでください。\n", ProgramName)
+		fmt.Fprintln(&output, "  必要なコマンドだけを表示することで、エージェントの選択ミスとトークン消費を抑えられます。")
+	}
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "使い方:")
 	fmt.Fprintf(&output, "  %s [--error-format text|json] <command> [arguments]\n", ProgramName)
@@ -259,6 +267,11 @@ func (c *CLI) renderRootHelp() []byte {
 		output.Write(renderNamespaceIndex("名前空間:", namespaces))
 	}
 	fmt.Fprintln(&output)
+	if unconfigured {
+		fmt.Fprintf(&output, "初回設定を始めるには '%s config' を実行してください。\n", ProgramName)
+		fmt.Fprintf(&output, "設定コマンドの機械可読契約には '%s help config --format agent' を実行してください。\n", ProgramName)
+		return output.Bytes()
+	}
 	fmt.Fprintf(&output, "コマンドを選ぶには '%s <namespace> --help' を実行してください。\n", ProgramName)
 	fmt.Fprintln(&output, "詳細を確認するには、正確なコマンドの末尾に '--help' を付けてください。")
 	fmt.Fprintf(&output, "結果・エラー・復旧を含む機械可読契約には '%s help <exact-command> --format agent' を実行してください。\n", ProgramName)
@@ -609,6 +622,7 @@ func defaultAgentErrorContract() agentErrorContract {
 			declaredCommandError(fault.KindInvalidInput, "invalid_root_options", false, "help", "グローバルオプションを修正してください。"),
 			declaredCommandError(fault.KindInvalidInput, "missing_command", false, "help", "利用できるコマンドの結果を確認してください。"),
 			declaredCommandError(fault.KindInvalidInput, "unknown_command", false, "help", "正確なコマンドパスまたは名前空間を確認してください。"),
+			declaredCommandError(fault.KindRejected, "command_selection_required", false, "config", "使用するChatworkコマンドを選択してください。"),
 			declaredCommandError(fault.KindInvalidInput, "command_selection_invalid", false, "config", "無効なコマンド選択を明示的に置き換えてください。"),
 			declaredCommandError(fault.KindUnavailable, "command_selection_unsafe", false, "doctor", "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"),
 			declaredCommandError(fault.KindUnavailable, "command_selection_unavailable", true, "doctor", "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"),

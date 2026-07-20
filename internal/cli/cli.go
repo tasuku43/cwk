@@ -33,6 +33,8 @@ type CLI struct {
 	baseCatalog      Catalog
 	catalog          Catalog
 	commandSelection *configcmd.Service
+	selectionLoaded  bool
+	selectionSaved   bool
 	terminal         terminalui.Opener
 	doctor           *doctorcmd.Service
 	samples          *samplecmd.Service
@@ -174,6 +176,9 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 		}
 	}
 	c.catalog = activeCatalog
+	if c.selectionLoaded && !c.selectionSaved && commandViewConfigurableInvocation(baseCatalog, commandArgs) {
+		return c.fail(ctx, commandSelectionRequiredFault())
+	}
 	commandArgs = normalizeTrailingHelpAlias(c.catalog, commandArgs)
 	command, rest, found := c.catalog.Match(commandArgs)
 	if !found {
@@ -210,6 +215,8 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 }
 
 func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, error) {
+	c.selectionLoaded = false
+	c.selectionSaved = false
 	if c == nil || c.commandSelection == nil {
 		return base, nil
 	}
@@ -217,13 +224,11 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 	if err != nil {
 		return Catalog{}, err
 	}
+	c.selectionLoaded = true
+	c.selectionSaved = configured
 	enabled := make([]string, 0)
 	if configured {
 		enabled = normalizeLegacyCommandSelection(profile.EnabledCommands())
-	} else {
-		for _, command := range base.ConfigurableCommands() {
-			enabled = append(enabled, command.Path)
-		}
 	}
 	view, _, err := base.ActiveView(enabled)
 	if err != nil {
@@ -236,6 +241,46 @@ func (c *CLI) resolveActiveCatalog(ctx context.Context, base Catalog) (Catalog, 
 		)
 	}
 	return view, nil
+}
+
+func commandViewConfigurableInvocation(base Catalog, args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	if args[0] == "help" {
+		_, selector, err := parseHelpArgs(args[1:])
+		return err == nil && selectorContainsConfigurableCommand(base, selector)
+	}
+	if isHelpFlag(args[len(args)-1]) {
+		return selectorContainsConfigurableCommand(base, strings.Join(args[:len(args)-1], " "))
+	}
+	if command, _, found := base.Match(args); found {
+		return command.Configurable
+	}
+	return selectorContainsConfigurableCommand(base, strings.Join(args, " "))
+}
+
+func selectorContainsConfigurableCommand(base Catalog, selector string) bool {
+	if selector == "" {
+		return false
+	}
+	commands, _ := base.Select(selector)
+	for _, command := range commands {
+		if command.Configurable {
+			return true
+		}
+	}
+	return false
+}
+
+func commandSelectionRequiredFault() error {
+	return fault.New(
+		fault.KindRejected,
+		"command_selection_required",
+		"初回設定が必要です。cwk config で使用するChatworkコマンドを選ぶと、エージェントに表示する候補が減り、選択ミスとトークン消費を抑えられます。",
+		false,
+		fault.NextAction{Command: "config", Reason: "使用するChatworkコマンドを選択してください。"},
+	)
 }
 
 func commandViewAlwaysInvocation(base Catalog, args []string) bool {

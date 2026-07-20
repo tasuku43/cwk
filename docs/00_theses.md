@@ -75,6 +75,12 @@ An agent that knows the user's desired outcome should reach the exact command co
   curated away. This curation is not an authorization, sandbox, or security
   boundary: a local actor able to edit or remove the preference can restore
   commands.
+- Until a command-selection profile has been saved, the active view contains
+  only those four local control commands. Human root help explicitly says that
+  `config` is unset, why the reduced view lowers agent token use and selection
+  mistakes, and how to run `config`. A known configurable task or its scoped
+  help fails as `command_selection_required` before PAT resolution or provider
+  I/O; an actually unknown path remains `unknown_command`.
 - `config` accepts one terminal-native interaction: Up/Down navigates, Space
   toggles, Enter validates and saves, and `q` leaves the prior selection
   unchanged. Each choice retains a literal read/create/write badge; optional
@@ -115,6 +121,9 @@ An agent that knows the user's desired outcome should reach the exact command co
   blocked unseen mutations, declared uncertain-error grammar, doctor
   fingerprint reconciliation, and migration of only the formerly selectable
   `doctor` and `version` paths.
+- First-run tests prove the control-only human and agent help views, the explicit
+  human help explanation, `state=unconfigured source=missing` diagnostics,
+  exact `config` recovery, and zero PAT/provider calls for known Chatwork paths.
 - Root and namespace agent-index entries retain the 512-byte per-command budget.
 - Human-help tests prove that every catalog command belongs to exactly one root
   entry and round-trips through its canonical namespace; exact-help recipe

@@ -174,6 +174,94 @@ func configurableCommandPaths(catalog Catalog) []string {
 	return paths
 }
 
+func TestMissingProfileRequiresConfigAndExplainsTheReducedHelpView(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	factoryCalls := 0
+	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+		factoryCalls++
+		return nil, nil, errors.New("must not resolve authentication")
+	}
+
+	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
+		t.Fatalf("root help exit=%d stderr=%q", code, h.stderr.String())
+	}
+	for _, want := range []string{
+		"config が未設定のため、現在は制御コマンドだけを表示しています。",
+		"cwk config",
+		"エージェントの選択ミスとトークン消費を抑えられます。",
+	} {
+		if !strings.Contains(h.stdout.String(), want) {
+			t.Errorf("root help lacks %q:\n%s", want, h.stdout.String())
+		}
+	}
+	if strings.Contains(h.stdout.String(), "名前空間:") || strings.Contains(h.stdout.String(), "rooms") {
+		t.Fatalf("unconfigured root help leaked Chatwork commands:\n%s", h.stdout.String())
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"help", "--format", "agent"}); code != ExitOK {
+		t.Fatalf("root agent help exit=%d stderr=%q", code, h.stderr.String())
+	}
+	var index agentIndexDocument
+	if err := json.Unmarshal(h.stdout.Bytes(), &index); err != nil {
+		t.Fatalf("root agent help JSON: %v\n%s", err, h.stdout.String())
+	}
+	if got, want := len(index.Commands), len(DefaultCatalog().AlwaysCommands()); got != want {
+		t.Fatalf("unconfigured agent commands=%d want=%d: %+v", got, want, index.Commands)
+	}
+	for _, command := range index.Commands {
+		if strings.Contains(command.Path, " ") {
+			t.Fatalf("unconfigured agent help leaked configurable command %+v", command)
+		}
+	}
+
+	for _, args := range [][]string{
+		{"rooms", "list"},
+		{"help", "rooms"},
+		{"rooms", "--help"},
+		{"help", "messages", "list", "--format", "agent"},
+	} {
+		h.reset(strings.NewReader(""))
+		if code := runCLI(h.command, args); code != ExitRejected {
+			t.Fatalf("unconfigured invocation %v exit=%d stderr=%q", args, code, h.stderr.String())
+		}
+		for _, want := range []string{"code: command_selection_required", "cwk config", "トークン消費"} {
+			if !strings.Contains(h.stderr.String(), want) {
+				t.Errorf("unconfigured invocation %v lacks %q: %s", args, want, h.stderr.String())
+			}
+		}
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("unconfigured commands resolved PAT %d times", factoryCalls)
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"--error-format=json", "rooms", "list"}); code != ExitRejected {
+		t.Fatalf("unconfigured JSON invocation exit=%d stderr=%q", code, h.stderr.String())
+	}
+	var failure errorDocument
+	if err := json.Unmarshal(h.stderr.Bytes(), &failure); err != nil {
+		t.Fatalf("unconfigured JSON error: %v\n%s", err, h.stderr.String())
+	}
+	if failure.Error.Kind != fault.KindRejected || failure.Error.Code != "command_selection_required" || failure.Error.Retryable ||
+		len(failure.Error.NextActions) != 1 || failure.Error.NextActions[0].Command != "config" {
+		t.Fatalf("unconfigured JSON error=%+v", failure.Error)
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"unknown"}); code != ExitUsage {
+		t.Fatalf("unknown command exit=%d stderr=%q", code, h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "code: unknown_command") {
+		t.Fatalf("unknown command was mistaken for first-run recovery: %q", h.stderr.String())
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"help", "config"}); code != ExitOK {
+		t.Fatalf("config help exit=%d stderr=%q", code, h.stderr.String())
+	}
+}
+
 func configKeysForSelection(catalog Catalog, initial, target []string) string {
 	initialSet := stringSet(initial)
 	targetSet := stringSet(target)
@@ -1062,7 +1150,7 @@ func TestUnclassifiedSaveOutcomePointsToDoctorFingerprintReconciliation(t *testi
 	}
 }
 
-func TestUnclassifiedSaveOutcomeDoesNotMistakeDefaultForPersistedCandidate(t *testing.T) {
+func TestUnclassifiedSaveOutcomeDoesNotMistakeMissingProfileForPersistedCandidate(t *testing.T) {
 	store := &uncertainCommandSelectionStore{persist: false}
 	var stdout, stderr bytes.Buffer
 	command := newCLI(strings.NewReader("\r"), &stdout, &stderr, DefaultCatalog(), passingInspector("runtime"))
@@ -1083,11 +1171,11 @@ func TestUnclassifiedSaveOutcomeDoesNotMistakeDefaultForPersistedCandidate(t *te
 	if code := command.RunContext(context.Background(), []string{"doctor"}); code != ExitOK {
 		t.Fatalf("doctor exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "state=valid source=default") || !strings.Contains(stdout.String(), wantFingerprint) {
-		t.Fatalf("doctor did not expose the same-selection but non-persisted state:\n%s", stdout.String())
+	if !strings.Contains(stdout.String(), "state=unconfigured source=missing") || !strings.Contains(stdout.String(), commandSelectionFingerprint(nil)) {
+		t.Fatalf("doctor did not expose the unconfigured non-persisted state:\n%s", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "source=saved") {
-		t.Fatalf("default selection falsely reconciled as the saved candidate:\n%s", stdout.String())
+		t.Fatalf("missing selection falsely reconciled as the saved candidate:\n%s", stdout.String())
 	}
 }
 

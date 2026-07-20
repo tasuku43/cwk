@@ -221,10 +221,11 @@ the production destination.
 The persisted command allowlist reduces the agent's attention surface; it is
 not an authorization, access-control, sandbox, or security boundary. The same
 local principal that runs `cwk` may edit or remove the file, invoke `config`,
-or install another binary. Removing the file intentionally restores the
-documented missing-state behavior in which all current configurable Chatwork
-commands are visible. Hidden commands must therefore never be used as evidence
-that an operation is forbidden or inaccessible.
+or install another binary. Removing the file returns the installation to the
+documented unconfigured control-only state and permits the same principal to
+run `config` again with an all-selected initial draft. Hidden commands must
+therefore never be used as evidence that an operation is forbidden or
+inaccessible.
 
 `help`, `doctor`, `version`, and the single exact `config` write remain
 catalog-declared always-on so the local view is diagnosable and reversible.

@@ -167,12 +167,19 @@ The test suite has complementary levels:
   root, relative namespace listings, natural trailing-help equivalence, and
   unchanged unknown-command faults.
 - Command-selection catalog tests keep exactly `help`, `doctor`, `version`, and
-  `config` always-on; prove missing state enables every current configurable
-  Chatwork command while a saved allowlist keeps later additions off; and make
+  `config` always-on; prove missing state exposes only that control plane while
+  a saved allowlist keeps later additions off; and make
   root, namespace, exact, trailing, agent, recovery, workflow, and routing
   views agree. They reject a visible consumer without a reachable producer and
   a visible recovery action whose command is hidden, without auto-enabling
   either dependency.
+- First-run command-selection tests require root human help to explain that
+  `config` is unset and why the reduced view lowers token use and selection
+  mistakes. Root agent help contains only the four control commands; known
+  configurable execution and scoped-help paths return
+  `command_selection_required` with exact `config` recovery and zero PAT or
+  provider calls, while unknown and saved-disabled paths remain
+  `unknown_command`.
 - Command-selection TTY tests drive the single `config` selector through a
   synthetic terminal. They require textual `[read]`, `[create]`, and `[write]`
   effect badges even when color is unavailable, catalog-derived color spans
@@ -201,15 +208,16 @@ The test suite has complementary levels:
   provider calls; re-enabling must not bypass the original authentication or
   mutation confirmation contract.
 - Command-selection reconciliation tests add one bounded `command-selection`
-  check to always-on `doctor`. Synthetic default, saved, stale, legacy,
+  check to always-on `doctor`. Synthetic missing, saved, stale, legacy,
   malformed, unsafe, and unavailable states fix its state/source,
   enabled/disabled/stale/legacy counts and deterministic ordered SHA-256
   fingerprint. An uncertain save records expected `source=saved` and its
   candidate fingerprint; tests require both to match the subsequent doctor
-  result and reject the same fingerprint reported as `source=default`, so an
+  result and reject an unconfigured empty-selection fingerprint, so an
   uncertain write is inspected without a second mutation or false success.
   Exact-command agent help publishes the exact dynamic error-message grammar, and a
-  JSON error fixture must match it byte-for-byte around the fingerprint.
+  JSON error fixture must match it byte-for-byte around the fingerprint. Missing
+  state reports `state=unconfigured source=missing` with zero enabled paths.
 - Config success-output tests fix the two-line natural-Japanese
   visible/hidden/change transcript, require cleanup prose only for a nonzero
   stale-plus-legacy count, and reject internal key/value labels or a fingerprint
@@ -324,7 +332,7 @@ Every strong statement should identify its enforcement path.
 | Chatwork rate-limit evidence | Strict header/body parsing tests, five-minute plausibility bounds, read/mutation catalog signatures, advisory-timing validation, and text/JSON unknown-timing snapshots |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
 | Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
-| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), control-only first-run human/agent help with an explicit unset/token-efficiency explanation, typed `command_selection_required` recovery and zero PAT/provider calls, actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
 | Bounded agent discovery | Fixed root/namespace index and exact-scope shapes, exact-command-only request pointers, 512-byte per-command entry validation, forbidden-detail canaries, 100-command root/namespace growth tests, and exact-human-help structured recipe tests that suppress any workflow with a hidden step while keeping every agent-help shape recipe-free |
 | Member-name candidate discovery | Domain/application/CLI/presentation and active synthetic tests require one complete room-members provider read, exact case-sensitive substring filtering with no normalization or automatic selection, explicit query/source/candidate/completeness metadata, stable canonical refs, escaped external names, zero query leakage, and a two-command `members find` to exact `messages list --sender` flow with no full-message pre-dump or external processing |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |

@@ -13,7 +13,7 @@ import (
 
 const (
 	commandSelectionFingerprintVersion  = "cwk-command-selection/v1"
-	commandSelectionDoctorDetailGrammar = "state=<valid|invalid|unsafe|unavailable> source=<default|saved|unknown> enabled=<count|unknown> disabled=<count|unknown> stale=<count|unknown> legacy=<count|unknown> fingerprint=<sha256:64-lowercase-hex|unavailable>"
+	commandSelectionDoctorDetailGrammar = "state=<valid|unconfigured|invalid|unsafe|unavailable> source=<missing|saved|unknown> enabled=<count|unknown> disabled=<count|unknown> stale=<count|unknown> legacy=<count|unknown> fingerprint=<sha256:64-lowercase-hex|unavailable>"
 )
 
 func (c *CLI) commandSelectionDoctorCheck(ctx context.Context) (doctor.Check, bool, error) {
@@ -49,6 +49,16 @@ func (c *CLI) commandSelectionDoctorCheck(ctx context.Context) (doctor.Check, bo
 		base = c.catalog
 	}
 	choices := base.ConfigurableCommands()
+	if !state.configured {
+		return doctor.Check{
+			Name:   "command-selection",
+			Status: doctor.CheckStatusWarn,
+			Detail: fmt.Sprintf(
+				"state=unconfigured source=missing enabled=0 disabled=%d stale=0 legacy=0 fingerprint=%s",
+				len(choices), commandSelectionFingerprint(nil),
+			),
+		}, true, nil
+	}
 	enabled := selectedPathsInCatalogOrder(choices, state.enabled)
 	status := doctor.CheckStatusPass
 	stateName := "valid"

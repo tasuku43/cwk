@@ -51,6 +51,19 @@ func TestCommandSelectionDoctorCheckNormalizesLegacyLocalCommands(t *testing.T) 
 	}
 }
 
+func TestCommandSelectionDoctorCheckReportsMissingProfileAsUnconfigured(t *testing.T) {
+	command := newCLI(strings.NewReader(""), &strings.Builder{}, &strings.Builder{}, DefaultCatalog(), passingInspector("unused"))
+	command.commandSelection = configcmd.New(diagnosticSelectionStore{})
+	check, present, err := command.commandSelectionDoctorCheck(context.Background())
+	if err != nil || !present {
+		t.Fatalf("check present=%v err=%v", present, err)
+	}
+	want := "state=unconfigured source=missing enabled=0 disabled="
+	if check.Status != "warn" || !strings.Contains(check.Detail, want) || !strings.Contains(check.Detail, commandSelectionFingerprint(nil)) {
+		t.Fatalf("check = %+v, want warning containing %q", check, want)
+	}
+}
+
 func TestCommandSelectionDoctorCheckFailureKeepsTheFixedDetailGrammar(t *testing.T) {
 	tests := []struct {
 		name       string

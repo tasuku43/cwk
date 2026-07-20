@@ -201,10 +201,13 @@ loads an exact-path enabled allowlist and derives one catalog-order active view;
 it does not construct a second command registry or mutate the complete catalog.
 `help`, `doctor`, `version`, and the single exact `config` write are always-on;
 the Chatwork task leaves are independently configurable. Missing selection
-state enables every current configurable Chatwork leaf. A present allowlist is
-authoritative, so a command added in a later release remains hidden until
-explicitly selected; unknown saved paths are retained as stale upgrade evidence
-but never become executable. Profiles written by the preceding selector may
+state derives an unconfigured active view containing only those four control
+commands. CLI dispatch consults the complete catalog only to distinguish a
+known configurable task or namespace from an actually unknown path, returning
+`command_selection_required` before PAT resolution while never routing the
+hidden task. A present allowlist is authoritative, so a command added in a later
+release remains hidden until explicitly selected; unknown saved paths are
+retained as stale upgrade evidence but never become executable. Profiles written by the preceding selector may
 contain the formerly configurable exact paths `doctor` and `version`; only
 those two known legacy entries are removed before active-view validation and
 are omitted on the next confirmed save. This narrow migration does not make
@@ -261,8 +264,11 @@ canonical enabled paths. Confirmed `config` success is projected separately as
 a short human-readable visible/hidden/change summary with conditional cleanup;
 it does not duplicate the fingerprint. An uncertain fault names the expected
 `source=saved` as well as its candidate fingerprint; reconciliation succeeds
-only when `doctor` reports both, so an absent profile whose all-enabled default
-happens to hash identically is not mistaken for a persisted replacement.
+only when `doctor` reports both. An absent profile instead reports
+`state=unconfigured source=missing`, zero enabled Chatwork commands, and the
+deterministic empty-selection fingerprint; the interactive selector still
+presents an all-selected initial draft. Missing state therefore cannot be
+mistaken for a persisted replacement.
 Exact-command agent help declares the exact runtime message grammar, and the JSON
 error contract is tested against it rather than leaving these dynamic values in
 undeclared prose. Malformed

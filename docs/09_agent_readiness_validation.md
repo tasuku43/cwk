@@ -253,9 +253,13 @@ never evaluation inputs or retained evidence.
 The active command-selection scenario uses a temporary synthetic config home
 plus a synthetic interactive terminal and fake PAT/provider counters; it never
 reads or changes a developer's real preference and needs no live Chatwork data.
-Starting with no preference file, the agent observes the complete current help
-view and the four always-on commands: `help`, `doctor`, `version`, and `config`.
-It opens the single `config` selector, uses Up and Down to move and Space to
+Starting with no preference file, the agent observes a control-only root help
+view containing `help`, `doctor`, `version`, and `config`. Human help explicitly
+states that `config` is unset, that only control commands are shown, and that
+the smaller view reduces token use and selection mistakes. A known Chatwork
+path fails as `command_selection_required` with exact `config` recovery and
+zero PAT/provider calls. The agent opens the single `config` selector, which
+starts with all current Chatwork commands selected, uses Up and Down to move and Space to
 disable `contact-requests list`, `contact-requests accept`, and
 `contact-requests reject`, then presses Enter to save. The selector displays
 catalog-derived `[read]`, `[create]`, and `[write]` labels; optional color may
@@ -277,16 +281,17 @@ editing JSON directly:
    and the actual fingerprint without performing a second mutation; an
    uncertain-save JSON fixture carries the candidate fingerprint, follows the
    exact message grammar published by exact-command agent help, and distinguishes
-   `source=saved` from an identical `source=default` fingerprint;
+   `source=saved` from `state=unconfigured source=missing` and its
+   empty-selection fingerprint;
 4. a second `config` run marks the three paths off and can re-enable them from
    its complete catalog-derived selector, after which normal and agent help
    expose them again;
 5. re-enabled contact-request commands still enforce their original PAT,
    canonical-reference, provider-permission, and `--confirm=access-change` or
    `--confirm=destructive` contracts; selection grants no authority; and
-6. removing the saved preference restores the documented all-current-commands
-   view, demonstrating why this feature is attention curation rather than a
-   security control.
+6. removing the saved preference restores the documented unconfigured
+   control-only view and all-selected `config` draft, demonstrating why this
+   feature is attention curation rather than a security control.
 
 The saved-profile variant injects one synthetic catalog addition and verifies
 that it remains off until selected. The invalid-state variant proves ordinary

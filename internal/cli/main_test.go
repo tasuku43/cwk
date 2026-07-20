@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"testing"
+
+	"github.com/tasuku43/cwk/internal/domain/commandselection"
+	"github.com/tasuku43/cwk/internal/infra/commandconfig"
 )
 
 // TestMain keeps production-constructor tests isolated from the developer's
@@ -17,6 +21,13 @@ func TestMain(m *testing.M) {
 		panic(err)
 	}
 	if err := os.Setenv("AppData", base); err != nil {
+		panic(err)
+	}
+	profile, err := commandselection.New(configurableCommandPaths(DefaultCatalog()))
+	if err != nil {
+		panic(err)
+	}
+	if err := commandconfig.NewFileStoreAt(base).Save(context.Background(), profile); err != nil {
 		panic(err)
 	}
 	code := m.Run()

@@ -113,18 +113,30 @@ hidden command, then restores the terminal, then invokes one fixed-target
 profile replacement. Restoration failure also performs zero saves, and a
 confirmed save is not overwritten by late cancellation.
 
-A missing preference means all current configurable commands are enabled, which
-preserves behavior for an existing installation. Once a preference has been
-saved, its allowlist is authoritative: commands added by a later release remain
-off until selected, and removed paths remain visible only as stale configuration
-evidence. Invalid state never silently restores the full view or presents an
-always-on-only root help page as a normal empty selection. When active-profile
-loading fails, `doctor`, `version`, `config`, and scoped help for the always-on
-local commands remain reachable; bare root help and Chatwork discovery return
-the typed load fault because no truthful active Chatwork view exists. Malformed
-serialized content may enter the deliberate `config` repair flow and still
-writes nothing before Enter. Unsafe filesystem objects, modes, or inaccessible
-paths require local repair instead of an edit loop.
+An absent preference is an explicit unconfigured first-run state. Its active
+view contains only `help`, `doctor`, `version`, and `config`; no Chatwork task is
+advertised or invocable. Human root help says that `config` is unset, that only
+the control commands are currently shown, and that selecting only relevant
+commands reduces agent token use and selection mistakes. The root agent index
+contains only the same four active commands. A known configurable command,
+namespace, trailing help, or scoped help request fails as non-retryable
+`command_selection_required` with exact `config` recovery before PAT resolution
+or provider I/O. A genuinely unknown path remains `unknown_command`.
+
+`config` starts an absent profile with all current Chatwork commands selected;
+Enter explicitly saves that selection, while quitting leaves the installation
+unconfigured. Once a preference has been saved, its allowlist is authoritative:
+commands added by a later release remain off until selected, and removed paths
+remain visible only as stale configuration evidence. A deliberately saved empty
+allowlist is configured and does not re-enter first-run guidance. Invalid state
+never silently restores the full view or presents an always-on-only root help
+page as a normal empty selection. When active-profile loading fails, `doctor`,
+`version`, `config`, and scoped help for the always-on local commands remain
+reachable; bare root help and Chatwork discovery return the typed load fault
+because no truthful active Chatwork view exists. Malformed serialized content
+may enter the deliberate `config` repair flow and still writes nothing before
+Enter. Unsafe filesystem objects, modes, or inaccessible paths require local
+repair instead of an edit loop.
 
 Read-only `doctor`, not `help` or a second config leaf, reconciles an uncertain
 profile replacement. Its `command-selection` diagnostic reports source, state,
@@ -523,14 +535,19 @@ pagination, follow cross-room references, or persist configuration.
 
 Persistent command selection is an additive pre-1.0 local workflow. It does
 not remove capabilities from `DefaultCatalog`; it derives the help and routing
-view for one installation from a saved exact-path allowlist. Missing state
-retains the former all-enabled behavior, while a saved profile keeps commands
-introduced by later releases off until explicitly selected. The later
+view for one installation from a saved exact-path allowlist. The later
 single-selector refinement deliberately removed public `config show` and
 `config edit`, made `help`/`doctor`/`version`/`config` always on, adopted one
 terminal Up/Down/Space/Enter/`q` interaction, and moved read-only uncertain-save
 reconciliation to `doctor`. The profile schema and location did not change;
 legacy `doctor`/`version` entries are normalized on the next save.
+
+The subsequent first-run refinement is an intentional pre-1.0 behavioral
+change: missing state now exposes only the four control commands and requires an
+explicit Enter-confirmed `config` save before any Chatwork task or scoped task
+help is available. It adds `command_selection_required`, an explanatory root
+help notice, and `state=unconfigured source=missing` diagnostics. Existing
+saved profiles and deliberately saved empty selections are unchanged.
 
 The final pre-`v0.1.0` selector presentation deliberately replaced the
 machine-shaped confirmed-save line with Concept A's natural-Japanese result

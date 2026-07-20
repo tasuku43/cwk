@@ -220,9 +220,10 @@ do not infer that choice from namespace, effect, or provider ownership. The
 complete `DefaultCatalog` remains the capability/API/release contract, while a
 saved exact-path allowlist controls only the active help and routing view. A
 saved profile keeps a newly added configurable command off until selected;
-missing profile state enables all current configurable commands. In this
-product keep `help`, `doctor`, `version`, and the single exact `config` write
-always-on; only Chatwork task leaves are selectable. Validate the active view
+missing profile state exposes only the local control plane and returns
+`command_selection_required` for a known configurable path until `config` is
+saved. In this product keep `help`, `doctor`, `version`, and the single exact
+`config` write always-on; only Chatwork task leaves are selectable. Validate the active view
 so visible required-reference consumers retain a reachable visible producer
 and visible recovery actions resolve inside the view; do not silently
 auto-enable a dependency. Human and agent help, trailing-help normalization,

@@ -16,6 +16,14 @@ brew install tasuku43/tap/cwk
 
 ## クイックスタート
 
+最初に、エージェントへ表示するChatworkコマンドを選びます。
+
+```sh
+cwk config
+```
+
+上下キーで移動し、Spaceで切り替え、Enterで保存します。必要なコマンドだけを表示すると、エージェントが読む候補とトークン消費を減らせます。
+
 ChatworkのAPIトークン（PAT）を環境変数 `CWK_API_TOKEN` に設定します。トークンはシークレットマネージャーなど安全な場所で管理してください。`cwk` 自体が保存することはありません。
 
 ```sh
@@ -103,13 +111,13 @@ cwk messages list --room <room-ref> --sender <account-ref> --context replies
 
 ## 表示するコマンドを選ぶ
 
-`cwk config` では、エージェントに見せるChatworkコマンドを選べます。
+`cwk config` では、エージェントに見せるChatworkコマンドをいつでも選び直せます。設定前は、`help`、`doctor`、`version`、`config` だけが表示されます。
 
 ```sh
 cwk config
 ```
 
-上下キーで移動し、Spaceで切り替え、Enterで保存します。`q` なら保存せず終了します。オンにしたコマンドだけがヘルプや候補に現れるため、作業に関係のないコンテキストを減らせます。
+`q` なら保存せず終了します。オンにしたコマンドだけがヘルプや候補に現れるため、作業に関係のないコンテキストを減らせます。
 
 これは権限管理ではありません。ローカルユーザーはいつでも設定を変更できます。Chatworkの権限やsandboxの代わりにはなりません。
 
