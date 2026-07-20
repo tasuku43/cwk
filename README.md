@@ -24,6 +24,8 @@ cwk config
 
 上下キーで移動し、Spaceで切り替え、Enterで保存します。必要なコマンドだけを表示すると、エージェントが読む候補とトークン消費を減らせます。
 
+<img width="953" height="477" alt="image" src="https://github.com/user-attachments/assets/43d1c5c3-6bf4-4b23-8e50-d04319e39f79" />
+
 ChatworkのAPIトークン（PAT）を環境変数 `CWK_API_TOKEN` に設定します。トークンはシークレットマネージャーなど安全な場所で管理してください。`cwk` 自体が保存することはありません。
 
 ```sh
