@@ -11,6 +11,56 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
+func TestExecuteFindsRoomCandidatesAfterOneQueryFreeRoomRead(t *testing.T) {
+	rooms := []chatwork.Room{
+		{Ref: relationshipReference(t, chatwork.ReferenceRoom, "41"), Name: "Security Review"},
+		{Ref: relationshipReference(t, chatwork.ReferenceRoom, "42"), Name: "Platform COST Review"},
+		{Ref: relationshipReference(t, chatwork.ReferenceRoom, "43"), Name: "cost Planning"},
+		{Ref: relationshipReference(t, chatwork.ReferenceRoom, "44"), Name: "コスト管理"},
+	}
+	port := &fakePort{result: chatwork.Result{
+		Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+		Rooms:    rooms,
+	}}
+	request := chatwork.Request{Task: chatwork.TaskRoomsList, RoomQuery: "CoSt"}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if port.calls != 1 || port.request.Task != chatwork.TaskRoomsList || port.request.RoomQuery != "" {
+		t.Fatalf("provider call = %d request=%+v", port.calls, port.request)
+	}
+	want := []chatwork.Room{rooms[1], rooms[2]}
+	if !reflect.DeepEqual(result.Rooms, want) {
+		t.Fatalf("room candidates = %+v, want %+v", result.Rooms, want)
+	}
+	if result.RoomSelection == nil || result.RoomSelection.Query != "CoSt" ||
+		result.RoomSelection.SourceCount != 4 || result.RoomSelection.CandidateCount != 2 {
+		t.Fatalf("room selection = %+v", result.RoomSelection)
+	}
+}
+
+func TestExecuteRoomQueryPreservesExplicitEmptyCandidateSet(t *testing.T) {
+	port := &fakePort{result: chatwork.Result{
+		Coverage: chatwork.Coverage{Kind: "provider_collection", Complete: true},
+		Rooms: []chatwork.Room{
+			{Ref: relationshipReference(t, chatwork.ReferenceRoom, "42"), Name: "Security Review"},
+		},
+	}}
+
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskRoomsList, RoomQuery: "コスト",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Rooms == nil || len(result.Rooms) != 0 || result.RoomSelection == nil ||
+		result.RoomSelection.SourceCount != 1 || result.RoomSelection.CandidateCount != 0 {
+		t.Fatalf("empty candidates = %+v", result)
+	}
+}
+
 func TestExecuteFindsMemberCandidatesAfterOneQueryFreeMemberRead(t *testing.T) {
 	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
 	accounts := []chatwork.Account{
@@ -227,6 +277,7 @@ func TestExecuteRejectsInvalidTaskSpecificResult(t *testing.T) {
 	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
 		Task: chatwork.TaskMessagesSend,
 		Room: chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "2"},
+		Body: "message",
 	})
 	var got *fault.Error
 	if !errors.As(err, &got) || got.Code != "chatwork_result_invalid" || result.Task != "" || port.calls != 1 {
@@ -246,7 +297,7 @@ func TestExecuteRejectsResultIdentityThatDoesNotMatchRequest(t *testing.T) {
 	}{
 		{
 			name:    "created parent room",
-			request: chatwork.Request{Task: chatwork.TaskMessagesSend, Room: room2},
+			request: chatwork.Request{Task: chatwork.TaskMessagesSend, Room: room2, Body: "message"},
 			result: chatwork.Result{Task: chatwork.TaskMessagesSend, CreatedInRoom: &chatwork.RoomScopedCreation{
 				Refs: []chatwork.Reference{message3}, ParentRoom: room9,
 			}},
@@ -260,7 +311,7 @@ func TestExecuteRejectsResultIdentityThatDoesNotMatchRequest(t *testing.T) {
 		},
 		{
 			name:    "affected target",
-			request: chatwork.Request{Task: chatwork.TaskMessagesUpdate, Room: room2, Message: message3},
+			request: chatwork.Request{Task: chatwork.TaskMessagesUpdate, Room: room2, Message: message3, Body: "message"},
 			result:  chatwork.Result{Task: chatwork.TaskMessagesUpdate, Affected: []chatwork.Reference{message8}},
 		},
 	}
@@ -273,6 +324,25 @@ func TestExecuteRejectsResultIdentityThatDoesNotMatchRequest(t *testing.T) {
 				t.Fatalf("result = %+v, err = %#v, calls = %d", result, err, port.calls)
 			}
 		})
+	}
+}
+
+func TestExecutePassesMessageBodyFileSourceUnchangedToInfrastructure(t *testing.T) {
+	room := chatwork.Reference{Kind: chatwork.ReferenceRoom, Value: "2"}
+	message := chatwork.Reference{Kind: chatwork.ReferenceMessage, Value: "3"}
+	port := &fakePort{result: chatwork.Result{
+		Task: chatwork.TaskMessagesSend,
+		CreatedInRoom: &chatwork.RoomScopedCreation{
+			Refs: []chatwork.Reference{message}, ParentRoom: room,
+		},
+	}}
+	request := chatwork.Request{Task: chatwork.TaskMessagesSend, Room: room, BodyFile: "message.txt"}
+
+	if _, err := New(port).Execute(context.Background(), testBinding(t), request); err != nil {
+		t.Fatal(err)
+	}
+	if port.calls != 1 || port.request.Body != "" || port.request.BodyFile != "message.txt" {
+		t.Fatalf("port call = %d request %+v", port.calls, port.request)
 	}
 }
 

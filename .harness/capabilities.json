@@ -55,6 +55,11 @@
     "reason": ""
   },
   {
+    "id": "chatwork.messages.search",
+    "status": "excluded",
+    "reason": "The official Chatwork API v2 exposes bounded room-message reads but no global full-text message-search operation; cwk documents room discovery and bounded room-local selection instead."
+  },
+  {
     "id": "chatwork.personal-tasks.inspect",
     "status": "public",
     "reason": ""
@@ -63,6 +68,11 @@
     "id": "chatwork.rooms.manage",
     "status": "public",
     "reason": ""
+  },
+  {
+    "id": "chatwork.reactions.inspect",
+    "status": "excluded",
+    "reason": "The official Chatwork API v2 operation and OAuth-scope indexes expose no reaction-read operation or reaction collection in message reads."
   },
   {
     "id": "chatwork.room-tasks.manage",

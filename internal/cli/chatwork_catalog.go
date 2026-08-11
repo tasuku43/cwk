@@ -48,45 +48,45 @@ func chatworkCommandSpecs() []CommandSpec {
 		chatworkRead("contacts list", "Chatworkコンタクトを検索する", "", RoleDiscover,
 			"chatwork.contacts.discover", "コンタクトを、完全一致のアカウント参照とダイレクトチャット参照を含む固定位置スキーマで一覧表示する",
 			nil, fields(refField("account_ref", account, "1番目にある正規のコンタクトアカウント参照。"), refField("room_ref", room, "2番目にある正規のダイレクトチャット参照。"), textField("name", "3番目にある、ターミナルで安全な引用済みコンタクト表示名。"), textField("organization", "空でない組織名または部署情報がある場合に末尾へ付く任意項目。"), completeField()), chatwork.TaskContactsList),
-		chatworkRead("rooms list", "参加中のChatworkルームを検索する", "", RoleDiscover,
-			"chatwork.rooms.manage", "参加中のルームを、完全一致のルーム参照とタスクに必要なステータスを含む固定位置スキーマで一覧表示する",
-			nil, roomFields(room, true), chatwork.TaskRoomsList),
+		chatworkRead("rooms list", "参加中のChatworkルームを検索する", "[--query <text>]", RoleDiscover,
+			"chatwork.rooms.manage", "参加中のルームを、名前の大文字小文字を区別しない部分一致で絞り、正規の room_ref 候補として返す",
+			[]CommandInput{textFlag("--query", false, "1〜255 UTF-8バイトのルーム名部分文字列。大文字小文字は区別せず、複数候補を自動選択しません。")}, roomDiscoveryFields(room), chatwork.TaskRoomsList),
 		chatworkMutation("rooms create", "メンバーを正確に指定してグループチャットを作成する", "--account <account-ref> --name <text> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] [--description <text>] [--icon meeting|group|check|document|event|project|business|study|security|star|idea|heart|magcup|beer|music|sports|travel] [--invite-code <code>] [--invite-approval required|not-required] --confirm=access-change", RoleAct,
 			"chatwork.rooms.manage", "検証済みの認証アカウント範囲で、メンバー構成とアクセスへの影響を明示してグループチャットを一つ作成する",
 			[]CommandInput{refFlag("--account", true, account, "ルーム作成を、実行前に検証する認証アカウントの完全一致参照に結び付けます。"), textFlag("--name", true, "1〜255文字のルーム名。"), repeatedRefFlag("--admin", true, account, "管理者を一人追加します。複数追加する場合は繰り返し指定します。"), repeatedRefFlag("--member", false, account, "メンバーを一人追加します。複数追加する場合は繰り返し指定します。"), repeatedRefFlag("--readonly", false, account, "閲覧のみのメンバーを一人追加します。複数追加する場合は繰り返し指定します。"), textFlag("--description", false, "ルームの説明。"), enumFlag("--icon", false, "Chatwork公式のルームアイコンプリセット。", chatwork.RoomIconPresetValues()...), textFlag("--invite-code", false, "1〜50文字の英数字、アンダースコア、ハイフンからなる任意コードの招待リンクを同時に作成します。"), enumFlag("--invite-approval", false, "この承認要件を持つ招待リンクを作成します。", "required", "not-required"), confirmFlag(confirmAccessChange)},
 			fields(refField("room_ref", room, "作成したルームの正規参照。")), chatwork.TaskRoomsCreate, confirmAccessChange, "rooms list",
 			createMutation("chatwork-room", "--account", operation.CardinalityMany, yes, yes, no)),
-		chatworkRead("rooms show", "完全一致するルームを一つ表示する", "--room <room-ref>", RoleAct,
+		chatworkRead("rooms show", "完全一致するルームを一つ表示する", "--room <room-id>", RoleAct,
 			"chatwork.rooms.manage", "表示名で再検索せず、完全一致するルームを一つ確認する",
 			[]CommandInput{refFlag("--room", true, room, "ルーム検索で得た room_ref を変更せずに渡します。")}, roomFields(room, false), chatwork.TaskRoomsShow),
-		chatworkMutation("rooms update", "完全一致するルームの説明情報を更新する", "--room <room-ref> [--name <text>] [--description <text>] [--icon <preset>]", RoleAct,
+		chatworkMutation("rooms update", "完全一致するルームの説明情報を更新する", "--room <room-id> [--name <text>] [--description <text>] [--icon <preset>]", RoleAct,
 			"chatwork.rooms.manage", "メンバー構成を変えずに、選択したルームの名前、説明、アイコンを更新する",
 			[]CommandInput{refFlag("--room", true, room, "更新する完全一致のルーム。"), textFlag("--name", false, "変更後のルーム名。"), textFlag("--description", false, "変更後のルーム説明。"), textFlag("--icon", false, "変更後の定義済みアイコンプリセット。")},
 			fields(refField("room_ref", room, "更新したルームの正規参照。")), chatwork.TaskRoomsUpdate, "", "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityOne, no, no, no)),
-		chatworkMutation("rooms leave", "完全一致するグループチャットから退席する", "--room <room-ref> --confirm=destructive", RoleAct,
+		chatworkMutation("rooms leave", "完全一致するグループチャットから退席する", "--room <room-id> --confirm=destructive", RoleAct,
 			"chatwork.rooms.manage", "破壊的影響とアクセスへの影響を明示して、選択したグループチャットから退席する",
 			[]CommandInput{refFlag("--room", true, room, "退席する完全一致のルーム。"), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "退席したルームの正規参照。")), chatwork.TaskRoomsLeave, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityMany, no, yes, yes)),
-		chatworkMutation("rooms delete", "完全一致するグループチャットを完全に削除する", "--room <room-ref> --confirm=destructive", RoleAct,
+		chatworkMutation("rooms delete", "完全一致するグループチャットを完全に削除する", "--room <room-id> --confirm=destructive", RoleAct,
 			"chatwork.rooms.manage", "選択したグループチャットとその中のデータを完全に削除する",
 			[]CommandInput{refFlag("--room", true, room, "削除する完全一致のルーム。"), confirmFlag(confirmDestructive)}, fields(refField("room_ref", room, "削除したルームの正規参照。")), chatwork.TaskRoomsDelete, confirmDestructive, "rooms show",
 			writeMutation("chatwork-room", "--room", "", operation.CardinalityUnbounded, no, yes, yes)),
-		chatworkRead("members find", "ルーム内の表示名からメンバー候補を探す", "--room <room-ref> --query <text>", RoleDiscover,
+		chatworkRead("members find", "ルーム内の表示名からメンバー候補を探す", "--room <room-id> --query <text>", RoleDiscover,
 			"chatwork.members.manage", "完全一致するルームの全メンバーから表示名を部分一致で絞り、曖昧さを残した正規 account-ref 候補を返す",
 			[]CommandInput{
 				refFlag("--room", true, room, "候補を探す完全一致のルーム。rooms list で得た room_ref を変更せずに渡します。"),
 				textFlag("--query", true, "表示名に含まれる1〜255 UTF-8バイトの文字列。大文字小文字、空白、Unicodeを正規化せず完全一致の部分文字列として照合し、複数候補を自動選択しません。"),
 			}, fields(textField("query", "照合に使った引用済み文字列。"), integerField("source_count", "照合した完全なルームメンバー数。"), integerField("candidate_count", "表示名が部分一致した候補数。"), refField("account_ref", account, "候補の正規アカウント参照。選択後は変更せず messages list --sender へ渡します。"), textField("name", "ターミナルで安全な引用済み候補表示名。"), textField("role", "候補のルーム権限。"), completeField()), chatwork.TaskMembersFind),
-		chatworkRead("members list", "完全一致するルームのメンバーを一覧表示する", "--room <room-ref>", RoleAct,
+		chatworkRead("members list", "完全一致するルームのメンバーを一覧表示する", "--room <room-id>", RoleAct,
 			"chatwork.members.manage", "完全一致する一つのルームについて、メンバーの識別情報と権限を固定位置スキーマで一覧表示する",
 			[]CommandInput{refFlag("--room", true, room, "メンバー構成を確認する完全一致のルーム。")}, fields(refField("account_ref", account, "1番目にあるメンバーアカウントの正規参照。"), textField("name", "2番目にある、ターミナルで安全な引用済みメンバー表示名。"), textField("role", "3番目にあるメンバーの権限。"), completeField()), chatwork.TaskMembersList),
-		chatworkMutation("members replace", "ルームのメンバー構成全体を置き換える", "--room <room-ref> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] --confirm=access-change", RoleAct,
+		chatworkMutation("members replace", "ルームのメンバー構成全体を置き換える", "--room <room-id> --admin <account-ref> [--member <account-ref>] [--readonly <account-ref>] --confirm=access-change", RoleAct,
 			"chatwork.members.manage", "アクセスへの影響を明示して、選択したルームの権限別メンバー構成全体を置き換える",
 			[]CommandInput{refFlag("--room", true, room, "メンバー構成を置き換える完全一致のルーム。"), repeatedRefFlag("--admin", true, account, "管理者アカウント。複数指定する場合は繰り返します。"), repeatedRefFlag("--member", false, account, "メンバーアカウント。複数指定する場合は繰り返します。"), repeatedRefFlag("--readonly", false, account, "閲覧のみのアカウント。複数指定する場合は繰り返します。"), confirmFlag(confirmAccessChange)},
 			fields(integerField("administrators", "置き換え後の管理者数。"), integerField("members", "置き換え後のメンバー数。"), integerField("readonly", "置き換え後の閲覧のみメンバー数。")), chatwork.TaskMembersReplace, confirmAccessChange, "members list",
 			writeMutation(room, "--room", "", operation.CardinalityMany, yes, yes, yes)),
-		chatworkRead("messages list", "選択可能な上限付きメッセージ範囲を取得する", "--room <room-ref> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies] [--resolve-relations <count>]", RoleAct,
+		chatworkRead("messages list", "選択可能な上限付きメッセージ範囲を取得する", "--room <room-id> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies] [--resolve-relations <count>] [--max-bytes <bytes>]", RoleAct,
 			"chatwork.messages.manage", "閲覧制限・期間の到達不能・解析不能な関係を空や不存在と区別し、明示した追加取得予算内で返信元を自己完結させる上限付きメッセージ範囲を取得する",
 			[]CommandInput{
 				refFlag("--room", true, room, "メッセージを取得する完全一致のルーム。"),
@@ -95,63 +95,69 @@ func chatworkCommandSpecs() []CommandSpec {
 				textFlag("--until", false, "上限付き取得範囲内で、この時刻を含まない秒精度・明示オフセット付き RFC3339 送信時刻より前を主要候補にします。--on とは同時に指定できません。"),
 				textFlag("--on", false, "Asia/Tokyo の一暦日を YYYY-MM-DD、today、yesterday のいずれかで選びます。相対日はコマンド開始時に一度だけ具体化し、--since/--until とは同時に指定できません。"),
 				integerFlag("--start-index", false, "任意の送信者・期間照合後に、型付き送信時刻が新しい順で選択を始める1始まりの順位（1〜100）です。省略時は1です。"),
-				integerFlag("--count", false, "--start-index から返す主要メッセージの最大件数（1〜100）です。終了順位ではありません。--start-index 11 --count 20 は順位11〜30を選びます。直接の返信コンテキストにより、表示件数はこの値を超えることがあります。"),
+				deprecatedIntegerFlag("--count", false, "--start-index から返す主要メッセージの最大件数（1〜100）です。終了順位ではありません。--start-index 11 --count 20 は順位11〜30を選びます。直接の返信コンテキストにより、表示件数はこの値を超えることがあります。", "--limit"),
 				repeatedRefFlag("--sender", false, account, "プロバイダーの上限付き範囲内で、完全一致の送信者アカウントに絞り込みます。表示名しか分からない場合は先に members find で候補を取得し、選んだ account_ref を変更せず渡します。列挙した送信者のいずれかに一致させる（OR）には繰り返し指定し、完全一致参照は最大100件です。"),
-				enumFlag("--context", false, "送信者、期間、順位のいずれかの選択とともに使用し、関連レコードを含めない（none、既定値）か、上限付き範囲内にある明示的な返信元・返信先を1ホップだけ含める（replies）かを選択します。返信コンテキストは主要期間外を含む場合があります。", "none", "replies"),
-				integerFlag("--resolve-relations", false, "表示対象と補足メッセージが持つすべての同一ルーム未解決返信先を、正規 message_ref による追加の一件取得で再帰的に補う最大件数（0〜100）です。既定値は5、0は追加取得を無効化します。元の100件内にある返信先と重複IDは枠を消費せず、循環は一度だけ扱います。"),
+				enumFlag("--context", false, "選択時の既定値は replies です。送信者、期間、順位のいずれかの選択とともに使用し、replies は上限付き範囲内の明示的な返信元・返信先を1ホップ含め、none は関連レコードを除いて出力を軽くします。", "none", "replies"),
+				integerFlag("--resolve-relations", false, "既定値は5で、値を省略でき、0は追加取得を無効化します。表示対象と補足メッセージが持つ同一ルーム返信先を追加の一件取得で再帰的に補う上限（0〜100）です。元の100件内の返信先・重複IDは枠を消費しません。"),
+				integerFlag("--max-bytes", false, "標準出力を1〜16777216バイトに収めます。主メッセージと返信コンテキスト・関係補足は分割しません。"),
 			}, messageFields(room, message, account, true), chatwork.TaskMessagesList),
-		chatworkMutation("messages send", "完全一致するルームへメッセージを送信する", "--room <room-ref> --body <text> [--self-unread]", RoleAct,
+		chatworkMutation("messages send", "完全一致するルームへメッセージを送信する", "--room <room-id> [--body <text>] [--body-file <path>] [--self-unread]", RoleAct,
 			"chatwork.messages.manage", "選択したルームへ、指定したメッセージ本文を一件送信する",
-			[]CommandInput{refFlag("--room", true, room, "送信先の完全一致ルーム。"), textFlag("--body", true, "メッセージ本文。意図して使用する場合は、確認済みのChatwork記法を含められます。"), boolFlag("--self-unread", "送信したメッセージを、認証済みアカウントで未読のままにします。")},
+			[]CommandInput{refFlag("--room", true, room, "送信先の完全一致ルーム。"), textFlag("--body", false, "UTF-8本文（1〜65535バイト）。- は標準入力から読みます。"), textFlag("--body-file", false, "本文を読み取るローカルファイル。UTF-8、1〜65535バイトです。"), boolFlag("--self-unread", "送信したメッセージを、認証済みアカウントで未読のままにします。")},
 			fields(refField("message_ref", message, "作成したメッセージの正規参照。"), refField("room_ref", room, "親ルームの正規参照。")), chatwork.TaskMessagesSend, "", "messages list",
 			createMutation("chatwork-message", "--room", operation.CardinalityOne, yes, no, no)),
-		chatworkMutation("messages mark-read", "完全一致するメッセージまでを既読にする", "--room <room-ref> --message <message-ref>", RoleAct,
+		chatworkMutation("messages mark-read", "完全一致するメッセージまでを既読にする", "--room <room-id> --message <message-ref>", RoleAct,
 			"chatwork.messages.manage", "一つのルームで、選択した完全一致メッセージまでを既読にする",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "既読にする範囲の境界となる完全一致メッセージ。")}, unreadFields(), chatwork.TaskMessagesMarkRead, "", "messages show",
 			writeMutation(message, "--message", "--room", operation.CardinalityMany, no, no, no)),
-		chatworkMutation("messages mark-unread", "完全一致するメッセージからを未読にする", "--room <room-ref> --message <message-ref>", RoleAct,
+		chatworkMutation("messages mark-unread", "完全一致するメッセージからを未読にする", "--room <room-id> --message <message-ref>", RoleAct,
 			"chatwork.messages.manage", "一つのルームで、選択した完全一致メッセージからを未読にする",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "未読にする範囲の境界となる完全一致メッセージ。")}, unreadFields(), chatwork.TaskMessagesMarkUnread, "", "messages show",
 			writeMutation(message, "--message", "--room", operation.CardinalityMany, no, no, no)),
-		chatworkRead("messages show", "完全一致するメッセージを一件表示する", "--room <room-ref> --message <message-ref>", RoleAct,
-			"chatwork.messages.manage", "完全一致するメッセージを安全な本文と型付き関係で確認し、閲覧制限を不存在と区別する",
-			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "確認する完全一致メッセージ。")}, messageFields(room, message, account, false), chatwork.TaskMessagesShow),
-		chatworkMutation("messages update", "完全一致するメッセージを更新する", "--room <room-ref> --message <message-ref> --body <text>", RoleAct,
+		chatworkRead("messages show", "完全一致メッセージと直接の子返信を表示する", "--room <room-id> --message <message-ref> [--context none|replies] [--resolve-relations <count>]", RoleAct,
+			"chatwork.messages.manage", "完全一致するメッセージをアンカーに、安全な本文、最新100件内の型付き直接返信、および明示的な返信元連鎖を上限付きで確認する",
+			[]CommandInput{
+				refFlag("--room", true, room, "完全一致する親ルーム。"),
+				refFlag("--message", true, message, "確認する完全一致メッセージ。"),
+				enumFlag("--context", false, "none は一件だけ、replies は最新100件を一度読み、型付き同一ルーム返信辺がアンカーを指す直接の子だけを追加します。省略時は一件だけです。", "none", "replies"),
+				integerFlag("--resolve-relations", false, "アンカーから返信元方向を追加の一件取得で補う上限（0〜100）です。値を省略すると5になり、--context 省略時は replies を選びます。0でも replies の固定最新範囲読取は行います。"),
+			}, messageFields(room, message, account, false), chatwork.TaskMessagesShow),
+		chatworkMutation("messages update", "完全一致するメッセージを更新する", "--room <room-id> --message <message-ref> [--body <text>] [--body-file <path>]", RoleAct,
 			"chatwork.messages.manage", "完全一致するメッセージ一件の本文を置き換える",
-			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "更新する完全一致メッセージ。"), textFlag("--body", true, "変更後のメッセージ本文。")}, fields(refField("message_ref", message, "更新したメッセージの正規参照。")), chatwork.TaskMessagesUpdate, "", "messages show",
+			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "更新する完全一致メッセージ。"), textFlag("--body", false, "変更後のUTF-8本文（1〜65535バイト）。- は標準入力から読みます。"), textFlag("--body-file", false, "変更後の本文を読み取るローカルファイル。UTF-8、1〜65535バイトです。")}, fields(refField("message_ref", message, "更新したメッセージの正規参照。")), chatwork.TaskMessagesUpdate, "", "messages show",
 			writeMutation("chatwork-message", "--message", "--room", operation.CardinalityOne, no, no, no)),
-		chatworkMutation("messages delete", "完全一致するメッセージを削除する", "--room <room-ref> --message <message-ref> --confirm=destructive", RoleAct,
+		chatworkMutation("messages delete", "完全一致するメッセージを削除する", "--room <room-id> --message <message-ref> --confirm=destructive", RoleAct,
 			"chatwork.messages.manage", "破壊的影響を明示して、選択した完全一致メッセージを削除する",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--message", true, message, "削除する完全一致メッセージ。"), confirmFlag(confirmDestructive)}, fields(refField("message_ref", message, "削除したメッセージの正規参照。")), chatwork.TaskMessagesDelete, confirmDestructive, "messages show",
 			writeMutation("chatwork-message", "--message", "--room", operation.CardinalityOne, no, no, yes)),
-		chatworkRead("room-tasks list", "完全一致するルームのタスクを一覧表示する", "--room <room-ref> [--account <account-ref>] [--assigned-by <account-ref>] [--status open|done]", RoleAct,
+		chatworkRead("room-tasks list", "完全一致するルームのタスクを一覧表示する", "--room <room-id> [--account <account-ref>] [--assigned-by <account-ref>] [--status open|done]", RoleAct,
 			"chatwork.room-tasks.manage", "上限付きのルームタスク一覧を、完全一致のタスク参照とアカウント参照を含む固定位置スキーマで取得する",
 			[]CommandInput{refFlag("--room", true, room, "タスクを取得する完全一致のルーム。"), refFlag("--account", false, account, "完全一致する担当者アカウントで絞り込みます。"), refFlag("--assigned-by", false, account, "完全一致する割り当て元アカウントで絞り込みます。"), enumFlag("--status", false, "タスクのステータスで絞り込みます。", "open", "done")}, taskFields(room, task, account, message, true), chatwork.TaskRoomTasksList),
-		chatworkMutation("room-tasks create", "ルーム内の完全一致する担当者にタスクを作成する", "--room <room-ref> --body <text> --assignee <account-ref> [--limit <unix-time>] [--limit-type date|time]", RoleAct,
+		chatworkMutation("room-tasks create", "ルーム内の完全一致する担当者にタスクを作成する", "--room <room-id> --body <text> --assignee <account-ref> [--limit <unix-time>] [--limit-type date|time]", RoleAct,
 			"chatwork.room-tasks.manage", "一つのルームで、指定したタスク本文を完全一致する担当者アカウントに割り当てる",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), textFlag("--body", true, "タスク本文。"), repeatedRefFlag("--assignee", true, account, "完全一致する担当者。複数追加する場合は繰り返し指定します。"), integerFlag("--limit", false, "任意のUnix期限。"), enumFlag("--limit-type", false, "期限を日付または時刻として解釈します。", "date", "time")}, fields(refField("task_ref", task, "作成したタスクの正規参照。"), refField("room_ref", room, "親ルームの正規参照。")), chatwork.TaskRoomTasksCreate, "", "room-tasks list",
 			createMutation("chatwork-task", "--room", operation.CardinalityMany, yes, no, no)),
-		chatworkRead("room-tasks show", "完全一致するルームタスクを一件表示する", "--room <room-ref> --task <task-ref>", RoleAct,
+		chatworkRead("room-tasks show", "完全一致するルームタスクを一件表示する", "--room <room-id> --task <task-ref>", RoleAct,
 			"chatwork.room-tasks.manage", "再検索せず、完全一致するタスクを一件確認する",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--task", true, task, "確認する完全一致タスク。")}, taskFields(room, task, account, message, false), chatwork.TaskRoomTasksShow),
-		chatworkMutation("room-tasks set-status", "完全一致するタスクの完了状態を設定する", "--room <room-ref> --task <task-ref> --status open|done", RoleAct,
+		chatworkMutation("room-tasks set-status", "完全一致するタスクの完了状態を設定する", "--room <room-id> --task <task-ref> --status open|done", RoleAct,
 			"chatwork.room-tasks.manage", "選択した完全一致タスクを open または done に設定する",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--task", true, task, "変更する完全一致タスク。"), enumFlag("--status", true, "変更後のタスクステータス。", "open", "done")}, fields(refField("task_ref", task, "更新したタスクの正規参照。")), chatwork.TaskRoomTasksSetStatus, "", "room-tasks show",
 			writeMutation("chatwork-task", "--task", "--room", operation.CardinalityOne, yes, no, no)),
-		chatworkRead("files list", "完全一致するルームのファイルを一覧表示する", "--room <room-ref> [--account <account-ref>]", RoleAct,
+		chatworkRead("files list", "完全一致するルームのファイルを一覧表示する", "--room <room-id> [--account <account-ref>]", RoleAct,
 			"chatwork.files.manage", "上限付きのルームファイル一覧を固定位置スキーマで取得する。1番目と2番目の値は変更せず files show に渡す",
 			[]CommandInput{refFlag("--room", true, room, "ファイルを取得する完全一致のルーム。"), refFlag("--account", false, account, "完全一致するアップロード者アカウントで絞り込みます。")}, fileFields(room, file, account, message, true), chatwork.TaskFilesList),
-		chatworkMutation("files upload", "上限付きファイルを完全一致するルームへアップロードする", "--room <room-ref> --path <file> [--message <text>]", RoleAct,
+		chatworkMutation("files upload", "上限付きファイルを完全一致するルームへアップロードする", "--room <room-id> --path <file> [--message <text>]", RoleAct,
 			"chatwork.files.manage", "選択したルームへ、5 MiB以下のローカルファイルを一つアップロードする",
 			[]CommandInput{refFlag("--room", true, room, "アップロード先の完全一致ルーム。"), textFlag("--path", true, "ローカルファイルのパス。アップロード前に上限と妥当性を検証します。"), textFlag("--message", false, "ファイルに添付する任意のメッセージ。")}, fields(refField("file_ref", file, "アップロードしたファイルの正規参照。"), refField("room_ref", room, "親ルームの正規参照。")), chatwork.TaskFilesUpload, "", "files list",
 			createMutation("chatwork-file", "--room", operation.CardinalityOne, yes, no, no)),
-		chatworkRead("files show", "完全一致するルームファイルを一件表示する", "--room <room-ref> --file <file-ref> [--create-download-url]", RoleAct,
+		chatworkRead("files show", "完全一致するルームファイルを一件表示する", "--room <room-id> --file <file-ref> [--create-download-url]", RoleAct,
 			"chatwork.files.manage", "完全一致するファイルを一件確認し、任意で上限付きのプロバイダーダウンロードURLを要求する",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), refFlag("--file", true, file, "確認する完全一致ファイル。"), boolFlag("--create-download-url", "結果にプロバイダーのダウンロードURLを要求します。")}, fileFields(room, file, account, message, false), chatwork.TaskFilesShow),
-		chatworkRead("invite-link show", "ルームの招待リンク状態を表示する", "--room <room-ref>", RoleAct,
+		chatworkRead("invite-link show", "ルームの招待リンク状態を表示する", "--room <room-id>", RoleAct,
 			"chatwork.invite-links.manage", "完全一致するルーム一つの招待リンク状態を確認する",
 			[]CommandInput{refFlag("--room", true, room, "招待リンク状態を確認する完全一致のルーム。")}, inviteFields(invite), chatwork.TaskInviteLinkShow),
-		chatworkMutation("invite-link create", "ルームの招待リンクを作成する", "--room <room-ref> [--code <code>] [--approval required|not-required] [--description <text>] --confirm=access-change", RoleAct,
+		chatworkMutation("invite-link create", "ルームの招待リンクを作成する", "--room <room-id> [--code <code>] [--approval required|not-required] [--description <text>] --confirm=access-change", RoleAct,
 			"chatwork.invite-links.manage", "アクセスへの影響を明示して、ルームの招待リンクを作成する",
 			[]CommandInput{refFlag("--room", true, room, "完全一致する親ルーム。"), textFlag("--code", false, "1〜50文字の英数字、アンダースコア、ハイフンからなる任意の招待リンクコード。"), enumFlag("--approval", false, "参加に管理者の承認が必要かどうか。", "required", "not-required"), textFlag("--description", false, "招待リンクの説明。"), confirmFlag(confirmAccessChange)}, inviteFields(invite), chatwork.TaskInviteLinkCreate, confirmAccessChange, "invite-link show",
 			createMutation("chatwork-invite-link", "--room", operation.CardinalityOne, no, yes, no)),
@@ -176,27 +182,57 @@ func chatworkCommandSpecs() []CommandSpec {
 			writeMutation("chatwork-contact-request", "--request", "", operation.CardinalityOne, no, yes, yes)),
 	}
 	for index := range commands {
-		if commands[index].Path != "messages list" {
-			continue
-		}
-		commands[index].HumanRecipes = []HumanHelpRecipe{
-			{
-				Title: "人物名からその人の投稿を探す",
-				Steps: []HumanHelpRecipeStep{
-					{Path: "members find", Args: "--room <room-ref> --query <name>"},
-					{Path: "messages list", Args: "--room <room-ref> --sender <account-ref>"},
+		switch commands[index].Path {
+		case "members find":
+			commands[index].DeprecatedAliases = []string{"rooms members find"}
+		case "members list":
+			commands[index].DeprecatedAliases = []string{"rooms members list"}
+		case "members replace":
+			commands[index].DeprecatedAliases = []string{"rooms members replace"}
+		case "rooms list":
+			commands[index].HumanRecipes = []HumanHelpRecipe{{
+				Title: "ルーム名しか分からない状態から入る",
+				Steps: []HumanHelpRecipeStep{{Path: "rooms list", Args: "--query <room-name>"}},
+			}}
+		case "messages list":
+			commands[index].HelpConstraints = []string{
+				"--on は --since または --until と併用できません。--since と --until は昇順で指定します。",
+				"--context は --sender、期間、--start-index、--count のいずれかと併用します。",
+				"--start-index は1〜100です。100件より前は --since/--until で期間を絞ります。",
+				"Chatwork API に全体全文検索はありません。rooms list --query で room-id を得て、--sender/--on/--since/--until でルーム内を絞ります。",
+				"--max-bytes は標準出力だけを制限します。最終行の output-next-start-index を使い、output-next-count があれば --count をその値へ置き換えて続けます。",
+			}
+			commands[index].HumanRecipes = []HumanHelpRecipe{
+				{
+					Title: "人物の発言を期間で追う",
+					Steps: []HumanHelpRecipeStep{
+						{Path: "members find", Args: "--room <room-id> --query <name>"},
+						{Path: "messages list", Args: "--room <room-id> --sender <account-ref> --since 2026-08-01T00:00:00+09:00 --until 2026-08-08T00:00:00+09:00"},
+					},
+					Note: "候補が複数なら account-ref を勝手に選ばず、対象を確認してから2段目へ進みます。",
 				},
-				Note: "候補が複数なら account-ref を勝手に選ばず、対象を確認してから2段目へ進みます。",
-			},
-			{
-				Title: "今日または昨日の会話を確認する",
-				Steps: []HumanHelpRecipeStep{
-					{Path: "messages list", Args: "--room <room-ref> --on today"},
+				{
+					Title: "今日または昨日の会話を確認する",
+					Steps: []HumanHelpRecipeStep{
+						{Path: "messages list", Args: "--room <room-id> --on today"},
+					},
+					Note: "昨日は today を yesterday に置き換えます。",
 				},
-				Note: "昨日は today を yesterday に置き換えます。",
-			},
+			}
+		case "messages show":
+			commands[index].DeprecatedAliases = []string{"messages get"}
+			commands[index].HelpConstraints = []string{
+				"--context none は正の --resolve-relations と併用できません。replies は最新100件内の型付き直接子だけを追加し、範囲外・閲覧制限を明示します。",
+			}
+		case "messages send", "messages update":
+			commands[index].ExclusiveInputGroups = [][]string{{"--body", "--body-file"}}
+			commands[index].HelpConstraints = []string{
+				"--body と --body-file はどちらか一方だけを指定します。--body - は標準入力を読みます。",
+			}
+		case "invite-link update":
+			commands[index].ExclusiveInputGroups = [][]string{{"--code", "--regenerate-code"}}
+			commands[index].HelpConstraints = []string{"--code と --regenerate-code はどちらか一方だけを指定します。"}
 		}
-		break
 	}
 	return commands
 }
@@ -270,9 +306,9 @@ func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mu
 		declaredCommandError(fault.KindAuthentication, "invalid_authentication_binding", false, help, "設定済みのChatwork認証を確立し直してください。"),
 		declaredCommandError(fault.KindInternal, "unclassified_chatwork_error", false, help, "Chatworkアダプターのエラー分類を確認してください。"),
 		declaredCommandError(fault.KindInvalidInput, "chatwork_invalid_request", false, help, "Chatworkが受け付けるタスク入力に修正してください。"),
-		declaredCommandError(fault.KindAuthentication, "chatwork_token_missing", false, help, "このコマンドのプロセスに CWK_API_TOKEN を設定してください。"),
-		declaredCommandError(fault.KindAuthentication, "chatwork_token_invalid", false, help, "CWK_API_TOKEN を有効なプロセスローカルのトークンに置き換えてください。"),
-		declaredCommandError(fault.KindAuthentication, "chatwork_authentication_failed", false, help, "設定済みのChatworkトークンを置き換えてください。"),
+		declaredCommandError(fault.KindAuthentication, "chatwork_token_missing", false, "doctor", "CWK_API_TOKEN、設定ファイル、キーチェーンの探索結果を確認し、このコマンドのプロセスにトークンを設定してください。"),
+		declaredCommandError(fault.KindAuthentication, "chatwork_token_invalid", false, "doctor", "CWK_API_TOKEN、設定ファイル、キーチェーンの探索結果を確認し、有効なプロセスローカルのトークンに置き換えてください。"),
+		declaredCommandError(fault.KindAuthentication, "chatwork_authentication_failed", false, "doctor", "Chatwork 認証の診断結果を確認してから、設定済みトークンを置き換えてください。"),
 		declaredCommandError(fault.KindPermission, "chatwork_permission_denied", false, help, "このタスクを実行できるアカウントを使用してください。"),
 		declaredCommandError(fault.KindNotFound, "chatwork_not_found", false, help, "現在有効な正規参照を再検索してください。"),
 		rateLimit,
@@ -295,8 +331,19 @@ func chatworkCommandErrors(path string, task chatwork.Task, reconcile string, mu
 	if task == chatwork.TaskMessagesList || task == chatwork.TaskMessagesShow {
 		errors = append(errors, declaredCommandError(fault.KindContract, "chatwork_message_limitation_invalid", false, help, "閲覧制限を推測せず、Chatworkの応答契約変更を確認してください。"))
 	}
+	if task == chatwork.TaskMessagesList {
+		errors = append(errors, declaredCommandError(fault.KindInvalidInput, "output_budget_too_small", false, help, "--max-bytes を必要量まで増やすか、送信者・期間・順位で対象を絞ってください。"))
+	}
 	if task == chatwork.TaskMessagesShow {
 		errors = append(errors, declaredCommandError(fault.KindPermission, "chatwork_message_restricted", false, help, "閲覧できるアカウントまたはプランで対象を確認してください。"))
+	}
+	if task == chatwork.TaskMessagesSend || task == chatwork.TaskMessagesUpdate {
+		errors = append(errors,
+			declaredCommandError(fault.KindInvalidInput, "chatwork_message_body_stdin_unreadable", false, help, "読み取り可能な標準入力を使うか、--body-file を指定してください。"),
+			declaredCommandError(fault.KindInvalidInput, "chatwork_message_body_file_unreadable", false, help, "読み取り可能なローカルファイルを指定してください。"),
+			declaredCommandError(fault.KindInvalidInput, "chatwork_message_body_too_large", false, help, "本文を65535バイト以下にしてください。"),
+			declaredCommandError(fault.KindInvalidInput, "chatwork_message_body_invalid", false, help, "空でない有効なUTF-8本文を指定してください。"),
+		)
 	}
 	if task == chatwork.TaskRoomsCreate {
 		errors = append(errors, declaredCommandError(fault.KindUnavailable, "chatwork_account_verification_failed", false, help, "変更を再実行せず、認証アカウントを確認できる状態かをこのコマンドの契約で確認してください。"))
@@ -349,6 +396,9 @@ func writeMutation(kind, target, parent string, cardinality operation.Cardinalit
 }
 
 func refFlag(name string, required bool, kind, description string) CommandInput {
+	if name == "--room" && kind == string(chatwork.ReferenceRoom) {
+		description = "先頭ゼロなし1〜32桁の正の10進 room_id。" + description
+	}
 	return CommandInput{Name: name, Source: InputSourceFlag, Required: required, Description: description, AllowedValues: []string{}, ReferenceKind: kind}
 }
 func repeatedRefFlag(name string, required bool, kind, description string) CommandInput {
@@ -361,6 +411,11 @@ func textFlag(name string, required bool, description string) CommandInput {
 }
 func integerFlag(name string, required bool, description string) CommandInput {
 	return textFlag(name, required, description)
+}
+func deprecatedIntegerFlag(name string, required bool, description string, aliases ...string) CommandInput {
+	input := integerFlag(name, required, description)
+	input.DeprecatedAliases = append([]string(nil), aliases...)
+	return input
 }
 func boolFlag(name, description string) CommandInput {
 	return CommandInput{Name: name, Source: InputSourceFlag, Required: false, Description: description, AllowedValues: []string{}}
@@ -404,6 +459,14 @@ func roomFields(room string, collection bool) []OutputField {
 	}
 	return result
 }
+func roomDiscoveryFields(room string) []OutputField {
+	selection := fields(
+		textField("query", "指定時だけ存在する、照合に使った引用済み文字列。"),
+		integerField("source_count", "--query の照合対象となった参加中ルーム数。"),
+		integerField("candidate_count", "--query に部分一致した候補ルーム数。"),
+	)
+	return append(selection, roomFields(room, true)...)
+}
 func messageFields(room, message, account string, collection bool) []OutputField {
 	messageDescription := "正規のメッセージ参照。"
 	bodyDescription := "構造を安全に区切った、信頼されていないテキストとしてのメッセージ本文。"
@@ -414,6 +477,19 @@ func messageFields(room, message, account string, collection bool) []OutputField
 		bodyDescription = "位置レコードの末尾にある、ターミナルで安全な引用済みメッセージ本文。"
 	}
 	result := fields(refField("message_ref", message, messageDescription), refField("room_ref", room, "親ルームの正規参照。"), refField("sender_ref", account, "送信者アカウントの正規参照。"), textField("sender_name", "構造を安全に区切った、信頼されていないテキストとしての送信者表示名。"), textField("body", bodyDescription), integerField("send_time", sendDescription), textField("relation_state", "不完全な公式記法により関係集合を証明できない場合だけ unknown。完全な複数返信は unknown ではなく、省略時は reviewed relation set が完全です。"), OutputField{Name: "relations", Type: OutputFieldTypeArray, Description: "relation_state が unknown の場合は省略する、解決済みまたは未解決の型付きTo・返信・引用関係。返信は公式記法の順序を保ち、1件は reply=#N、複数は reply=[#N,#M] のように表します。各値は既存の解決済み・未解決文法を使います。"})
+	if !collection {
+		return append(result,
+			OutputField{Name: "reply_child_refs", Type: OutputFieldTypeArray, Description: "--context replies で、最新の上限付き範囲から型付き同一ルーム返信辺により証明した直接の子メッセージ正規参照。プロバイダー順です。"},
+			OutputField{Name: "reply_child_source_sequences", Type: OutputFieldTypeArray, Description: "各直接子の最新範囲内での1始まりのプロバイダー位置。"},
+			integerField("reply_context_source_count", "--context replies の固定最新範囲で見えたメッセージ数。"),
+			integerField("reply_context_source_limit", "直接子を探した固定最新範囲の上限100。"),
+			booleanField("reply_context_complete", "直接子の探索範囲が完全か。false は範囲外の子が存在し得ることを示します。"),
+			textField("reply_context_access_limitation", "直接子の探索範囲に対する none・partial・all の閲覧制限。"),
+			integerField("relation_fetch_limit", "返信関係を補う追加の一件取得上限。指定時だけ存在します。"),
+			integerField("relation_fetch_attempts", "実際に行った追加の一件取得回数。指定時だけ存在します。"),
+			OutputField{Name: "relation_resolution_targets", Type: OutputFieldTypeArray, Description: "明示的な同一ルーム返信先ごとの正規 message_ref、fetched・not-found・restricted・budget-exhausted 状態、および取得できた補足メッセージ。"},
+		)
+	}
 	if collection {
 		result = append(result,
 			integerField("sequence", "プロバイダーが返した元のメッセージ範囲内での1始まりの位置。選択後の出力では連番にならない場合があります。"),
@@ -440,8 +516,14 @@ func messageFields(room, message, account string, collection bool) []OutputField
 			integerField("items_per_page", "この選択で実際に返した主要メッセージ数。返信コンテキストは含みません。"),
 			integerField("next_start_index", "同じ条件と変化していない上限付き範囲で、次の未選択主要メッセージから続けるための --start-index 値。候補が残る場合だけ存在します。"),
 			OutputField{Name: "filter_senders", Type: OutputFieldTypeArray, Description: "OR条件の基点として使用した、完全一致する正規の送信者アカウント参照。絞り込みを要求しなかった場合は存在しません。"},
-			textField("filter_context", "実際に適用した none または replies のコンテキストポリシー。既定の none で索引選択だけを行った場合は省略されます。"),
+			textField("filter_context", "選択時に実際に適用した none または replies のコンテキストポリシー。省略時の既定値は replies です。"),
 			OutputField{Name: "anchor_sequences", Type: OutputFieldTypeArray, Description: "主要メッセージとして選択した、プロバイダー元のシーケンス。表示される基点以外のシーケンスは返信コンテキストです。"},
+			integerField("max_bytes", "--max-bytes 指定時だけ最終配送行にある、末尾改行を含む標準出力予算。"),
+			booleanField("output_complete", "--max-bytes 指定時だけ存在し、この呼び出しの主要アンカーをすべて配送したかを示します。プロバイダーの complete とは別です。"),
+			integerField("output_items", "--max-bytes 指定時だけ存在する、配送した主要アンカー数。返信コンテキストと関係補足は数えません。"),
+			integerField("output_total_items", "--max-bytes 指定時だけ存在する、この呼び出しで配送対象だった主要アンカー総数。"),
+			integerField("output_next_start_index", "予算で未配送の主要アンカーがある場合だけ存在する、同じ条件で次のnewest-first順位から続ける --start-index 値。"),
+			integerField("output_next_count", "元の --count 範囲が予算で未配送の場合だけ存在する、続きで --count を置き換える残り主要アンカー数。"),
 		)
 	}
 	return result

@@ -144,34 +144,50 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	}
 
 	commandArgs = normalizeRootAlias(commandArgs)
+	baseCanonicalArgs := normalizeCommandAlias(baseCatalog, commandArgs)
+	staticHelpArgs, staticHelp := normalizeStaticHelpInvocation(baseCatalog, baseCanonicalArgs)
+	helpFallback := false
 	activeCatalog, activeErr := c.resolveActiveCatalog(ctx, baseCatalog)
 	if activeErr != nil {
-		if !commandViewAlwaysInvocation(baseCatalog, commandArgs) {
+		if staticHelp && commandSelectionHelpFallbackAllowed(activeErr) {
+			activeCatalog = baseCatalog
+			commandArgs = staticHelpArgs
+			helpFallback = true
+		} else if !commandViewAlwaysInvocation(baseCatalog, commandArgs) {
 			return c.fail(ctx, commandSelectionDispatchFault(activeErr))
+		} else {
+			activeCatalog, _, err = baseCatalog.ActiveView([]string{})
+			if err != nil {
+				return c.fail(ctx, fault.Wrap(
+					fault.KindContract,
+					"invalid_catalog",
+					"コマンドカタログの制御領域は無効です。",
+					false,
+					err,
+					fault.NextAction{Command: "help", Reason: "ディスパッチ前にカタログを修復してください。"},
+				))
+			}
 		}
-		activeCatalog, _, err = baseCatalog.ActiveView([]string{})
-		if err != nil {
-			return c.fail(ctx, fault.Wrap(
-				fault.KindContract,
-				"invalid_catalog",
-				"コマンドカタログの制御領域は無効です。",
-				false,
-				err,
-				fault.NextAction{Command: "help", Reason: "ディスパッチ前にカタログを修復してください。"},
-			))
-		}
+	}
+	if helpFallback {
+		ctx = withStaticHelpFallback(ctx)
 	}
 	c.catalog = activeCatalog
-	if c.selectionLoaded && !c.selectionSaved && commandViewConfigurableInvocation(baseCatalog, commandArgs) {
+	selectionCheckArgs := baseCanonicalArgs
+	if staticHelp {
+		selectionCheckArgs = staticHelpArgs
+	}
+	if c.selectionLoaded && !c.selectionSaved && commandViewConfigurableInvocation(baseCatalog, selectionCheckArgs) {
 		return c.fail(ctx, commandSelectionRequiredFault())
 	}
+	commandArgs = normalizeCommandAlias(c.catalog, commandArgs)
 	commandArgs = normalizeTrailingHelpAlias(c.catalog, commandArgs)
 	command, rest, found := c.catalog.Match(commandArgs)
 	if !found {
 		return c.failUsage(
 			ctx,
 			"unknown_command",
-			fmt.Sprintf("コマンド %q は不明です。", strings.Join(commandArgs, " ")),
+			unknownCommandMessage(commandArgs, c.catalog),
 			"help",
 			"正確なコマンドパスまたは名前空間を確認してください。",
 		)
@@ -250,6 +266,7 @@ func selectorContainsConfigurableCommand(base Catalog, selector string) bool {
 	if selector == "" {
 		return false
 	}
+	selector = canonicalHelpSelector(base, selector)
 	commands, _ := base.Select(selector)
 	for _, command := range commands {
 		if command.Configurable {
@@ -282,7 +299,7 @@ func commandViewAlwaysInvocation(base Catalog, args []string) bool {
 		if selector == "" {
 			return false
 		}
-		command, found := base.Lookup(selector)
+		command, found := base.Lookup(canonicalHelpSelector(base, selector))
 		return found && !command.Configurable
 	}
 	command, _, found := base.Match(args)
@@ -309,6 +326,21 @@ func commandSelectionDispatchFault(err error) error {
 	return err
 }
 
+func commandSelectionHelpFallbackAllowed(err error) bool {
+	public, ok := fault.PublicCopy(err)
+	if !ok {
+		return false
+	}
+	switch public.Code {
+	case "command_selection_invalid":
+		return public.Kind == fault.KindInvalidInput
+	case "command_selection_unsafe", "command_selection_unavailable":
+		return public.Kind == fault.KindUnavailable
+	default:
+		return false
+	}
+}
+
 func normalizeRootAlias(args []string) []string {
 	switch args[0] {
 	case "--help", "-h":
@@ -320,12 +352,84 @@ func normalizeRootAlias(args []string) []string {
 	}
 }
 
-// normalizeTrailingHelpAlias maps the conventional `<selector> --help` form
-// onto the catalog help task. Only selectors already proven by the catalog are
-// rewritten, so an unknown namespace retains the normal unknown-command fault
-// instead of changing error taxonomy inside the help parser.
+// normalizeCommandAlias owns only finite compatibility spellings. A mapping is
+// enabled only when its canonical target is an exact catalog command; it never
+// guesses a path, reads configuration, or performs provider I/O.
+func normalizeCommandAlias(catalog Catalog, args []string) []string {
+	for _, command := range catalog.Commands() {
+		for _, alias := range command.DeprecatedAliases {
+			aliasWords := strings.Fields(alias)
+			if !hasWordPrefix(args, aliasWords) {
+				continue
+			}
+			canonicalWords := strings.Fields(command.Path)
+			normalized := make([]string, 0, len(canonicalWords)+len(args)-len(aliasWords))
+			normalized = append(normalized, canonicalWords...)
+			return append(normalized, args[len(aliasWords):]...)
+		}
+	}
+	return args
+}
+
+func hasWordPrefix(args, prefix []string) bool {
+	if len(prefix) > len(args) {
+		return false
+	}
+	for index := range prefix {
+		if args[index] != prefix[index] {
+			return false
+		}
+	}
+	return true
+}
+
+// normalizeStaticHelpInvocation recognizes help without consulting command
+// selection. It is used only to keep static help available when that local
+// selection state cannot be loaded safely.
+func normalizeStaticHelpInvocation(catalog Catalog, args []string) ([]string, bool) {
+	if len(args) == 0 {
+		return args, false
+	}
+	if args[0] == "help" {
+		return normalizeTrailingHelpAlias(catalog, args), true
+	}
+	normalized := normalizeTrailingHelpAlias(catalog, args)
+	if len(normalized) > 0 && normalized[0] == "help" {
+		return normalized, true
+	}
+	return args, false
+}
+
+// normalizeTrailingHelpAlias maps a help flag anywhere after a known exact
+// command, plus the conventional `<namespace> --help` form, onto the catalog
+// help task. Unknown paths retain the normal unknown-command taxonomy.
 func normalizeTrailingHelpAlias(catalog Catalog, args []string) []string {
-	if len(args) < 2 || !isHelpFlag(args[len(args)-1]) {
+	if len(args) < 2 {
+		return args
+	}
+	if args[0] == "help" {
+		if len(args) == 2 && isHelpFlag(args[1]) {
+			return []string{"help", "help"}
+		}
+		normalized := make([]string, 0, len(args))
+		normalized = append(normalized, "help")
+		for _, argument := range args[1:] {
+			if !isHelpFlag(argument) {
+				normalized = append(normalized, argument)
+			}
+		}
+		return normalized
+	}
+	if command, rest, found := catalog.Match(args); found {
+		for _, argument := range rest {
+			if !isHelpFlag(argument) {
+				continue
+			}
+			normalized := []string{"help"}
+			return append(normalized, strings.Fields(command.Path)...)
+		}
+	}
+	if !isHelpFlag(args[len(args)-1]) {
 		return args
 	}
 	selectorWords := args[:len(args)-1]
@@ -364,6 +468,14 @@ func parseRootOptions(args []string) (rootOptions, []string, error) {
 		case strings.HasPrefix(argument, "--error-format="):
 			value = strings.TrimPrefix(argument, "--error-format=")
 		default:
+			// Conventional root aliases are catalog commands after normalization,
+			// not unknown global options. Leave them in argv for normalizeRootAlias.
+			if argument == "--help" || argument == "-h" || argument == "--version" || argument == "-v" {
+				return options, args[index:], nil
+			}
+			if strings.HasPrefix(argument, "-") {
+				return options, nil, unknownRootOptionError(argument)
+			}
 			return options, args[index:], nil
 		}
 		if seenErrorFormat {

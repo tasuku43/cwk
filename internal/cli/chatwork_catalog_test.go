@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
+	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
 func TestChatworkCatalogSpecsValidateWithPublicCatalog(t *testing.T) {
@@ -143,7 +144,7 @@ func TestMembersFindCatalogPublishesCandidateDiscoveryWithoutAutomaticSelection(
 	if find.Path == "" {
 		t.Fatal("members find is absent from the Chatwork catalog")
 	}
-	if find.Role != RoleDiscover || find.Effect.String() != "read" || find.Usage() != "cwk members find --room <room-ref> --query <text>" {
+	if find.Role != RoleDiscover || find.Effect.String() != "read" || find.Usage() != "cwk members find --room <room-id> --query <text>" {
 		t.Fatalf("members find command = %+v", find)
 	}
 	inputs := make(map[string]CommandInput, len(find.Agent.Inputs))
@@ -171,7 +172,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	if messages.Path == "" {
 		t.Fatal("messages list is absent from the Chatwork catalog")
 	}
-	wantUsage := "cwk messages list --room <room-ref> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies] [--resolve-relations <count>]"
+	wantUsage := "cwk messages list --room <room-id> [--window recent|changes] [--since <RFC3339>] [--until <RFC3339>] [--on <day>] [--start-index <index>] [--count <count>] [--sender <account-ref>] [--context none|replies] [--resolve-relations <count>] [--max-bytes <bytes>]"
 	if messages.Usage() != wantUsage {
 		t.Fatalf("messages list usage = %q, want %q", messages.Usage(), wantUsage)
 	}
@@ -205,6 +206,7 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	context := inputs["--context"]
 	if context.Required || !reflect.DeepEqual(context.AllowedValues, []string{"none", "replies"}) ||
 		!strings.Contains(context.Description, "1ホップ") || !strings.Contains(context.Description, "既定値") ||
+		!strings.Contains(context.Description, "replies") || !strings.Contains(context.Description, "none") ||
 		!strings.Contains(context.Description, "返信元・返信先") || !strings.Contains(context.Description, "上限付き範囲") {
 		t.Fatalf("context input contract = %+v", context)
 	}
@@ -213,8 +215,16 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 		len(resolution.AllowedValues) != 0 || resolution.ReferenceKind != "" ||
 		!strings.Contains(resolution.Description, "0〜100") || !strings.Contains(resolution.Description, "追加の一件取得") ||
 		!strings.Contains(resolution.Description, "重複ID") || !strings.Contains(resolution.Description, "再帰的") ||
-		!strings.Contains(resolution.Description, "既定値は5") || !strings.Contains(resolution.Description, "0は追加取得を無効化") {
+		!strings.Contains(resolution.Description, "値を省略") || !strings.Contains(resolution.Description, "既定値は5") ||
+		!strings.Contains(resolution.Description, "0は追加取得を無効化") {
 		t.Fatalf("resolve-relations input contract = %+v", resolution)
+	}
+	maxBytes := inputs["--max-bytes"]
+	if maxBytes.Name == "" || maxBytes.Required || maxBytes.Repeatable || maxBytes.Source != InputSourceFlag ||
+		len(maxBytes.AllowedValues) != 0 || maxBytes.ReferenceKind != "" ||
+		!strings.Contains(maxBytes.Description, "1〜16777216") || !strings.Contains(maxBytes.Description, "標準出力") ||
+		!strings.Contains(maxBytes.Description, "分割しません") {
+		t.Fatalf("max-bytes input contract = %+v", maxBytes)
 	}
 	window := inputs["--window"]
 	if !reflect.DeepEqual(window.AllowedValues, []string{"recent", "changes"}) ||
@@ -238,5 +248,118 @@ func TestMessageListCatalogPublishesBoundedSelectionInputs(t *testing.T) {
 	}
 	if strings.Contains(count.Description, "Use --window recent") {
 		t.Fatalf("count input repeats the new default window: %+v", count)
+	}
+	declaredErrors := make(map[string]CommandError, len(messages.Agent.Errors))
+	for _, commandError := range messages.Agent.Errors {
+		declaredErrors[commandError.Code] = commandError
+	}
+	if budgetFault := declaredErrors["output_budget_too_small"]; budgetFault.Kind != fault.KindInvalidInput || budgetFault.Retryable {
+		t.Fatalf("output budget fault = %+v", budgetFault)
+	}
+}
+
+func TestMessagesShowCatalogDeclaresOptionalBoundedReplyContext(t *testing.T) {
+	var show CommandSpec
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path == "messages show" {
+			show = command
+			break
+		}
+	}
+	if show.Path == "" {
+		t.Fatal("messages show is absent from the Chatwork catalog")
+	}
+	if want := "cwk messages show --room <room-id> --message <message-ref> [--context none|replies] [--resolve-relations <count>]"; show.Usage() != want {
+		t.Fatalf("messages show usage = %q, want %q", show.Usage(), want)
+	}
+	inputs := make(map[string]CommandInput, len(show.Agent.Inputs))
+	for _, input := range show.Agent.Inputs {
+		inputs[input.Name] = input
+	}
+	if !reflect.DeepEqual(inputs["--context"].AllowedValues, []string{"none", "replies"}) ||
+		!strings.Contains(inputs["--context"].Description, "最新100件") || !strings.Contains(inputs["--context"].Description, "直接の子") {
+		t.Fatalf("messages show context = %+v", inputs["--context"])
+	}
+	if inputs["--resolve-relations"].Required || !strings.Contains(inputs["--resolve-relations"].Description, "値を省略すると5") ||
+		!strings.Contains(inputs["--resolve-relations"].Description, "0でも") {
+		t.Fatalf("messages show resolution = %+v", inputs["--resolve-relations"])
+	}
+	constraints := strings.Join(show.HelpConstraints, "\n")
+	if !strings.Contains(constraints, "--context none") || !strings.Contains(constraints, "型付き直接子") {
+		t.Fatalf("messages show constraints = %q", constraints)
+	}
+}
+
+func TestMessagesListHelpStatesStartIndexAndGlobalSearchLimits(t *testing.T) {
+	var list CommandSpec
+	for _, command := range chatworkCommandSpecs() {
+		if command.Path == "messages list" {
+			list = command
+			break
+		}
+	}
+	constraints := strings.Join(list.HelpConstraints, "\n")
+	for _, want := range []string{"--start-index", "1〜100", "--since/--until", "全体全文検索はありません", "rooms list --query", "--sender/--on/--since/--until"} {
+		if !strings.Contains(constraints, want) {
+			t.Errorf("messages list constraints lack %q: %s", want, constraints)
+		}
+	}
+}
+
+func TestMessageMutationCatalogPublishesExclusiveBoundedBodySources(t *testing.T) {
+	commands := make(map[string]CommandSpec)
+	allCommands := chatworkCommandSpecs()
+	for _, command := range allCommands {
+		commands[command.Path] = command
+	}
+	wantUsage := map[string]string{
+		"messages send":   "cwk messages send --room <room-id> [--body <text>] [--body-file <path>] [--self-unread]",
+		"messages update": "cwk messages update --room <room-id> --message <message-ref> [--body <text>] [--body-file <path>]",
+	}
+	wantFaults := []string{
+		"chatwork_message_body_stdin_unreadable",
+		"chatwork_message_body_file_unreadable",
+		"chatwork_message_body_too_large",
+		"chatwork_message_body_invalid",
+	}
+	for path, usage := range wantUsage {
+		t.Run(path, func(t *testing.T) {
+			command := commands[path]
+			if command.Usage() != usage {
+				t.Fatalf("usage = %q, want %q", command.Usage(), usage)
+			}
+			inputs := make(map[string]CommandInput, len(command.Agent.Inputs))
+			for _, input := range command.Agent.Inputs {
+				inputs[input.Name] = input
+			}
+			if inputs["--body"].Required || inputs["--body-file"].Required ||
+				!strings.Contains(inputs["--body"].Description, "標準入力") ||
+				!strings.Contains(inputs["--body-file"].Description, "65535") {
+				t.Fatalf("body inputs = body %+v file %+v", inputs["--body"], inputs["--body-file"])
+			}
+			constraints := strings.Join(command.HelpConstraints, "\n")
+			if !strings.Contains(constraints, "どちらか一方") || !strings.Contains(constraints, "--body -") {
+				t.Fatalf("constraints = %q", constraints)
+			}
+			declared := make(map[string]CommandError, len(command.Agent.Errors))
+			for _, commandError := range command.Agent.Errors {
+				declared[commandError.Code] = commandError
+			}
+			for _, code := range wantFaults {
+				commandError, ok := declared[code]
+				if !ok || commandError.Kind != fault.KindInvalidInput || commandError.Retryable {
+					t.Errorf("fault %s = %+v, exists=%t", code, commandError, ok)
+				}
+			}
+			output := renderCommandHelp(command, allCommands)
+			if len(output) > maxExactHelpBytes {
+				t.Fatalf("exact help is %d bytes: %s", len(output), output)
+			}
+			for _, want := range []string{"--body (text, 選択必須)", "--body-file (path, 選択必須)"} {
+				if !strings.Contains(string(output), want) {
+					t.Errorf("exact help lacks conditional requirement %q:\n%s", want, output)
+				}
+			}
+		})
 	}
 }

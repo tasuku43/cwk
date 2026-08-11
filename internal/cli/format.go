@@ -46,7 +46,7 @@ func parseFormatOnlyArgs(args []string) (successFormat, error) {
 			}
 			value = strings.TrimPrefix(argument, "--format=")
 		case strings.HasPrefix(argument, "-"):
-			return format, fmt.Errorf("フラグ %q は不明です", argument)
+			return format, unknownFlagError(argument, []string{"--format"})
 		default:
 			return format, fmt.Errorf("予期しない引数 %q です", argument)
 		}

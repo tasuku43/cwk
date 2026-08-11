@@ -122,6 +122,24 @@ func TestChatworkSnapshotCompleteCoverageRequiresPublicOwnerForEveryOperation(t 
 	}
 }
 
+func TestChatworkSnapshotAllowsExcludedCapabilityWithoutInventedOperation(t *testing.T) {
+	snapshot := validChatworkSnapshot("chatwork.items.read")
+	snapshot.CoverageStatus = "complete"
+	issues := validateChatworkSnapshot(snapshot, []capability{
+		{ID: "chatwork.items.read", Status: "public"},
+		{ID: "chatwork.reactions.inspect", Status: "excluded", Reason: "The reviewed provider exposes no reaction-read operation."},
+	})
+	if len(issues) != 0 {
+		t.Fatalf("excluded capability issues = %+v", issues)
+	}
+
+	issues = validateChatworkSnapshot(snapshot, []capability{
+		{ID: "chatwork.items.read", Status: "public"},
+		{ID: "chatwork.reactions.inspect", Status: "deferred", Reason: "A mapped operation is required before implementation."},
+	})
+	assertIssuesContain(t, issues, `Chatwork capability "chatwork.reactions.inspect" has no upstream operation mapping`)
+}
+
 func TestChatworkSnapshotPinsLimitsAndMutationPolicy(t *testing.T) {
 	snapshot := validChatworkSnapshot("chatwork.items.read")
 	snapshot.Limits.MetadataReadTimeoutSeconds = 21

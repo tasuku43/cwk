@@ -16,6 +16,62 @@ import (
 
 const TokenEnvironment = "CWK_API_TOKEN" // #nosec G101 -- environment variable name only; no credential value is embedded.
 
+const (
+	authenticationSearchDetail  = "探索した場所: 環境変数 CWK_API_TOKEN。設定ファイルとキーチェーンには未対応です"
+	tokenMissingCode            = "chatwork_token_missing"
+	tokenInvalidCode            = "chatwork_token_invalid"
+	authenticationMissingPrefix = "Chatwork API トークンが見つかりません。"
+	authenticationInvalidPrefix = "Chatwork API トークンは無効です。"
+)
+
+// TokenEnvironmentState is the secret-free result of inspecting the one
+// supported Chatwork credential source.
+type TokenEnvironmentState string
+
+const (
+	TokenEnvironmentMissing TokenEnvironmentState = "missing"
+	TokenEnvironmentInvalid TokenEnvironmentState = "invalid"
+	TokenEnvironmentValid   TokenEnvironmentState = "valid"
+)
+
+// TokenEnvironmentInspection describes where authentication was inspected
+// without retaining or exposing the credential value.
+type TokenEnvironmentInspection struct {
+	State    TokenEnvironmentState
+	Source   string
+	Name     string
+	Config   string
+	Keychain string
+}
+
+// InspectTokenEnvironment inspects only the process-local environment. It
+// performs no provider call and returns no credential-bearing value.
+func InspectTokenEnvironment() TokenEnvironmentInspection {
+	token, found := os.LookupEnv(TokenEnvironment)
+	state := TokenEnvironmentMissing
+	if found && token != "" {
+		state = TokenEnvironmentValid
+		if validateToken(token) != nil {
+			state = TokenEnvironmentInvalid
+		}
+	}
+	return TokenEnvironmentInspection{
+		State:    state,
+		Source:   "environment",
+		Name:     TokenEnvironment,
+		Config:   "unsupported",
+		Keychain: "unsupported",
+	}
+}
+
+func tokenAuthenticationFault(code string) error {
+	prefix := authenticationInvalidPrefix
+	if code == tokenMissingCode {
+		prefix = authenticationMissingPrefix
+	}
+	return fault.New(fault.KindAuthentication, code, prefix+authenticationSearchDetail, false)
+}
+
 type credentialRecord struct {
 	credential requestCredential
 	session    authn.Session
@@ -52,6 +108,9 @@ type Client struct {
 	now      func() time.Time
 	newID    func() (string, error)
 	readFile func(string) ([]byte, error)
+	// Message bodies have a smaller read ceiling than uploads and keep the
+	// caller context through their infrastructure-owned filesystem boundary.
+	readBodyFile func(context.Context, string) ([]byte, error)
 }
 
 // NewFromEnvironment constructs the production adapter. The token is read
@@ -59,12 +118,14 @@ type Client struct {
 func NewFromEnvironment() (*Client, error) {
 	token := os.Getenv(TokenEnvironment)
 	if token == "" {
-		return nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
+		return nil, tokenAuthenticationFault(tokenMissingCode)
 	}
 	if err := validateToken(token); err != nil {
-		return nil, fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
+		return nil, tokenAuthenticationFault(tokenInvalidCode)
 	}
-	return newClient(ProductionBaseURL, token, productionHTTPClient(), randomBindingID, boundedReadFile), nil
+	client := newClient(ProductionBaseURL, token, productionHTTPClient(), randomBindingID, boundedReadFile)
+	client.readBodyFile = boundedReadMessageBodyFile
+	return client, nil
 }
 
 // Authenticate creates a fresh process-local binding for the one configured
@@ -93,10 +154,10 @@ func (c *Client) Authenticate(ctx context.Context, requirement authn.Requirement
 
 	credential := c.source
 	if credential.method.Validate() != nil {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
+		return authn.Session{}, tokenAuthenticationFault(tokenMissingCode)
 	}
 	if credential.secret == "" {
-		return authn.Session{}, fault.New(fault.KindAuthentication, "chatwork_token_missing", "Chatwork API トークンが設定されていません", false)
+		return authn.Session{}, tokenAuthenticationFault(tokenMissingCode)
 	}
 
 	value, err := c.newID()
@@ -195,6 +256,21 @@ func newClientWithCredential(baseURL string, credential requestCredential, httpC
 		newID:    newID,
 		readFile: readFile,
 	}
+	if readFile != nil {
+		client.readBodyFile = func(ctx context.Context, path string) ([]byte, error) {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			value, err := readFile(path)
+			if err != nil {
+				return nil, err
+			}
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
+			return value, nil
+		}
+	}
 	return client
 }
 
@@ -242,11 +318,11 @@ func randomBindingID() (string, error) {
 
 func validateToken(token string) error {
 	if len(token) < 8 || len(token) > 4096 {
-		return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
+		return tokenAuthenticationFault(tokenInvalidCode)
 	}
 	for _, r := range token {
 		if r < 0x21 || r > 0x7e {
-			return fault.New(fault.KindAuthentication, "chatwork_token_invalid", "Chatwork API トークンは無効です", false)
+			return tokenAuthenticationFault(tokenInvalidCode)
 		}
 	}
 	return nil

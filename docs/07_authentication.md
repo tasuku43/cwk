@@ -163,8 +163,15 @@ The gate emits the following stable recovery classes:
 A non-nil catalog authentication requirement binds the command to this gate.
 Catalog validation requires every stable gate code with the exact kind and
 retryability. Chatwork-specific `chatwork_token_missing` and
-`chatwork_token_invalid` faults additionally point to the exact scoped help for
-the task; no recovery points to a login or authentication namespace.
+`chatwork_token_invalid` faults additionally publish their credential input and
+`cwk doctor` as the exact executable `next_action` in the runtime structured
+error. The fault enumerates the inspected environment variable and explicitly
+states that configuration-file and keychain credential lookup are unsupported.
+`doctor` repeats this inspection offline without retaining or printing the
+credential value. No recovery depends on the retired agent-help contract or
+points to a login/authentication namespace. The complete authentication
+declaration remains internal catalog validation data rather than an expanded
+public help payload.
 
 After the action begins, a valid structured adapter fault remains authoritative
 even when the context is canceled. An unstructured mutation error cannot prove
@@ -266,6 +273,7 @@ The PAT boundary is complete only when tests prove:
   sessions;
 - token canaries never reach argv, stdout, stderr, structured faults, logs,
   snapshots, fixtures, persistent configuration, or repository history;
-- root/scoped help exposes no authentication lifecycle command and gives exact
-  scoped recovery for token failure;
+- root/scoped text help exposes no authentication lifecycle command, and
+  runtime structured token failures give exact classified recovery without a
+  preliminary full-contract lookup;
 - `task check`, `task security`, and `task public:check` pass.

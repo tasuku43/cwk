@@ -51,6 +51,7 @@ type invocationContextKey uint8
 const (
 	errorFormatContextKey invocationContextKey = iota
 	commandPathContextKey
+	staticHelpFallbackContextKey
 )
 
 func withErrorFormat(ctx context.Context, format errorFormat) context.Context {
@@ -59,6 +60,18 @@ func withErrorFormat(ctx context.Context, format errorFormat) context.Context {
 
 func withCommandPath(ctx context.Context, path string) context.Context {
 	return context.WithValue(ctx, commandPathContextKey, path)
+}
+
+func withStaticHelpFallback(ctx context.Context) context.Context {
+	return context.WithValue(ctx, staticHelpFallbackContextKey, true)
+}
+
+func staticHelpFallback(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	value, _ := ctx.Value(staticHelpFallbackContextKey).(bool)
+	return value
 }
 
 func invocationErrorFormat(ctx context.Context) errorFormat {

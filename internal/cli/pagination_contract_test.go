@@ -35,18 +35,6 @@ func TestPagedOutputRequiresExactOpaqueCursorBinding(t *testing.T) {
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("valid paged catalog: %v", err)
 	}
-	workflows := catalog.referenceWorkflows()
-	foundCursorLoop := false
-	for _, workflow := range workflows {
-		if workflow.ReferenceKind == "item-page" && workflow.Producer.Path == paged.Path &&
-			workflow.Producer.Field == "next_cursor" && workflow.Consumer.Path == paged.Path &&
-			workflow.Consumer.Input == "--cursor" {
-			foundCursorLoop = true
-		}
-	}
-	if !foundCursorLoop {
-		t.Fatalf("reference workflows lack exact cursor continuation: %+v", workflows)
-	}
 	if len(paged.Agent.Output.Fields) != 2 {
 		t.Fatalf("paged item fields include top-level cursor metadata: %+v", paged.Agent.Output.Fields)
 	}
@@ -55,23 +43,25 @@ func TestPagedOutputRequiresExactOpaqueCursorBinding(t *testing.T) {
 		got[1] != (ProducedRef{Kind: "item-page", Field: "next_cursor"}) {
 		t.Fatalf("paged produced refs = %+v", got)
 	}
+	if got := paged.ConsumedRefs(); len(got) != 1 || got[0] != (ConsumedRef{Kind: "item-page", Argument: "--cursor"}) {
+		t.Fatalf("paged consumed refs = %+v", got)
+	}
 
-	encoded, err := (&CLI{catalog: catalog}).renderAgentHelp(paged.Path, true, []CommandSpec{paged})
+	encoded, err := json.Marshal(paged.Agent)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Contains(encoded, []byte(`"pagination":{"cursor_input":"--cursor","cursor_output":{"name":"next_cursor","type":"string","description":"Opaque cursor for the next page; an empty string means traversal is complete.","reference_kind":"item-page"},"completion":"empty_cursor"}`)) {
-		t.Fatalf("agent help projection lacks pagination binding: %s", encoded)
+		t.Fatalf("internal contract lacks pagination binding: %s", encoded)
 	}
-	var help agentDocument
-	if err := json.Unmarshal(encoded, &help); err != nil {
+	var contract AgentContract
+	if err := json.Unmarshal(encoded, &contract); err != nil {
 		t.Fatal(err)
 	}
-	if len(help.Commands) != 1 || help.Commands[0].Contract.Pagination == nil ||
-		help.Commands[0].Contract.Pagination.CursorInput != "--cursor" ||
-		help.Commands[0].Contract.Pagination.CursorOutput.Name != "next_cursor" ||
-		help.Commands[0].Contract.Pagination.Completion != PaginationCompletionEmptyCursor {
-		t.Fatalf("scoped agent help pagination = %+v", help.Commands)
+	if contract.Pagination == nil || contract.Pagination.CursorInput != "--cursor" ||
+		contract.Pagination.CursorOutput.Name != "next_cursor" ||
+		contract.Pagination.Completion != PaginationCompletionEmptyCursor {
+		t.Fatalf("internal pagination contract = %+v", contract.Pagination)
 	}
 	complete, err := json.Marshal(utilitySpec("complete").Agent)
 	if err != nil {

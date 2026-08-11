@@ -105,12 +105,27 @@ query/source/candidate metadata, visibly escape external names, and never
 auto-select even a unique result. Test zero, unique, and ambiguous candidates
 plus direct reuse of the chosen reference by the next command.
 
+For the reviewed room-name workflow, extend `rooms list` with an optional
+application-owned `--query`: perform one complete rooms provider read, clear the
+query before the port, then use Unicode simple-case-folded rune-window
+substring matching. Preserve provider order and every candidate with canonical
+references and query/source/candidate/completeness metadata. Do not normalize
+Unicode or whitespace, trim, rank, expand one rune to several, leak a provider
+query, or auto-select. `members find` deliberately retains its exact
+case-sensitive substring contract. A consuming `--room <room-id>` accepts only
+the returned leading-zero-free positive decimal of 1 through 32 digits; names,
+`rid...`, kind-prefixed text, and browser URLs are rejected rather than
+resolved by an act command.
+
 For the reviewed Chatwork message index selection, declare optional one-based
 `--start-index <index>` and maximum `--count <count>` with the inclusive range
 1..100; count alone defaults start index to 1. Exact-sender OR matching precedes
 typed-time newest-first ranking, later provider position breaks equal-time ties,
 then index/count select primary anchors; direct typed reply context follows and
-may increase displayed count beyond the requested count. Preserve provider
+may increase displayed count beyond the requested count. For an active sender,
+period, or index selection, omitted context defaults to `replies`; exact
+`--context none` opts out, and context without a primary selection must fail
+before authentication while naming the invalid flag and alternatives. Preserve provider
 order and original source sequences in output. Keep candidate count, applied
 start index, requested count, actual items per page, and optional next start
 index separate from provider `source-limit=100`. This SCIM-derived vocabulary
@@ -127,8 +142,8 @@ offset and whole seconds. `--on` uses the fixed `Asia/Tokyo` calendar; resolve
 an injected clock once and carry only the effective concrete day/zone and
 half-open Unix bounds into the typed request/result. Exact-sender OR and period
 membership form the candidate predicate before typed-time rank/index/count;
-direct reply context follows and may add an out-of-period record only as
-explicit context. Clear every period field before the one `force`-only provider
+direct reply context follows by default and may add an out-of-period record;
+explicit `none` opts out. Clear every period field before the one `force`-only provider
 call, retain `source-limit=100`, and never claim fewer response bytes, provider
 date filtering, pagination, or older-history access. Reject ambiguous dates,
 offset-free or fractional timestamps, conflicting selectors, and empty or
@@ -148,6 +163,46 @@ evidence, and bind every exact result to the requested room/message. Retain
 only reviewed not-found/restricted target outcomes; abort without partial
 success on other faults. Clear the budget before every adapter call and prove
 that To, quotes, names, times, prose, and cross-room references never expand it.
+
+For the reviewed exact-message direct-reply workflow, omitted context and exact
+`none` keep one exact read. Explicit `messages show --context replies` performs
+that exact read first and one declared force-recent list read in the same room,
+caller context, and authentication binding. Select provider-order children only
+when a typed same-room reply edge targets the anchor; preserve canonical child
+references, source sequences/count/limit/completeness/access limitation, and
+never infer from To, quote, body, name, or time. Keep this typed child context
+separate from the exact anchor and from outgoing parent-chain resolution. The
+fixed list read does not consume `--resolve-relations`; zero disables only
+additional exact parent reads. Reset source-window relation state and resolve
+again against only the visible anchor and children so hidden recent targets do
+not retain a false resolved claim. Clear all local context/budget fields before
+each adapter call and test zero/many children, incomplete/restricted sources,
+parent/child coexistence, and omitted/none call counts.
+
+For the reviewed message presentation budget, keep `--max-bytes` entirely in
+CLI/presentation state and validate 1..16,777,216 before authentication. Plan the
+longest newest-first primary-anchor prefix after the complete typed result is
+assembled, while rendering provider order and keeping each message, direct reply
+context, and reachable relation closure atomic. Count the final delivery line
+and newline inside the hard budget. Publish delivered `output-items`, always-
+present eligible `output-total-items`, and incomplete `output-next-start-index`.
+When the original selection used `--count`, also publish
+`output-next-count=<remaining>` and require the continuation to replace the old
+count so it cannot expand the original slice. Keep provider and selection
+completeness distinct. A fixed envelope or first unit that cannot fit returns a
+typed zero-stdout fault; omission preserves the established bytes.
+
+For Chatwork message create/update body sources, make literal `--body`,
+`--body -`, and `--body-file` one exact XOR. CLI owns a bounded injected stdin
+read; infrastructure alone dereferences the user-selected file through an
+injected context-carrying regular-file reader. Keep production pipe/terminal
+descriptor I/O in infrastructure: use bounded readiness polling on Unix and
+exact synchronous-reader cancellation plus join on Windows, without closing a
+caller-owned descriptor or abandoning a reader. Reject non-regular body paths
+and stop body-file reads at 65,536 bytes rather than
+the upload ceiling. Validate nonempty UTF-8, NUL absence, and the 65,535-byte limit
+before provider I/O. Never expose a body, path, or private read error in a public
+fault, and never grant domain or application unrestricted filesystem access.
 
 For message-period reachability, derive an oldest boundary only from a
 nonempty, unrestricted `recent` typed source with valid send times. Classify a
@@ -175,8 +230,19 @@ For every external action, specify:
 - validation performed before the external boundary;
 - finite timeout, pagination/completeness, maximum attempts, and upstream idempotency behavior;
 - whether each flag is repeatable as a structured catalog fact; parsing and
-  scoped agent help must consume the same declaration rather than a parallel
+  bounded text help must consume the same declaration rather than a parallel
   command-specific flag registry;
+- whether exactly one member of an otherwise optional flag group is required;
+  declare that group once on `CommandSpec` so parsing, namespace help, and
+  exact-help required-one-of labels cannot drift;
+- whether a compatibility spelling is a deprecated alias, which one canonical
+  input it binds, the finite minimum-minor lifetime, its exact stderr warning,
+  and its conflict rule; never implement an alias as a second application input;
+- whether a finite command-path compatibility spelling is owned by the
+  canonical `CommandSpec.DeprecatedAliases`; never add a router-side alias
+  registry or a second handler/intent identity. Normalize it only against the
+  active view so a hidden canonical path cannot leak, and make canonical/alias
+  help selectors symmetric in space and dotted forms;
 - which derived policy applies at `app/execution.Invoker`; do not make the template assume approval, confirmation, OS authentication, or dry-run;
 - audit-safe fields and secret fields;
 - allowed network destination.
@@ -217,7 +283,7 @@ saved. In this product keep `help`, `doctor`, `version`, and the single exact
 `config` write always-on; only Chatwork task leaves are selectable. Validate the active view
 so visible required-reference consumers retain a reachable visible producer
 and visible recovery actions resolve inside the view; do not silently
-auto-enable a dependency. Human and agent help, trailing-help normalization,
+auto-enable a dependency. Text help, trailing-help normalization,
 workflows, recoveries, and routing must all consume the same active view.
 If persisted selection state is invalid, do not render the always-on control
 plane as though it were a deliberate empty root view. Keep config-scoped help
@@ -295,27 +361,32 @@ different references different kinds; sharing a kind declares them
 interchangeable across every matching field/input edge. Ensure required
 reference chains lead back to a command that can run without an unresolved
 required reference rather than forming a closed cycle.
-Verify that root agent help adds only the command's path, namespace, summary,
-capability, outcome, effect, and role. Then use an exact-command invocation to
-verify the complete contract and touching workflows. A namespace invocation is
-a compact index with exact-command pointers, never an aggregate of complete
-contracts. Root and namespace agent help must not regain inputs, output detail,
-authentication, errors, mutation facts, or workflows as the catalog grows, and
-each encoded command entry must remain within the 512-byte catalog budget.
-Keep human root help as a catalog-derived navigation projection: directly
-runnable single-word commands plus one entry per top-level namespace. Exact
-leaf summaries belong in namespace help, and each displayed selector must
-round-trip through the same catalog rather than a separate help registry.
-If a human workflow genuinely benefits from a short "when this, do that"
-recipe, store structured exact command steps on catalog command metadata.
-Render it only in exact-command human help when the selected command is one of
-its steps and every step exists in the active view. Keep root/namespace human
-help as indexes and keep recipes out of every agent-help shape.
-Exact human help must derive input requirements, repeatability, source, allowed
-values, reference kind, and descriptions from `AgentContract.Inputs`; do not
-reconstruct that contract from usage prose. Validate every projected input name
-as terminal structure regardless of whether its source is argv, environment,
-configuration, or stdin.
+Keep root help as a catalog-derived navigation projection: directly runnable
+single-word commands plus one entry per top-level namespace. Namespace help
+must emit each visible leaf's complete usage line, required flags, and required
+one-of flag groups so one lookup is enough to begin invocation. Each displayed
+selector must round-trip through the same catalog rather than a separate help
+registry.
+
+Exact text help derives from `AgentContract.Inputs` and is capped at 2,048
+encoded bytes. It contains only one usage line, each flag's name/type/
+required, required-one-of, or optional state/one-line description, combination
+constraints, and at most two catalog-backed examples whose steps remain visible. Do not publish
+complete input/output schemas, authentication, failures, mutation facts, or
+workflows as a help contract. Keep that metadata complete for internal catalog
+validation and runtime structured errors. Reject the catalog if even the
+minimum exact-help projection cannot fit in either the full or an active view.
+Validate every projected input name
+as terminal structure. The retired `help ... --format agent` form must fail
+explicitly with `--help` migration guidance; data-command `--format json`
+remains independent.
+
+For unknown flags, derive a deterministic did-you-mean suggestion from the
+selected command's declared canonical flags and deprecated aliases. Name the
+invalid input and fail; never rewrite argv, choose a target, authenticate, or
+execute the suggestion automatically. The reviewed `messages list --limit`
+alias binds to `--count` for at least two minor releases and succeeds with the
+exact stderr migration warning.
 
 Keep every recovery `command` executable under the template's small grammar:
 use one exact catalog path, or `help` plus an exact path/canonical namespace.
@@ -449,7 +520,7 @@ Add the smallest set that proves the capability:
   compatibility decision;
 - command-attention tests proving a new configurable leaf stays off in a saved
   profile, is absent from the unconfigured control-only view, participates in active
-  reference/recovery closure, and cannot leak through any human/agent help or
+  reference/recovery closure, and cannot leak through any text help or
   routing projection while disabled. Prove disabled execution performs zero
   PAT/provider calls and re-enabling retains the leaf's original security
   policy. For this product also prove single-command routing, always-on

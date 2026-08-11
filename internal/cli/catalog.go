@@ -16,10 +16,6 @@ import (
 const (
 	// ProgramName is intentionally a single bootstrap replacement token.
 	ProgramName = "cwk"
-
-	// maxAgentIndexEntryBytes bounds the selection-only root help cost per
-	// command. Detailed invocation contracts belong in scoped help.
-	maxAgentIndexEntryBytes = 512
 )
 
 type commandHandler func(context.Context, *CLI, CommandSpec, operation.Intent, []string) int
@@ -94,13 +90,14 @@ func (s InputSource) validate() error {
 // CommandInput is one machine-readable input contract. ReferenceKind is empty
 // only when the input is not an opaque reference.
 type CommandInput struct {
-	Name          string      `json:"name"`
-	Source        InputSource `json:"source"`
-	Required      bool        `json:"required"`
-	Repeatable    bool        `json:"repeatable,omitempty"`
-	Description   string      `json:"description"`
-	AllowedValues []string    `json:"allowed_values"`
-	ReferenceKind string      `json:"reference_kind,omitempty"`
+	Name              string      `json:"name"`
+	Source            InputSource `json:"source"`
+	Required          bool        `json:"required"`
+	Repeatable        bool        `json:"repeatable,omitempty"`
+	Description       string      `json:"description"`
+	AllowedValues     []string    `json:"allowed_values"`
+	ReferenceKind     string      `json:"reference_kind,omitempty"`
+	DeprecatedAliases []string    `json:"-"`
 }
 
 // OutputFormat identifies one stable presentation supported by a command.
@@ -304,15 +301,22 @@ type CommandSpec struct {
 	Path    string
 	Summary string
 	Args    string
-	Effect  operation.Effect
-	Role    CommandRole
+	// DeprecatedAliases are finite compatibility spellings normalized to Path
+	// before dispatch. They never become command identity or a second handler.
+	DeprecatedAliases []string
+	Effect            operation.Effect
+	Role              CommandRole
 	// Configurable allows this leaf to be omitted from one tool-local command
 	// view. False is deliberately the always-visible control-plane default.
-	Configurable bool
-	Agent        AgentContract
-	HumanRecipes []HumanHelpRecipe
-	handler      commandHandler
-	chatwork     *chatworkCommandDefinition
+	Configurable    bool
+	Agent           AgentContract
+	HumanRecipes    []HumanHelpRecipe
+	HelpConstraints []string
+	// ExclusiveInputGroups declare flag groups where exactly one member is
+	// required. Parsing and namespace help both derive from this catalog fact.
+	ExclusiveInputGroups [][]string
+	handler              commandHandler
+	chatwork             *chatworkCommandDefinition
 }
 
 // Usage returns the complete command invocation without optional prose.
@@ -395,37 +399,30 @@ func DefaultCatalog() Catalog {
 		},
 		CommandSpec{
 			Path:    "help",
-			Summary: "人向けヘルプまたはエージェント向けコマンド仕様を表示する",
-			Args:    "[command] [--format text|agent]",
+			Summary: "コマンドの簡潔なヘルプを表示する",
+			Args:    "[command]",
 			Effect:  operation.EffectRead,
 			Role:    RoleUtility,
 			Agent: AgentContract{
 				CapabilityID: "cli.discovery",
-				Outcome:      "外部I/Oを行わずに、ルートまたは名前空間の索引から正確なコマンドを選び、その使用法、契約、ワークフロー、次の操作を確認する",
+				Outcome:      "外部I/Oを行わずに、ルートまたは名前空間から正確なコマンドと簡潔な使用法を確認する",
 				Inputs: []CommandInput{
 					{Name: "command", Source: InputSourceArgument, Required: false, Description: "完全一致するコマンドパスまたは正規のコマンド名前空間を選択します。", AllowedValues: []string{}},
-					{Name: "--format", Source: InputSourceFlag, Required: false, Description: "人向けテキストまたは機械可読なエージェント契約を選択します。", AllowedValues: []string{"text", "agent"}},
 				},
 				Output: CommandOutput{
-					Formats:       []OutputFormat{OutputFormatText, OutputFormatJSON},
+					Formats:       []OutputFormat{OutputFormatText},
 					DefaultFormat: OutputFormatText,
 					Fields: []OutputField{
-						{Name: "path", Type: OutputFieldTypeString, Description: "対象範囲付きヘルプの選択子として使用できる完全一致のコマンドパス。"},
-						{Name: "namespace", Type: OutputFieldTypeString, Description: "対象範囲付きヘルプの選択子として使用できる正規の最上位名前空間。"},
-						{Name: "summary", Type: OutputFieldTypeString, Description: "コマンドが行うタスクの簡潔な説明。"},
-						{Name: "capability_id", Type: OutputFieldTypeString, Description: "安定した製品機能識別子。"},
-						{Name: "outcome", Type: OutputFieldTypeString, Description: "コマンドで達成できるユーザー成果。"},
-						{Name: "effect", Type: OutputFieldTypeString, Description: "宣言された read、create、write のいずれかの作用。"},
-						{Name: "role", Type: OutputFieldTypeString, Description: "宣言された utility、discover、act のいずれかのワークフローロール。"},
+						{Name: "usage", Type: OutputFieldTypeString, Description: "そのまま呼び出しを組み立てられる使用法。"},
+						{Name: "flags", Type: OutputFieldTypeArray, Description: "各フラグの型、必須性、簡潔な説明。"},
+						{Name: "constraints", Type: OutputFieldTypeArray, Description: "該当する場合の入力併用制約。"},
+						{Name: "examples", Type: OutputFieldTypeArray, Description: "該当する場合の最大二件の使用例。"},
 					},
-					Completeness:      OutputCompletenessComplete,
-					JSONEnvelope:      "commands",
-					JSONSchemaVersion: 4,
+					Completeness: OutputCompletenessComplete,
 				},
 				Prerequisites: []string{},
 				Errors: []CommandError{
-					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help", "text または agent 形式と、ルートヘルプにあるコマンドパスまたは名前空間を指定してください。"),
-					declaredCommandError(fault.KindContract, "output_encoding_failed", false, "help", "エージェント向けヘルプのJSON変換を修正してください。"),
+					declaredCommandError(fault.KindInvalidInput, "invalid_arguments", false, "help", "ルートヘルプにあるコマンドパスまたは名前空間を指定し、廃止済みの agent 形式ではなく --help を使用してください。"),
 					declaredCommandError(fault.KindInternal, "output_write_failed", true, "help", "書き込み可能な出力ストリームで再試行してください。"),
 					declaredCommandError(fault.KindCanceled, "operation_canceled", true, "help", "呼び出し元の準備ができたら再試行してください。"),
 				},
@@ -471,12 +468,36 @@ func (c Catalog) Validate() error {
 		return fmt.Errorf("command catalog is empty")
 	}
 	seen := make(map[string]struct{}, len(c.commands))
+	aliases := make(map[string]string)
+	type commandAlias struct {
+		path  string
+		owner string
+	}
+	aliasOrder := make([]commandAlias, 0)
 	producedKinds := make(map[string][]string)
 	consumedKinds := make(map[string][]string)
 	paginationKindOwners := make(map[string]string)
 	for index, command := range c.commands {
 		if err := operation.ValidateCommandPath(command.Path); err != nil {
 			return fmt.Errorf("catalog command %d: %w", index, err)
+		}
+		for _, alias := range command.DeprecatedAliases {
+			if err := operation.ValidateCommandPath(alias); err != nil {
+				return fmt.Errorf("catalog command %q has invalid deprecated alias %q: %w", command.Path, alias, err)
+			}
+			if alias == command.Path {
+				return fmt.Errorf("catalog command %q repeats its canonical path as a deprecated alias", command.Path)
+			}
+			if owner, exists := aliases[alias]; exists {
+				return fmt.Errorf("catalog deprecated alias %q is shared by %q and %q", alias, owner, command.Path)
+			}
+			for _, existing := range aliasOrder {
+				if strings.HasPrefix(alias, existing.path+" ") || strings.HasPrefix(existing.path, alias+" ") {
+					return fmt.Errorf("catalog deprecated aliases %q for %q and %q for %q collide at a command/namespace boundary", existing.path, existing.owner, alias, command.Path)
+				}
+			}
+			aliases[alias] = command.Path
+			aliasOrder = append(aliasOrder, commandAlias{path: alias, owner: command.Path})
 		}
 		if err := validateContractText("command summary", command.Summary); err != nil {
 			return fmt.Errorf("catalog command %q has an invalid summary", command.Path)
@@ -494,10 +515,13 @@ func (c Catalog) Validate() error {
 		if err := validateAgentContract(command); err != nil {
 			return fmt.Errorf("catalog command %q: %w", command.Path, err)
 		}
-		if err := validateAgentIndexEntry(command); err != nil {
+		if err := validateHumanHelpRecipes(command.HumanRecipes); err != nil {
 			return fmt.Errorf("catalog command %q: %w", command.Path, err)
 		}
-		if err := validateHumanHelpRecipes(command.HumanRecipes); err != nil {
+		if err := validateHelpConstraints(command.HelpConstraints); err != nil {
+			return fmt.Errorf("catalog command %q: %w", command.Path, err)
+		}
+		if err := validateExclusiveInputGroups(command); err != nil {
 			return fmt.Errorf("catalog command %q: %w", command.Path, err)
 		}
 		if err := validateCommandReferenceRole(command); err != nil {
@@ -525,6 +549,16 @@ func (c Catalog) Validate() error {
 			paginationKindOwners[command.Agent.Pagination.CursorOutput.ReferenceKind] = command.Path
 		}
 	}
+	for alias, owner := range aliases {
+		if _, exists := seen[alias]; exists {
+			return fmt.Errorf("catalog deprecated alias %q for %q collides with a canonical command", alias, owner)
+		}
+		for path := range seen {
+			if strings.HasPrefix(alias, path+" ") || strings.HasPrefix(path, alias+" ") {
+				return fmt.Errorf("catalog deprecated alias %q for %q collides with command boundary %q", alias, owner, path)
+			}
+		}
+	}
 	for kind, owner := range paginationKindOwners {
 		producers := producedKinds[kind]
 		consumers := consumedKinds[kind]
@@ -546,6 +580,9 @@ func (c Catalog) Validate() error {
 		return err
 	}
 	for _, command := range c.commands {
+		if output := renderCommandHelp(command, c.commands); len(output) > maxExactHelpBytes {
+			return fmt.Errorf("catalog command %q exact help exceeds %d encoded bytes", command.Path, maxExactHelpBytes)
+		}
 		for _, declaredError := range command.Agent.Errors {
 			for _, action := range declaredError.NextActions {
 				nextCommand, err := c.resolveRecoveryCommand(action.Command)
@@ -582,6 +619,47 @@ func validateHumanHelpRecipes(recipes []HumanHelpRecipe) error {
 				strings.IndexFunc(step.Args, isUnsafeContractRune) >= 0 {
 				return fmt.Errorf("human help recipe %d step %d has invalid arguments", recipeIndex, stepIndex)
 			}
+		}
+	}
+	return nil
+}
+
+func validateHelpConstraints(constraints []string) error {
+	for index, constraint := range constraints {
+		if err := validateContractText("help constraint", constraint); err != nil {
+			return fmt.Errorf("help constraint %d is invalid", index)
+		}
+	}
+	return nil
+}
+
+func validateExclusiveInputGroups(command CommandSpec) error {
+	inputs := make(map[string]CommandInput, len(command.Agent.Inputs))
+	for _, input := range command.Agent.Inputs {
+		inputs[input.Name] = input
+	}
+	grouped := make(map[string]struct{})
+	for _, group := range command.ExclusiveInputGroups {
+		if len(group) < 2 {
+			return fmt.Errorf("exclusive input group requires at least two flags")
+		}
+		seen := make(map[string]struct{}, len(group))
+		for _, name := range group {
+			input, exists := inputs[name]
+			if !exists || input.Source != InputSourceFlag {
+				return fmt.Errorf("exclusive input group names an unknown or non-flag input %q", name)
+			}
+			if input.Required {
+				return fmt.Errorf("exclusive input group member %q must not also be individually required", name)
+			}
+			if _, duplicate := seen[name]; duplicate {
+				return fmt.Errorf("exclusive input group repeats %q", name)
+			}
+			if _, duplicate := grouped[name]; duplicate {
+				return fmt.Errorf("input %q belongs to more than one exclusive input group", name)
+			}
+			seen[name] = struct{}{}
+			grouped[name] = struct{}{}
 		}
 	}
 	return nil
@@ -653,6 +731,7 @@ func validateAgentContract(command CommandSpec) error {
 	seenInputs := make(map[string]struct{}, len(contract.Inputs))
 	inputsByName := make(map[string]CommandInput, len(contract.Inputs))
 	commandLineInputs := make(map[string]struct{})
+	inputNamesAndAliases := make(map[string]string, len(contract.Inputs))
 	for index, input := range contract.Inputs {
 		if err := input.Source.validate(); err != nil {
 			return fmt.Errorf("agent input %d: %w", index, err)
@@ -682,8 +761,27 @@ func validateAgentContract(command CommandSpec) error {
 		if _, exists := seenInputs[input.Name]; exists {
 			return fmt.Errorf("agent input %q is declared more than once", input.Name)
 		}
+		if owner, exists := inputNamesAndAliases[input.Name]; exists {
+			return fmt.Errorf("agent input %q collides with deprecated alias owned by %q", input.Name, owner)
+		}
 		seenInputs[input.Name] = struct{}{}
+		inputNamesAndAliases[input.Name] = input.Name
 		inputsByName[input.Name] = input
+		if len(input.DeprecatedAliases) > 0 && input.Source != InputSourceFlag {
+			return fmt.Errorf("agent input %q may declare deprecated aliases only when it is a flag", input.Name)
+		}
+		for _, alias := range input.DeprecatedAliases {
+			if err := validateInputName(CommandInput{Name: alias, Source: InputSourceFlag}); err != nil {
+				return fmt.Errorf("agent input %q deprecated alias: %w", input.Name, err)
+			}
+			if alias == input.Name {
+				return fmt.Errorf("agent input %q repeats its canonical name as a deprecated alias", input.Name)
+			}
+			if owner, exists := inputNamesAndAliases[alias]; exists {
+				return fmt.Errorf("agent input %q deprecated alias %q collides with %q", input.Name, alias, owner)
+			}
+			inputNamesAndAliases[alias] = input.Name
+		}
 		if input.ReferenceKind != "" {
 			if err := validateReferenceName(input.ReferenceKind); err != nil {
 				return fmt.Errorf("agent input %q reference kind: %w", input.Name, err)
@@ -1126,6 +1224,7 @@ func validateInputName(input CommandInput) error {
 type argumentSyntaxInput struct {
 	Required      bool
 	AllowedValues []string
+	ValueSyntax   string
 }
 
 type argumentSyntaxToken struct {
@@ -1185,7 +1284,7 @@ func parseArgumentSyntaxInputs(syntax string) (map[string]argumentSyntaxInput, e
 			if _, exists := inputs[name]; exists {
 				return nil, fmt.Errorf("argument syntax input %q is declared more than once", name)
 			}
-			inputs[name] = argumentSyntaxInput{Required: !token.Optional, AllowedValues: allowed}
+			inputs[name] = argumentSyntaxInput{Required: !token.Optional, AllowedValues: allowed, ValueSyntax: valueSyntax}
 			continue
 		}
 
@@ -1197,7 +1296,7 @@ func parseArgumentSyntaxInputs(syntax string) (map[string]argumentSyntaxInput, e
 			if _, exists := inputs[name]; exists {
 				return nil, fmt.Errorf("argument syntax input %q is declared more than once", name)
 			}
-			inputs[name] = argumentSyntaxInput{Required: !token.Optional, AllowedValues: []string{}}
+			inputs[name] = argumentSyntaxInput{Required: !token.Optional, AllowedValues: []string{}, ValueSyntax: token.Value}
 			continue
 		}
 
@@ -1208,7 +1307,7 @@ func parseArgumentSyntaxInputs(syntax string) (map[string]argumentSyntaxInput, e
 			if _, exists := inputs[token.Value]; exists {
 				return nil, fmt.Errorf("argument syntax input %q is declared more than once", token.Value)
 			}
-			inputs[token.Value] = argumentSyntaxInput{Required: false, AllowedValues: []string{}}
+			inputs[token.Value] = argumentSyntaxInput{Required: false, AllowedValues: []string{}, ValueSyntax: "<selector>"}
 			continue
 		}
 		return nil, fmt.Errorf("argument syntax token %q is outside the supported grammar", token.Value)
@@ -1344,17 +1443,6 @@ func validateCommandReferenceRole(command CommandSpec) error {
 		if !hasRequiredReference {
 			return fmt.Errorf("act commands must require at least one opaque reference")
 		}
-	}
-	return nil
-}
-
-func validateAgentIndexEntry(command CommandSpec) error {
-	encoded, err := json.Marshal(projectAgentIndexCommand(command))
-	if err != nil {
-		return fmt.Errorf("agent index entry cannot be encoded: %w", err)
-	}
-	if len(encoded) > maxAgentIndexEntryBytes {
-		return fmt.Errorf("agent index entry is %d bytes; maximum is %d", len(encoded), maxAgentIndexEntryBytes)
 	}
 	return nil
 }
@@ -1529,6 +1617,11 @@ func (c Catalog) ActiveView(enabled []string) (Catalog, []string, error) {
 // Unlike full-catalog validation, a visible producer need not have a visible
 // consumer because reducing action surface is a valid command-view choice.
 func (c Catalog) validateActiveView(full Catalog) error {
+	for _, command := range c.commands {
+		if output := renderCommandHelp(command, c.commands); len(output) > maxExactHelpBytes {
+			return fmt.Errorf("active command view command %q exact help exceeds %d encoded bytes", command.Path, maxExactHelpBytes)
+		}
+	}
 	producedKinds := make(map[string]struct{})
 	for _, command := range c.commands {
 		for _, produced := range command.ProducedRefs() {
@@ -1663,10 +1756,16 @@ func (c Catalog) Match(args []string) (CommandSpec, []string, bool) {
 }
 
 func cloneCommandSpec(command CommandSpec) CommandSpec {
+	command.DeprecatedAliases = cloneSlice(command.DeprecatedAliases)
 	command.Agent = cloneAgentContract(command.Agent)
 	command.HumanRecipes = cloneSlice(command.HumanRecipes)
 	for index := range command.HumanRecipes {
 		command.HumanRecipes[index].Steps = cloneSlice(command.HumanRecipes[index].Steps)
+	}
+	command.HelpConstraints = cloneSlice(command.HelpConstraints)
+	command.ExclusiveInputGroups = cloneSlice(command.ExclusiveInputGroups)
+	for index := range command.ExclusiveInputGroups {
+		command.ExclusiveInputGroups[index] = cloneSlice(command.ExclusiveInputGroups[index])
 	}
 	return command
 }
@@ -1675,6 +1774,7 @@ func cloneAgentContract(contract AgentContract) AgentContract {
 	contract.Inputs = cloneSlice(contract.Inputs)
 	for index := range contract.Inputs {
 		contract.Inputs[index].AllowedValues = cloneSlice(contract.Inputs[index].AllowedValues)
+		contract.Inputs[index].DeprecatedAliases = cloneSlice(contract.Inputs[index].DeprecatedAliases)
 	}
 	contract.Output.Formats = cloneSlice(contract.Output.Formats)
 	contract.Output.Fields = cloneSlice(contract.Output.Fields)

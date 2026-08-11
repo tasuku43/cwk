@@ -6,7 +6,7 @@ This document defines the small set of cross-project contracts supplied for API-
 
 | Area | Fixed by this template | Decided by the derived project |
 |---|---|---|
-| Public surface | Commands describe user outcomes; catalog metadata is complete and machine-readable | Which outcomes, commands, aliases, and compatibility promises exist |
+| Public surface | Commands describe user outcomes; catalog metadata is complete and machine-validated behind bounded text help | Which outcomes, commands, aliases, and compatibility promises exist |
 | Discovery and action | Discovery emits opaque references; action consumes an exact reference without rediscovery or transformation | Reference kinds, filters, ambiguity rules, and task-specific workflows |
 | Authentication | PAT-only secret-free requirements and session metadata, a fail-closed application gate, an ephemeral binding issued only by infrastructure and passed unchanged through task ports, exact record revalidation before I/O, typed failures, and zero downstream calls on rejection | Any future method, persistence, expiry, refresh/cache, tenant/account selection, login UX, or revocation requires a new product and security decision |
 | Future OAuth implementation | OAuth is not supplied by the current core; a future proposal must keep reviewed protocol machinery behind infrastructure | Whether OAuth is justified and which reviewed adapter/library is acceptable; see [ADR 0001](decisions/0001-oauth-library-boundary.md) |
@@ -44,12 +44,15 @@ login, status, logout, callback, browser, profile, or client-registration
 surface. `CWK_AUTH_METHOD` is not a public input, and its ambient value cannot
 change adapter selection or recovery.
 
-The scoped catalog contract declares the required PAT method and token
-environment prerequisite. `chatwork_token_missing` and
-`chatwork_token_invalid` recover through exact scoped help; no error points to
-an authentication lifecycle command. Synthetic adapter tests pin the exact
-header/destination, token redaction, binding isolation, and zero-call failure
-behavior.
+The internal catalog contract declares the required PAT method and token
+environment prerequisite. Runtime `chatwork_token_missing` and
+`chatwork_token_invalid` faults publish stable classification, enumerate the
+sole inspected environment source plus unsupported configuration/keychain
+sources, and recover through exact command `doctor`; no error depends on a
+public agent-contract dump or points to an authentication lifecycle command.
+The offline doctor check reports only source/state metadata. Synthetic adapter
+tests pin the exact header/destination, token redaction, binding isolation, and
+zero-call failure behavior.
 
 ## Pagination and completeness
 
@@ -70,7 +73,7 @@ An exhaustive command follows this contract:
 - `complete` means the command owns exhaustive traversal. It uses the bounded drain behavior above, exposes no pagination binding, and returns the whole declared result or no result.
 - `paged` means one successful invocation returns one complete public page, not an exhaustive collection. Its `AgentContract.Pagination` binds exactly one optional cursor argument or flag to exactly one top-level string cursor field. That field is always emitted beside `schema_version` and the collection envelope; `CommandOutput.Fields` continue to describe only items inside the envelope. Both cursor endpoints carry the same dedicated opaque reference kind, and no other command, input, or output may use that cursor kind. The typed `completion: "empty_cursor"` rule makes the empty string the only completion marker; omission, JSON `null`, and a non-string value are contract failures, not completion.
 
-Paged commands support only JSON and use JSON as their default. This keeps every successful presentation self-describing and prevents a text or TSV page without a completion marker from looking exhaustive. Catalog validation rejects a missing paged binding, a binding on complete output, any other output format, a required or non-CLI cursor input, an invalid or colliding top-level cursor field, a missing or unknown completion rule, non-opaque cursors, kind mismatch, and extra cursor candidates. Renderer fixture checks require the top-level cursor to be present and string-typed. Agent help projects the binding with the input/output contracts and derives a same-command continuation workflow, so an agent passes the emitted cursor bytes back without trimming, decoding, or guessing. A declared page is not an incomplete successful output; silently truncating that page, omitting its continuation cursor, or reaching a local limit without a cursor is a contract failure.
+Paged commands support only JSON and use JSON as their default. This keeps every successful presentation self-describing and prevents a text or TSV page without a completion marker from looking exhaustive. Catalog validation rejects a missing paged binding, a binding on complete output, any other output format, a required or non-CLI cursor input, an invalid or colliding top-level cursor field, a missing or unknown completion rule, non-opaque cursors, kind mismatch, and extra cursor candidates. Renderer fixture checks require the top-level cursor to be present and string-typed. Internal `AgentContract` validation derives the same-command continuation workflow, while the successful JSON page carries the cursor an agent passes back without trimming, decoding, or guessing. A declared page is not an incomplete successful output; silently truncating that page, omitting its continuation cursor, or reaching a local limit without a cursor is a contract failure.
 
 A finite application-owned projection over one already complete bounded task
 result is not provider pagination. It may expose SCIM-derived one-based
@@ -99,7 +102,20 @@ The adapter contract must distinguish a request that was not sent, a confirmed r
 
 The template does not select a backoff formula or universal numeric ceiling because vendor limits and latency budgets differ. A derived security/product contract records the maximum accepted timeout and attempt count, formula, jitter source, caps, and tests; user configuration above those bounds must fail rather than create an effectively unbounded call.
 
-Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; file input is limited to 5 MiB. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
+Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; upload file input is limited to 5 MiB. A message create/update body is independently limited to nonempty valid UTF-8 of at most 65,535 bytes. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
+
+`messages send` and `messages update` require exactly one of literal `--body`
+or `--body-file`; the literal `-` selects injected stdin. The CLI consumes
+stdin with a 65,536-byte limited reader. A file path remains typed task data
+through the application boundary and is dereferenced only by infrastructure's
+injected context-carrying regular-file reader while constructing the reviewed
+form request. Production pipe stdin is cancellation-aware without an abandoned
+reader, and the body-file read stops at 65,536 bytes rather than using the
+larger upload budget. Newlines,
+Chatwork notation, and shell metacharacters are opaque body bytes, not command
+syntax. Empty, oversized, NUL-containing, invalid UTF-8, or unreadable input
+returns a declared non-retryable `invalid_input` fault before provider HTTP,
+without copying the body, path, or private read failure into the public error.
 
 For Chatwork `429`, the authoritative general timing signal is
 `x-ratelimit-reset`, whose official value is Unix seconds. The adapter accepts
@@ -169,6 +185,21 @@ substring, and returns every canonical candidate with query/source-count
 provenance. Infrastructure must reject or remain unreachable for a leaked
 `members.find` provider task or nonempty member query.
 
+`rooms list --query` is an application-owned projection of one complete
+`GET /rooms` response. The provider request remains the ordinary rooms list
+with no query parameter. Application scans Unicode rune windows with simple
+case folding, preserves provider order, and returns every canonical candidate
+with query/source-count/candidate-count/completeness provenance. It performs no
+Unicode or whitespace normalization, trim, ranking, multi-rune case expansion,
+or automatic selection. Infrastructure rejects or remains unreachable for a
+leaked room query. This case-insensitive contract does not change the exact
+case-sensitive `members find` contract.
+
+Every consuming `--room <room-id>` remains an exact action input: a
+leading-zero-free positive decimal of 1 through 32 digits emitted as
+`room_ref`. Names, `rid...`, `chatwork-room:...`, and browser URLs fail before
+adapter access; neither CLI nor infrastructure resolves or normalizes them.
+
 `messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
 `--count`, and `--context` are application-owned selection inputs over the
 single bounded message-list response. `--resolve-relations` is a separate
@@ -182,7 +213,10 @@ OR and period membership form the candidate predicate; typed `send_time` then es
 newest-first candidate rank, with later provider position breaking equal-time
 ties; the one-based start index and requested maximum count select primary
 anchors; direct typed reply context runs last and may increase displayed count
-beyond the requested count. Membership selection does not reorder the
+beyond the requested count. For an active sender, period, or index selection,
+omitted context means `replies`; exact `none` opts out, and context without a
+primary selection is rejected before authentication with named alternatives.
+Membership selection does not reorder the
 provider records or their original sequences. Selection inputs never become
 Chatwork query parameters, reduce provider response bytes, or retrieve older
 history. Adapter request construction rejects them if they cross the
@@ -196,6 +230,29 @@ pagination, but separate calls remain stateless over separate Chatwork results
 and source mutations can shift ranks. Invalid ranks, ambiguous dates,
 offset-free/fractional timestamps, conflicting selectors, and empty or reversed
 periods fail before authentication or provider I/O.
+
+`messages show --context replies` composes two documented reads rather than
+adding an upstream query: one exact `GET /rooms/{room_id}/messages/{message_id}`
+followed by one `GET /rooms/{room_id}/messages?force=1` using the same context
+and authentication binding. The second response remains bounded by the
+documented 100-message ceiling and its access-limitation header. Application
+selects direct children only from typed same-room reply edges whose exact
+target is the anchor and preserves their provider positions. It clears
+`MessageFilter` and `MessageRelationFetchLimit` before both adapter calls.
+It then rebinds reply-resolution state to only the visible anchor and children,
+so another recent-window message is not labeled resolved unless parent
+resolution emits the corresponding context.
+`--resolve-relations` counts only subsequent unique exact parent-target reads;
+zero still permits the fixed child-source read. Omitted context and `none` make
+only the exact request. Neither call performs body search, child pagination, or
+arbitrary history traversal.
+
+The catalog-declared deprecated `messages list --limit` spelling binds to the
+same typed input as `--count` for at least two minor releases. It never crosses
+the application boundary as a second field or reaches the provider; successful
+use emits the migration warning on stderr. Conflicting alias/canonical inputs
+and other invalid flags fail before authentication/I/O. Did-you-mean output is
+diagnostic only and never rewrites the request.
 
 The relation budget accepts 0..100, defaults to five at the public CLI, and is
 also removed before infrastructure. Application walks explicit same-room reply

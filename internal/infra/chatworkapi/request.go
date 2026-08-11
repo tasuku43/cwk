@@ -1,6 +1,7 @@
 package chatworkapi
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -9,7 +10,7 @@ import (
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
-func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
+func (c *Client) buildRequestContext(ctx context.Context, input chatwork.Request) (requestSpec, error) {
 	if err := input.Validate(); err != nil {
 		return requestSpec{}, invalidRequest("Chatwork タスク入力がドメイン検証に失敗しました")
 	}
@@ -56,6 +57,9 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 	case chatwork.TaskContactsList:
 		return noBodyRequest(http.MethodGet, "/contacts", nil), nil
 	case chatwork.TaskRoomsList:
+		if input.RoomQuery != "" {
+			return requestSpec{}, invalidRequest("room query must be applied before the Chatwork request boundary")
+		}
 		return noBodyRequest(http.MethodGet, "/rooms", nil), nil
 	case chatwork.TaskRoomsCreate:
 		if input.Name == "" || len(input.Admins) == 0 {
@@ -133,10 +137,11 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		if err != nil {
 			return requestSpec{}, err
 		}
-		if input.Body == "" {
-			return requestSpec{}, invalidRequest("message creation requires a body")
+		body, err := c.messageBody(ctx, input)
+		if err != nil {
+			return requestSpec{}, err
 		}
-		form := url.Values{"body": {input.Body}}
+		form := url.Values{"body": {body}}
 		if input.SelfUnread {
 			form.Set("self_unread", "1")
 		}
@@ -162,6 +167,11 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		}
 		return formRequest(http.MethodPut, path, form), nil
 	case chatwork.TaskMessagesShow:
+		if len(input.MessageFilter.Senders) != 0 || input.MessageFilter.Period != (chatwork.MessagePeriod{}) ||
+			input.MessageFilter.Context != "" || input.MessageFilter.StartIndex != 0 || input.MessageFilter.Count != 0 ||
+			input.MessageRelationFetchLimit != 0 {
+			return requestSpec{}, invalidRequest("exact message context must be applied before the Chatwork request boundary")
+		}
 		path, err := messagePath()
 		return noBodyRequest(http.MethodGet, path, nil), err
 	case chatwork.TaskMessagesUpdate:
@@ -169,10 +179,11 @@ func (c *Client) buildRequest(input chatwork.Request) (requestSpec, error) {
 		if err != nil {
 			return requestSpec{}, err
 		}
-		if input.Body == "" {
-			return requestSpec{}, invalidRequest("message update requires a body")
+		body, err := c.messageBody(ctx, input)
+		if err != nil {
+			return requestSpec{}, err
 		}
-		return formRequest(http.MethodPut, path, url.Values{"body": {input.Body}}), nil
+		return formRequest(http.MethodPut, path, url.Values{"body": {body}}), nil
 	case chatwork.TaskMessagesDelete:
 		path, err := messagePath()
 		return noBodyRequest(http.MethodDelete, path, nil), err

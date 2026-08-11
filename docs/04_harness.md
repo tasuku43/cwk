@@ -74,7 +74,7 @@ capability and Chatwork-operation ledgers. The active attention view is a
 catalog-derived local projection, not a reason to mark a supported capability
 internal, deferred, excluded, or uncovered.
 
-The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-operation snapshot rather than a public-command registry. Its exact 32 operation IDs and method/path pairs are pinned to the official 2026-07-18 documentation index and map only to capability IDs. Contract validation rejects a same-sized substituted operation set, missing or duplicate operation IDs, method/path drift, unknown capabilities, or a Chatwork-backed capability with no upstream owner. The manifest is now `coverage_status: complete`, so any operation without at least one public capability owner fails the gate. Returning it to `planned` would reopen, not complete, this work. Future provider additions require a new reviewed snapshot decision; they do not silently extend the active goal.
+The derived project also owns `.harness/chatwork_api_v2.json`, a fixed upstream-operation snapshot rather than a public-command registry. Its exact 32 operation IDs and method/path pairs are pinned to the official 2026-07-18 documentation index and map only to capability IDs. Contract validation rejects a same-sized substituted operation set, missing or duplicate operation IDs, method/path drift, unknown capabilities, or a non-excluded Chatwork-backed capability with no upstream owner. An `excluded` Chatwork capability may deliberately record an outcome for which that reviewed upstream snapshot has no operation; its nonempty reason is the evidence rather than an invented route. The manifest is now `coverage_status: complete`, so any operation without at least one public capability owner fails the gate. Returning it to `planned` would reopen, not complete, this work. Future provider additions require a new reviewed snapshot decision; they do not silently extend the active goal.
 
 The manifest also pins the numeric implementation contract: 20-second metadata/read timeout, 60-second upload timeout, one attempt, 8 MiB successful response body, 64 KiB provider error body, 16 MiB complete output, 10,000 aggregate list items, the five reviewed provider operations with documented 100-item limits, and 5 MiB upload input. Its mutation policy fixes exact-invocation as the default, the precise operation-ID sets requiring `--confirm=access-change` or `--confirm=destructive`, and read-only reconciliation for uncertain outcomes. `contractlint` validates those exact values and sets. Runtime code does not read this manifest; boundary-specific tests compare independently typed production policy with the same accepted decisions.
 
@@ -95,6 +95,17 @@ regeneration, approval, and nonempty description before authentication; they
 pin the complete PUT form, code alphabet/length, explicit regeneration-only
 omission, create description support, exact result-reference binding, and zero
 calls for every empty/partial replacement.
+
+Message send/update boundary tests require exactly one literal, stdin, or file
+body source. They pin the 65,535-byte UTF-8 ceiling, a 65,536-byte-limited stdin
+read, byte-for-byte preservation of newlines/Chatwork notation/shell
+metacharacters, Unix cancellation of a waiting inherited pipe without closing
+it or consuming later input, Windows exact-thread cancellation and join,
+infrastructure-only context-carrying regular-file access with its own
+65,536-byte read ceiling, typed `invalid_input`
+faults, private body/path/read-error redaction, and zero provider HTTP calls for
+every missing, unreadable, empty, oversized, NUL-containing, or invalid UTF-8
+source.
 
 Boundary tests independently pin the provider-specific rate-limit contract:
 one strict official `x-ratelimit-reset` within five minutes, provider `Date`
@@ -149,21 +160,22 @@ The test suite has complementary levels:
 - Catalog pagination tests require an exact optional-input/top-level-string-output opaque cursor binding, typed empty-cursor completion, and JSON-only presentation for `paged` results, and forbid that binding for `complete` results. Renderer fixtures reject an omitted, null, or non-string cursor.
 - Infrastructure tests fix protocol conversion and boundary failure.
 - CLI tests fix routing, help, rendering, and exit behavior.
-- Human-help navigation tests require one root entry per direct command or
+- Text-help navigation tests require one root entry per direct command or
   top-level namespace, catalog-relative ordering within the direct and
   namespace sections, exact namespace membership/counts, no leaf duplication at
-  root, relative namespace listings, natural trailing-help equivalence, and
-  unchanged unknown-command faults.
+  root, relative namespace listings with every leaf's full usage and required
+  flags, natural trailing-help equivalence, and unchanged unknown-command
+  faults.
 - Command-selection catalog tests keep exactly `help`, `doctor`, `version`, and
   `config` always-on; prove missing state exposes only that control plane while
   a saved allowlist keeps later additions off; and make
-  root, namespace, exact, trailing, agent, recovery, workflow, and routing
-  views agree. They reject a visible consumer without a reachable producer and
+  root, namespace, exact, trailing, recovery, workflow, and routing views agree.
+  They reject a visible consumer without a reachable producer and
   a visible recovery action whose command is hidden, without auto-enabling
   either dependency.
 - First-run command-selection tests require root human help to explain that
   `config` is unset and why the reduced view lowers token use and selection
-  mistakes. Root agent help contains only the four control commands; known
+  mistakes. Root text help contains only the four control commands; known
   configurable execution and scoped-help paths return
   `command_selection_required` with exact `config` recovery and zero PAT or
   provider calls, while unknown and saved-disabled paths remain
@@ -203,8 +215,9 @@ The test suite has complementary levels:
   candidate fingerprint; tests require both to match the subsequent doctor
   result and reject an unconfigured empty-selection fingerprint, so an
   uncertain write is inspected without a second mutation or false success.
-  Exact-command agent help publishes the exact dynamic error-message grammar, and a
-  JSON error fixture must match it byte-for-byte around the fingerprint. Missing
+  The internal catalog failure contract validates the exact dynamic
+  error-message grammar, and runtime JSON/text fixtures must match it
+  byte-for-byte around the fingerprint. Missing
   state reports `state=unconfigured source=missing` with zero enabled paths.
 - Config success-output tests fix the two-line natural-Japanese
   visible/hidden/change transcript, require cleanup prose only for a nonzero
@@ -224,19 +237,24 @@ The test suite has complementary levels:
   Formula and require the isolated tap copy to be exact non-executable `0644`
   before strict Homebrew audit. This preserves source bytes while preventing
   runner umask from making a valid Formula unreadable to Homebrew.
-- Exact human-help tests derive required, repeatable, source, allowed-value,
-  reference-kind, and description facts from catalog inputs, including the
-  multi-sender message selection contract and the inclusive 1..100 start-index
-  and count bounds, plus inclusive-since/exclusive-until and fixed-Tokyo
-  `YYYY-MM-DD|today|yesterday` day selection.
+- Exact text-help tests derive flag name, type, required, required-one-of, or
+  optional state, one-line description, combination constraints, and at most two examples from
+  catalog inputs. They enforce a 2,048-byte encoded ceiling for every command,
+  including the multi-sender message selection contract and the inclusive
+  1..100 start-index/count bounds, plus inclusive-since/exclusive-until and
+  fixed-Tokyo `YYYY-MM-DD|today|yesterday` day selection.
+- Full-catalog and active-view validation reject a command whose minimum
+  exact-help projection cannot fit the 2,048-byte ceiling, including when
+  filtering changes which catalog-backed recipes are visible.
 - Catalog hostile-input tests reject invalid UTF-8, terminal controls, Unicode
   format controls, line separators, and whitespace in non-argv input names
   before exact help can render them.
-- Agent-help shape and size-growth tests keep root and namespace discovery
-  index-only while exact-command help retains the complete invocation,
-  recovery, and touching-workflow contract. Namespace growth tests reject
-  global inputs, I/O/error contracts, command contracts, mutations, and
-  workflows in the index payload.
+- Help shape and size tests keep root discovery index-only, require namespace
+  help to expose each visible leaf's complete usage, required flags, and
+  catalog-declared required one-of input groups, and
+  restrict exact help to the reviewed invocation facts. They reject public
+  contract dumps, enforce the exact 2,048-byte ceiling, and require
+  `help ... --format agent` to fail with `--help` migration guidance.
 - Localization contract tests require Japanese summaries, outcomes, input and
   output descriptions, prerequisites, and recovery reasons for every public
   catalog command while separately proving that command paths, flags, allowed
@@ -271,6 +289,14 @@ The test suite has complementary levels:
   manual release-owner review.
 - Shared semantic fixtures and answer keys fix relationship, identity, bounds, coverage, uncertainty, and hostile-text facts independently of presentation.
 - Relationship tests prove that To, quote, time proximity, display names, and layout-looking content do not fabricate reply edges; every valid multiple `[rp]` edge remains ordered, resolves independently, and renders as one scalar or a compact list without becoming unknown.
+- Room-name candidate tests require one ordinary rooms provider read, Unicode
+  simple-case-folded rune-window substring matching, provider-order all-match
+  output, query/source/candidate/completeness metadata, and canonical decimal
+  room references. They cover zero/one/many matches, Japanese and mixed case,
+  no normalization/trim/ranking/multi-rune expansion, zero query leakage, and
+  a no-`grep` flow into an exact action. Negative action tests reject names,
+  leading-zero decimals, `rid...`, kind-prefixed text, and browser URLs before
+  authentication/I/O. Member-name tests remain case-sensitive.
 - Bounded message-selection tests prove sender OR and half-open period
   membership precede typed-time ranking,
   later provider position breaks equal-time ties, one-based start index and
@@ -278,7 +304,9 @@ The test suite has complementary levels:
   and rendered records retain provider order and source sequences. They
   distinguish candidate count, applied start index, requested count, actual
   items per page, and next start index from provider `source-limit`, allow
-  explicit context to exceed the requested count, reject invalid values before
+  omitted context to default to replies for active selections, explicit none to
+  opt out, context without a primary selection to name the offending flag and
+  alternatives before authentication/I/O, context to exceed the requested count, reject invalid values before
   authentication/I/O, reject a source above declared
   coverage before selection, and keep local policy out of the one documented
   provider request. Fixed-clock tests prove Tokyo `today`/`yesterday`, exact
@@ -288,6 +316,65 @@ The test suite has complementary levels:
   `force` request. CLI/runtime tests additionally prove omitted and explicit
   `recent` emit the latest-window request while explicit `changes` retains the
   differential request and output.
+- Exact-message reply-context tests prove omitted/`none` performs one exact
+  request, while explicit `replies` performs that exact request followed by one
+  same-binding force-recent list request whose local context and relation
+  budget fields are cleared. Fixtures cover zero and multiple children,
+  provider-order source sequences, an anchor also present in the source,
+  parent-chain and child coexistence, `--resolve-relations 0`, incomplete and
+  partially restricted source evidence, and strict typed same-room reply-edge
+  matching. Source-window relation state is reset and re-resolved against the
+  visible anchor/children so hidden targets cannot be labeled resolved without
+  separate parent evidence. Body/To/quote/name/time canaries must not create a child. Domain
+  negatives reject wrong anchor/room/target, unresolved edges, invalid source
+  sequences, and over-bound coverage; capsule tests require anchor-first output
+  with separate reply-context and canonical reply-child records.
+- Byte-bounded message-delivery tests validate `--max-bytes` as a
+  CLI/presentation-only integer from 1 byte through 16 MiB and reject duplicate,
+  malformed, zero, negative, and over-bound values before authentication/I/O.
+  Request spies prove the option enters neither the domain request nor provider
+  query, and that the invocation makes the same one list request and relation
+  reads as its unbudgeted twin. Boundary fixtures choose the longest
+  newest-first anchor prefix while preserving provider-order output, whole
+  messages, direct reply context, and reachable relation closure as atomic
+  units. They cover shared context, UTF-8, exact byte boundaries, final newline,
+  and no split body/line/relation record. Metadata assertions fix exactly
+  `max-bytes`, `output-complete`, delivered-anchor `output-items`,
+  always-present eligible-anchor `output-total-items`, and conditional
+  `output-next-start-index` plus remaining-slice `output-next-count`; require
+  that delivery is the absolute final line;
+  and count its terminating newline inside the hard budget. Continuation tests
+  prove the next index is the next newest-first anchor rank with no repeated or
+  skipped anchor. Budgeted relation fixtures require
+  `relation-resolution targets` to equal the emitted relation target count
+  while `fetch-attempts` retains the complete invocation's already executed
+  total. Provider `complete` and selection `next-start-index` must remain
+  unchanged. A budget
+  below the fixed envelope or first atomic unit returns
+  `output_budget_too_small` with zero stdout bytes. Control goldens prove that
+  omitting the flag remains byte-for-byte identical and emits no delivery
+  metadata.
+- Deprecated-alias tests prove `messages list --limit` and `--count` bind the
+  same typed input and output, the alias succeeds with the exact stderr
+  migration notice for at least two minor releases, and conflicting spellings
+  fail before I/O. Unknown-flag tests require a deterministic catalog-derived
+  did-you-mean hint and prove no suggested argv is rewritten or executed.
+- Command-alias tests derive every finite spelling from `CommandSpec`, prove
+  canonical handler/intent identity, post-active-view normalization with no
+  hidden canonical-path disclosure, selector aliases in space/dot forms,
+  redundant help-flag normalization, active-view fail-closed behavior, and
+  catalog rejection of duplicate/path/boundary and alias-to-alias prefix
+  collisions. Routing tests also
+  cover dotted selectors, help flags in every post-command position, zero
+  authentication/I/O, and full-catalog static help under only the declared
+  invalid/unsafe/unavailable selection faults. Root and namespace fallback
+  assertions require the static-catalog/`doctor` notice, while exact help keeps
+  its bounded invocation-only bytes and ordinary tasks retain the load fault.
+- Routing-suggestion tests reject mistyped leading root options before command
+  selection or authentication, limit their hints to the fixed global option
+  set, and require `help --hlep` to name `cwk --help`. Unknown-command tests
+  require deterministic canonical-path guidance from only the active catalog,
+  zero handler execution, and no disabled/full-catalog path disclosure.
 - No-post-processing agent transcripts fail if a supported task requires `jq`, `grep`, a custom join, raw notation parsing, source inspection, or an exploratory provider call.
 - Presentation competitions pin fixtures, agent/model versions, prompts, repetitions, invocation budgets, answer scoring, token accounting, and latency measurement before candidate implementation.
 - Candidate reports retain per-worktree correctness, next-action/reference, token, tool-step, byte, latency, reviewability, maintenance, benchmark-defect, and audit evidence. A selected presentation receives golden and compatibility tests only after an explicit compatibility decision; an inconclusive benchmark is never relabeled as a win.
@@ -307,7 +394,7 @@ Every strong statement should identify its enforcement path.
 | Layer dependency | Go-aware architecture lint and import-boundary tests |
 | Finite domain state | Types, constructors, and table-driven negative tests |
 | Catalog completeness | Whole-catalog contract tests |
-| Discover-to-act composition | Reachable reference-graph validation, required act references, and byte-preserving round-trip tests, including positional `files list` file/room values passed unchanged to `files show` while `absent` is rejected as identity |
+| Discover-to-act composition | Reachable reference-graph validation, required act references, and byte-preserving round-trip tests, including `rooms list --query` candidates passed unchanged as positive decimal `<room-id>` values while names/URLs/`rid...`/kind-prefixed values are rejected, and positional `files list` file/room values passed unchanged to `files show` while `absent` is rejected as identity |
 | Command-bound singleton action | Fixed-target catalog kind/ID/scope validation, no-reference exclusivity tests, and matching mutation-target tests |
 | Side-effect ordering | Fake adapter counters and failure-before-I/O tests |
 | Mutation outcome classification | Structured-fault-first/cause-stripping tests, non-retryable unclassified outcome fallback, and read-only recovery validation |
@@ -317,18 +404,19 @@ Every strong statement should identify its enforcement path.
 | PAT process-local binding | Synthetic two-client/stale-binding fixtures, exact unchanged binding pass-through, fixed-destination header tests, and no persistent credential source |
 | Authentication secret exclusion | Token-canary scans across argv rejection, stdout, stderr, structured faults, logs, snapshots, fixtures, test diagnostics, and repository state |
 | Pagination completeness | Cursor loop/budget/cancellation tests, retryability/catalog agreement, and no-partial-result assertion |
-| Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only presentation, and agent-help/reference-workflow projection |
+| Public paged continuation | Catalog validation of one exact same-kind optional input/top-level output binding, JSON-only runtime presentation, and internal reference-workflow validation |
 | Retry safety | Timeout/attempt/idempotency validation and adapter contract tests |
 | Chatwork message truthfulness | Status/header matrix, private-summary canary, normal-zero/partial/all/restricted/not-found distinctions, relation unknown/absent tests, and hostile escaped-body list continuity |
 | Chatwork room identity and invite replacement | Same-binding `/me` exact-match tests with zero-POST failures; owner-free room form; pre-auth code/XOR/full-field validation; exact PUT form and regeneration omission tests |
 | Chatwork rate-limit evidence | Strict header/body parsing tests, five-minute plausibility bounds, read/mutation catalog signatures, advisory-timing validation, and text/JSON unknown-timing snapshots |
 | Agent recovery | Catalog fault declarations, exact-path/help-selector executable grammar tests, and structured error snapshots |
-| Hierarchical human discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace-size growth, trailing-help equivalence, exact input projection, and hostile non-argv name rejection tests |
-| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), control-only first-run human/agent help with an explicit unset/token-efficiency explanation, typed `command_selection_required` recovery and zero PAT/provider calls, actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
-| Bounded agent discovery | Fixed root/namespace index and exact-scope shapes, exact-command-only request pointers, 512-byte per-command entry validation, forbidden-detail canaries, 100-command root/namespace growth tests, and exact-human-help structured recipe tests that suppress any workflow with a hidden step while keeping every agent-help shape recipe-free |
+| Hierarchical text discovery | Catalog-derived direct-command/namespace partition, unique section-relative ordering and namespace counts, selector round-trip, no root leaf leakage, namespace leaf usage/required-flag projection, trailing-help equivalence, exact 2,048-byte/content/example limits, retired-agent-format rejection, and hostile input-name rejection tests |
+| User-selected command attention view | Complete `DefaultCatalog` contract lint plus configurable-leaf metadata, an exact-path ordered active view shared by every help/routing/recovery/workflow projection, exactly four always-on commands (`help`, `doctor`, `version`, `config`), control-only first-run text help with an explicit unset/token-efficiency explanation, typed `command_selection_required` recovery and zero PAT/provider calls, actionable required-reference/recovery closure validation, the single TTY selector's textual effect badges and key-state tests, Enter-only persistence, natural-Japanese confirmed-save golden output without recovery internals, all-exit terminal restoration, context-responsive platform reads with no abandoned input consumer, typed non-TTY failure, invalid-view retention, legacy local-command migration, resolve-once configuration-home alias support plus strict owned-target platform storage with Unix durability and explicit Windows limits, uncertain-fault/doctor count and fingerprint reconciliation, disabled zero-PAT/provider-call tests, and re-enable tests that retain existing security policy |
+| Bounded agent discovery | Root and namespace text-help journeys, namespace-complete leaf usages and required flags, exact-help 2,048-byte and two-example ceilings, forbidden full-contract canaries, explicit retired-format failure, runtime structured recovery, and active-view consistency tests |
+| Room-name candidate discovery | Domain/application/CLI/presentation tests require one complete rooms provider read, Unicode simple-case-folded substring filtering with no normalization/trim/ranking/multi-rune expansion or automatic selection, explicit query/source/candidate/completeness metadata, provider-order canonical refs, zero query leakage, and a no-`grep` flow into an exact decimal room action |
 | Member-name candidate discovery | Domain/application/CLI/presentation and active synthetic tests require one complete room-members provider read, exact case-sensitive substring filtering with no normalization or automatic selection, explicit query/source/candidate/completeness metadata, stable canonical refs, escaped external names, zero query leakage, and a two-command `members find` to exact `messages list --sender` flow with no full-message pre-dump or external processing |
 | External text structure | Visible-projection unit/E2E tests plus scoped I/O trust metadata; printable meaning remains explicitly out of scope |
-| Agent command certainty | Root/namespace-index to exact-scope round-trip tests plus task transcripts with no whole-namespace contract loading, command probing, or prose scraping |
+| Agent command certainty | Root/namespace text-help to executable-usage transcripts with no full-contract preloading, command probing, external help scraping, or undeclared recovery call |
 | Supported outcome completeness | Transcript assertion of zero external post-processing and declared provider/context coverage |
 | Context relationship truth | Presentation-independent typed fixtures and negative inference tests for To, quote, names, proximity, and missing references |
 | Presentation eligibility | Shared semantic answer key, canonical-reference/coverage/trust checks, determinism, and zero external post-processing |
@@ -336,8 +424,11 @@ Every strong statement should identify its enforcement path.
 | Presentation decision provenance | Retained raw runs, score summaries, audit findings, and benchmark-defect records that distinguish an experiment result from a later owner compatibility decision |
 | Current success text | All-route and golden tests require the headerless task projection. Seven reviewed homogeneous collections require exactly one trust/schema prelude even when empty and one provider-order physical line per item with stable canonical positions and optional suffixes; `files list` fixes `message_ref` as canonical-or-`absent`. `messages list` additionally requires one room/trust/fixed-schema header with the provider bound named `source-limit`, a document-local actor dictionary, positional canonical message/time/body values without repeated labels, flat provider-order adjacency records, reachability fields, and separate relation-resolution/context/gap records. Tests preserve migration history without claiming a Competition 1 winner |
 | Subtractive task projection | Catalog/result field checks and negative canaries allow only declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and external-text trust framing. Message actor aliases are allowed only as document-local compression with canonical dictionary entries; semantic raw-notation records, wire extras, derived thread metadata, and non-contract defaults fail |
-| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, fixed clocks, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with machine-readable repeatability and a 100-reference bound; optional inclusive whole-second offset-bearing RFC3339 `since`, exclusive `until`, or fixed-Tokyo exact/`today`/`yesterday` day; optional one-based `--start-index` and maximum `--count` 1..100; sender-and-period predicate then typed-send-time ranking with later-position tie-break then index/count selection then direct typed in-window reply expansion; context allowed beyond requested count/period with explicit anchors; provider-order gapped source sequences; source/effective-period/candidate/start/requested-count/items-per-page/next-start and anchor/context distinction; one documented `force` list request with no provider pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
+| Bounded message selection | Domain/application truth tables, adapter-request guards, scoped-help/runtime tests, fixed clocks, and active synthetic agent scenarios require omitted or explicit `recent` to select the latest bounded window, explicit `changes` to select differential retrieval, exact sender OR inputs with catalog-declared repeatability and a 100-reference bound; optional inclusive whole-second offset-bearing RFC3339 `since`, exclusive `until`, or fixed-Tokyo exact/`today`/`yesterday` day; optional one-based `--start-index` and maximum `--count` 1..100; catalog-declared deprecated `--limit` alias equivalence plus stderr migration warning and conflict rejection; sender-and-period predicate then typed-send-time ranking with later-position tie-break then index/count selection then direct typed in-window reply expansion, with omitted context defaulting to `replies` and explicit `none` opting out; context allowed beyond requested count/period with explicit anchors; context without a primary selection naming the offending input and alternatives before I/O; provider-order gapped source sequences; source/effective-period/candidate/start/requested-count/items-per-page/next-start and anchor/context distinction; one documented `force` list request with no provider pagination; pre-I/O invalid-input and over-bound-source rejection; canonical-reference reuse; and zero rendered-text filtering or raw-notation inference |
+| Byte-bounded message delivery | CLI-only 1..16,777,216-byte parser and request-leakage tests; same-call-count spies; longest newest-first anchor-prefix fixtures; atomic whole-message/direct-reply/reachable-relation closure checks; provider-order rendering; exact delivery keys including always-present `output-total-items` and count-bounded remaining `output-next-count`; absolute-final-line, continuation-rank/range, projected-relation-target, and original-fetch-attempt assertions; unchanged provider `complete` and selection `next-start-index`; UTF-8/exact-boundary/final-newline coverage; typed zero-stdout too-small failures; and omitted-option byte-for-byte goldens |
+| Unknown input guidance | Deterministic selected-command flag suggestions; leading-root-option suggestions before selection/authentication from only `--error-format`/`--help`/`--version`; `help --hlep` guidance to `cwk --help`; active-catalog canonical command-path suggestions; alias-prefix collision validation; and negative tests proving no disabled path disclosure, argv rewrite, target choice, handler execution, authentication, or I/O |
 | Bounded message relation closure | Domain/application/CLI and active T1 tests require `--resolve-relations` 0..100 with public default five; breadth-first recursive traversal of every same-room reply edge; source reuse, duplicate/cycle suppression, exact room/message result binding, one attempt per unique missing target, limit/attempt/provenance/gap evidence, retained not-found/restricted outcomes, whole-task abort for other faults, and no To/quote/body/cross-room expansion |
+| Exact-message direct replies | Domain/application/CLI tests require exact-anchor-first execution; one additional same-binding bounded recent list only for explicit `messages show --context replies`; provider-order direct children selected solely by typed same-room edges targeting the anchor; child canonical references/sequences plus source count/limit/completeness/access evidence; a relation-zero child-only path; omitted/none single-read behavior; independent outgoing-parent budget; and no body/To/quote/name/time inference |
 | Message reachability | Domain truth tables and active T2 tests require an oldest boundary only for nonempty unrestricted recent sources, within/partial/outside period classification against that boundary, unknown for changes/empty/limited/unprovable sources, one list invocation, and no false empty-day or complete-history claim |
 | Token efficiency | Pareto comparison among quality-eligible candidates followed by a selected-format non-regression budget |
 | Public capability coverage | Exact bidirectional match between capability ledger and catalog `CapabilityID` values |

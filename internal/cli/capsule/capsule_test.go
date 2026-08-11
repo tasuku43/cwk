@@ -561,6 +561,46 @@ func TestRenderMessagesShowRemainsTheExistingSingleRecord(t *testing.T) {
 	}
 }
 
+func TestRenderMessagesShowKeepsAnchorBeforeTypedRelationContext(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesShow)
+	parentRef := reference(chatwork.ReferenceMessage, "99")
+	result.Messages[0].Replies = []chatwork.Relation{{
+		Kind: "reply", Target: parentRef, ExternalID: result.Messages[0].Room.Value, Resolved: true,
+	}}
+	parent := result.Messages[0]
+	parent.Ref = parentRef
+	parent.Body = "parent"
+	parent.Replies = nil
+	child := result.Messages[0]
+	child.Ref = reference(chatwork.ReferenceMessage, "101")
+	child.Body = "child"
+	child.Replies = []chatwork.Relation{{
+		Kind: "reply", Target: result.Messages[0].Ref, ExternalID: result.Messages[0].Room.Value, Resolved: true,
+	}}
+	result.MessageShowContext = &chatwork.MessageShowContext{
+		Anchor: result.Messages[0].Ref, Children: []chatwork.Message{child}, SourceSequences: []int{3}, SourceCount: 4,
+		Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}, Access: chatwork.MessageAccessPartial,
+	}
+	result.MessageRelationResolution = &chatwork.MessageRelationResolution{
+		FetchLimit: 5, FetchAttempts: 1,
+		Targets: []chatwork.MessageRelationTarget{{Target: parentRef, State: chatwork.MessageRelationResolvedByFetch, Message: &parent}},
+	}
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	anchor := "message message-ref=100"
+	replyContext := "reply-context anchor-ref=100 count=1 window=recent source-count=4 source-limit=100 complete=false access-limitation=partial"
+	childContext := "reply-child source-sequence=#3 message-ref=101"
+	resolution := "relation-resolution fetch-limit=5 fetch-attempts=1 targets=1"
+	context := "relation-context provenance=fetched message-ref=99"
+	if !strings.Contains(got, anchor) || !strings.Contains(got, replyContext) || !strings.Contains(got, childContext) || !strings.Contains(got, resolution) || !strings.Contains(got, context) ||
+		strings.Index(got, anchor) > strings.Index(got, replyContext) || strings.Index(got, replyContext) > strings.Index(got, childContext) ||
+		strings.Index(got, childContext) > strings.Index(got, resolution) || strings.Index(got, resolution) > strings.Index(got, context) {
+		t.Fatalf("exact message context order is wrong:\n%s", got)
+	}
+}
+
 func TestRenderMessagesMakesAccessLimitationExplicit(t *testing.T) {
 	partial := resultForTask(chatwork.TaskMessagesList)
 	partial.MessageAccess = chatwork.MessageAccessPartial
@@ -688,6 +728,53 @@ func TestRenderCollectionsUseOneFixedSchemaAndPositionalRecord(t *testing.T) {
 				t.Fatalf("record repeated field-level trust markers:\n%s", got)
 			}
 		})
+	}
+}
+
+func TestRenderRoomCandidatesKeepsProvenanceCanonicalReferencesAndProviderOrder(t *testing.T) {
+	result := resultForTask(chatwork.TaskRoomsList)
+	result.Rooms = []chatwork.Room{
+		{Ref: reference(chatwork.ReferenceRoom, "42"), Name: "COST\nReview", Type: "group", Role: "admin", Unread: 2, Mentions: 1, Tasks: 3},
+		{Ref: reference(chatwork.ReferenceRoom, "44"), Name: "cost planning", Type: "group", Role: "member"},
+	}
+	result.RoomSelection = &chatwork.RoomSelection{Query: "CoSt", SourceCount: 4, CandidateCount: 2}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "room-candidates query=\"CoSt\" source-count=4 candidate-count=2 complete=true\n" +
+		"external-text=untrusted escaped\n" +
+		"schema: room-ref \"name\" type role unread mentions tasks\n" +
+		"42 \"COST\\\\nReview\" \"group\" \"admin\" 2 1 3\n" +
+		"44 \"cost planning\" \"group\" \"member\" 0 0 0\n"
+	if got != want {
+		t.Fatalf("room candidates mismatch\n--- got ---\n%s--- want ---\n%s", got, want)
+	}
+	if strings.Index(got, "\n42 ") > strings.Index(got, "\n44 ") {
+		t.Fatalf("room candidates lost provider order:\n%s", got)
+	}
+	for _, value := range []string{"42", "44"} {
+		if _, err := chatwork.NewReference(chatwork.ReferenceRoom, value); err != nil {
+			t.Fatalf("displayed room reference %q is not reusable: %v", value, err)
+		}
+	}
+}
+
+func TestRenderRoomCandidatesMakesZeroMatchesExplicit(t *testing.T) {
+	result := resultForTask(chatwork.TaskRoomsList)
+	result.Rooms = []chatwork.Room{}
+	result.RoomSelection = &chatwork.RoomSelection{Query: "該当なし", SourceCount: 3, CandidateCount: 0}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "room-candidates query=\"該当なし\" source-count=3 candidate-count=0 complete=true\n" +
+		"external-text=untrusted escaped\n" +
+		"schema: room-ref \"name\" type role unread mentions tasks\n"
+	if got != want {
+		t.Fatalf("empty room candidates mismatch\n--- got ---\n%s--- want ---\n%s", got, want)
 	}
 }
 

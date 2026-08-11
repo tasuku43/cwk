@@ -99,6 +99,13 @@ producer-to-consumer binding, and a CLI runtime test passes a discovered
 account reference unchanged into exact sender selection. Generic catalog
 fixtures remain test-local and do not introduce another resource identity.
 
+A room action accepts only a leading-zero-free positive decimal canonical room
+reference of 1 through 32 digits through `--room <room-id>`. A display name,
+`rid...`, kind-prefixed text, or Chatwork browser URL is rejected before
+authentication or adapter access rather than decoded into authority. The
+separate `rooms list --query` discover path may case-fold external room names,
+but it returns every match and never forwards one automatically to an action.
+
 ### Presentation-derived identity
 
 A presentation candidate may introduce shorthand, positions, labels, grouping, or other derived display values. None is authorization identity by default. Public action inputs, policy, logs, and infrastructure use validated canonical references. If a later presentation proposes reusable shorthand, it requires a separate typed contract defining scope, lifetime, collision handling, and exact resolution; the presentation experiment itself cannot grant that meaning.
@@ -127,9 +134,34 @@ the requested room and message. Not-found and exact-message restriction may be
 retained as typed target evidence; cancellation, rate limits, unavailability,
 malformed results, and other permission faults fail without partial success.
 
+`messages show --context replies` performs one additional bounded list read in
+the already validated anchor room under the same ephemeral authentication
+binding and caller context. It does not derive or broaden a room target. A
+message becomes a child only when infrastructure supplied a valid typed reply
+edge whose room and target exactly match the anchor; body text, copied tags,
+To/quote facts, names, and timestamps are not consulted. The result retains
+latest-window and access-limitation evidence so restricted or out-of-window
+children are never reported absent. This fixed read is declared independently
+from the finite exact-parent fetch budget.
+
 ## Controlled execution boundary
 
 All filesystem writes, subprocess execution, credential access, network calls, and platform services must have a bounded construction path. A command or use case must not receive an unrestricted client merely because it is convenient.
+
+Message create/update accepts exactly one body source. Literal argv is
+validated directly; `--body -` reads at most 65,536 bytes from the CLI's
+injected stdin, and `--body-file` carries only a path through domain and
+application layers before infrastructure uses its injected, caller-context,
+regular-file reader. Production pipe/terminal stdin goes through an
+infrastructure descriptor adapter: Unix uses bounded readiness polling and
+Windows targets the exact synchronous reader thread for cancellation. The
+Windows worker is joined, and neither platform closes the caller-owned
+descriptor or abandons a reader that could consume later input. The body-file
+reader rejects non-regular paths and stops at 65,536 bytes.
+Every source must produce nonempty valid UTF-8 of at most 65,535 bytes
+with no NUL before provider HTTP begins. Typed `invalid_input` faults expose
+neither the body, path, nor private read error, and tests prove zero provider
+calls for unreadable or invalid sources.
 
 For a mutation, the boundary performs this order:
 
@@ -277,6 +309,9 @@ marked replacement draft and changes nothing until Enter. Unsafe modes/objects
 refuse the selector and require external filesystem repair; unavailable storage
 must have access restored. The always-on read-only `doctor` reports invalid,
 unsafe, or unavailable command-selection state without mutating it.
+Complete-catalog static help is the sole read-only fallback: root and namespace
+output identifies that state and points to `doctor`, exact help exposes only its
+bounded invocation facts, and no fallback path dispatches a Chatwork task.
 
 Terminal control is also phase-bounded. The infrastructure-only
 `golang.org/x/term` adapter requires interactive stdin and stdout, owns raw
@@ -327,6 +362,12 @@ the application port, and a provider result above `source-limit=100` fails
 before local selection can conceal it. A derived next start index carries no
 credential, opaque provider state, or snapshot-stability claim.
 
+The deprecated message `--limit` spelling is a catalog-declared alias of the
+same typed `--count` input, not another authority or network control. It remains
+for at least two minor releases and successful use writes only a migration
+warning to stderr. Did-you-mean diagnostics never rewrite argv, choose a target,
+or execute a suggestion; invalid input still fails before authentication/I/O.
+
 Message `--since`, `--until`, and `--on` are also local read selectors, never
 network controls or authorization boundaries. Exact bounds require explicit
 offsets and whole seconds; `--on` uses fixed Tokyo calendar rules and a single
@@ -369,13 +410,24 @@ Remote or file-derived text may contain terminal controls, format characters, Un
 
 This projection protects terminal and TSV/JSON structure. It does **not** detect intent in printable text, remove prompt-like content, or prove that a language model will ignore it. Printable text such as `SYSTEM ...` or JSON-looking content remains semantically untrusted data. Agent consumers must keep data fields separate from instructions and apply their own trust policy; the CLI cannot claim semantic prompt-injection prevention.
 
-Exact-command agent help publishes this boundary in `io_contract`: `external_text_trust` is `untrusted_data`, `external_text_projection` is `visible_escape`, and `opaque_reference_policy` is `validated_exact_bytes`. Compact root and namespace indexes contain no I/O contract or external text.
+The internal `AgentContract` validates this boundary as
+`external_text_trust=untrusted_data`,
+`external_text_projection=visible_escape`, and
+`opaque_reference_policy=validated_exact_bytes`. Public help does not dump that
+contract; successful task output retains its trust framing and runtime
+structured faults retain their classification and recovery action.
 
 Display-name discovery does not weaken this boundary. A `members find` query is
 text, not an account identity; matching external member names remain untrusted
 and visibly escaped, and all matches retain validated exact account references.
 The discover command never authorizes or automatically invokes a reference-
 consuming command, including when exactly one candidate is returned.
+
+The same rule applies to `rooms list --query`: Unicode simple case folding is
+application-only candidate matching over one complete typed provider result,
+not identity normalization. No Unicode/whitespace normalization, trimming,
+ranking, multi-rune expansion, hidden provider search, or unique-result
+auto-selection is permitted. `members find` remains case-sensitive.
 
 A derived project must decide:
 
@@ -388,7 +440,7 @@ A derived project must decide:
 
 Do not let presentation sanitization change the identity used for authorization. Authorization uses validated domain values; display labels/content use a visible projection. Opaque references bypass that projection and retain the exact validated value.
 
-For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the `external_text_trust: untrusted_data` meaning already published by exact-command agent help. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
+For every presentation candidate, structure is CLI-authored and message text is external data. Its framing must prevent provider text from injecting candidate-specific records, fields, hierarchy, or completeness signals. Optimization must not remove the internally validated `external_text_trust: untrusted_data` meaning or its visible runtime framing. Hostile-text fixtures are shared across candidates so a format cannot improve token score by weakening structural safety.
 
 Candidate C's historical context capsule used local aliases only inside one output document. They were never accepted by command parsers, mutation policy, audit identity, or infrastructure. The current `messages list` likewise uses actor aliases only to factor repeated display data inside one document. Every actor dictionary entry exposes its validated canonical account reference, every message record exposes its validated canonical message reference, and command inputs accept only those canonical values unchanged. Aliases never cross into mutation policy, audit identity, application, or infrastructure.
 
@@ -478,7 +530,9 @@ Every new side-effect class should include tests for:
 - disabled-command invocation producing the ordinary unknown-command result
   before credential resolution or provider I/O;
 - malformed, oversized, duplicate-key, trailing-value, symbolic-link, or
-  special-file command-selection state without a silent all-enabled fallback;
+  special-file command-selection state without a silent all-enabled execution
+  fallback; complete-catalog static help remains read-only and cannot dispatch a
+  configurable task;
 - non-TTY rejection; fragmented CSI/SS3 keys; bounded terminal frames; and
   restoration across success, quit, EOF, cancellation, validation failure, and
   terminal failure;

@@ -52,6 +52,9 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 		providerRequest.Task = chatwork.TaskMembersList
 		providerRequest.MemberQuery = ""
 	}
+	// Room-name discovery is a local projection over the one complete joined-
+	// room collection. The query is display text, never a provider parameter.
+	providerRequest.RoomQuery = ""
 	providerRequest.MessageFilter = chatwork.MessageFilter{}
 	providerRequest.MessageRelationFetchLimit = 0
 	result, err := s.executeProvider(ctx, binding, providerRequest)
@@ -59,6 +62,22 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 		return chatwork.Result{}, err
 	}
 	switch request.Task {
+	case chatwork.TaskRoomsList:
+		if request.RoomQuery != "" {
+			sourceCount := len(result.Rooms)
+			candidates := make([]chatwork.Room, 0, sourceCount)
+			for _, room := range result.Rooms {
+				if chatwork.ContainsFold(room.Name, request.RoomQuery) {
+					candidates = append(candidates, room)
+				}
+			}
+			result.Rooms = candidates
+			result.RoomSelection = &chatwork.RoomSelection{
+				Query:          request.RoomQuery,
+				SourceCount:    sourceCount,
+				CandidateCount: len(candidates),
+			}
+		}
 	case chatwork.TaskMembersFind:
 		sourceCount := len(result.Accounts)
 		candidates := make([]chatwork.Account, 0, sourceCount)
@@ -103,6 +122,39 @@ func (s *Service) Execute(ctx context.Context, binding authn.BindingID, request 
 			return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, resolutionErr)
 		}
 		result.Messages = messages
+		if request.MessageFilter.Context == chatwork.MessageContextReplies {
+			recentRequest := chatwork.Request{
+				Task:        chatwork.TaskMessagesList,
+				Room:        request.Room,
+				ForceRecent: true,
+			}
+			recent, recentErr := s.executeProvider(ctx, binding, recentRequest)
+			if recentErr != nil {
+				return chatwork.Result{}, recentErr
+			}
+			anchor, source, showContext, contextErr := assembleMessageShowContext(messages[0], recent)
+			if contextErr != nil {
+				return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, contextErr)
+			}
+			result.Messages = []chatwork.Message{anchor}
+			result.MessageShowContext = showContext
+			if request.MessageRelationFetchLimit == 0 {
+				break
+			}
+			resolved, resolution, relationErr := s.resolveMessageRelations(
+				ctx,
+				binding,
+				request.Room,
+				source,
+				result.Messages,
+				request.MessageRelationFetchLimit,
+			)
+			if relationErr != nil {
+				return chatwork.Result{}, relationErr
+			}
+			result.Messages = resolved
+			result.MessageRelationResolution = resolution
+		}
 	}
 	if err := result.ValidateFor(request); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)

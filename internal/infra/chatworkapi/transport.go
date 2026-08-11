@@ -106,7 +106,7 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		(record.session.AccountID == "" || record.session.AccountID != input.Account.Value) {
 		return chatwork.Result{}, fault.New(fault.KindAuthentication, "authentication_context_mismatch", "認証が要求された Chatwork アカウントと一致しません", false)
 	}
-	spec, err := c.buildRequest(input)
+	spec, err := c.buildRequestContext(ctx, input)
 	if err != nil {
 		return chatwork.Result{}, err
 	}
@@ -275,6 +275,30 @@ func (c *Client) multipartRequest(path string, input chatwork.Request) (requestS
 	return requestSpec{method: http.MethodPost, path: path, body: bytes.NewReader(body.Bytes()), contentType: writer.FormDataContentType()}, nil
 }
 
+func (c *Client) messageBody(ctx context.Context, input chatwork.Request) (string, error) {
+	if input.BodyFile == "" {
+		return input.Body, nil
+	}
+	if c == nil || c.readBodyFile == nil {
+		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_file_unreadable", "メッセージ本文ファイルを読み取れませんでした", false)
+	}
+	data, err := c.readBodyFile(ctx, input.BodyFile)
+	if err != nil {
+		if ctx != nil && ctx.Err() != nil {
+			return "", fault.Wrap(fault.KindCanceled, "operation_canceled", "メッセージ本文ファイルの読み取りをキャンセルしました", true, ctx.Err())
+		}
+		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_file_unreadable", "メッセージ本文ファイルを読み取れませんでした", false)
+	}
+	if len(data) > chatwork.MaxMessageBodyBytes {
+		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_too_large", "メッセージ本文が 65535 バイトの上限を超えています", false)
+	}
+	body := string(data)
+	if err := chatwork.ValidateMessageBody(body); err != nil {
+		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_invalid", "メッセージ本文ファイルには空でない65535バイト以下の有効なUTF-8が必要です", false)
+	}
+	return body, nil
+}
+
 func validUploadFilename(value string) bool {
 	if value == "" || value == "." || value == string(filepath.Separator) || len(value) > 255 || !utf8.ValidString(value) {
 		return false
@@ -288,12 +312,41 @@ func validUploadFilename(value string) bool {
 }
 
 func boundedReadFile(path string) ([]byte, error) {
-	file, err := os.Open(path) // #nosec G304 -- files upload intentionally reads the exact user-selected --path and applies the fixed byte ceiling below.
+	return readBoundedRegularFile(path, MaxUploadBytes+1)
+}
+
+func boundedReadMessageBodyFile(ctx context.Context, path string) ([]byte, error) {
+	if ctx == nil {
+		return nil, context.Canceled
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	value, err := readBoundedRegularFile(path, int64(chatwork.MaxMessageBodyBytes)+1)
+	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func readBoundedRegularFile(path string, limit int64) ([]byte, error) {
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("selected path is not a readable regular file")
+	}
+	file, err := os.Open(path) // #nosec G304 -- upload and message-body tasks intentionally read the exact user-selected path and apply fixed byte ceilings before HTTP.
 	if err != nil {
 		return nil, err
 	}
 	defer file.Close()
-	return io.ReadAll(io.LimitReader(file, MaxUploadBytes+1))
+	openedInfo, err := file.Stat()
+	if err != nil || !openedInfo.Mode().IsRegular() {
+		return nil, fmt.Errorf("selected path changed before its bounded read")
+	}
+	return io.ReadAll(io.LimitReader(file, limit))
 }
 
 func readBounded(reader io.Reader, limit int64) ([]byte, error) {

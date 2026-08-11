@@ -198,14 +198,14 @@ func validateChatworkSnapshot(snapshot chatworkAPISnapshot, capabilities []capab
 	}
 	knownCapabilities := make(map[string]struct{}, len(capabilities))
 	publicCapabilities := make(map[string]struct{}, len(capabilities))
-	chatworkCapabilities := make(map[string]struct{})
+	mappingRequiredChatworkCapabilities := make(map[string]struct{})
 	for _, entry := range capabilities {
 		knownCapabilities[entry.ID] = struct{}{}
 		if entry.Status == "public" {
 			publicCapabilities[entry.ID] = struct{}{}
 		}
-		if strings.HasPrefix(entry.ID, "chatwork.") {
-			chatworkCapabilities[entry.ID] = struct{}{}
+		if strings.HasPrefix(entry.ID, "chatwork.") && entry.Status != "excluded" {
+			mappingRequiredChatworkCapabilities[entry.ID] = struct{}{}
 		}
 	}
 	reviewedByID := make(map[string]chatworkOperationIdentity, len(reviewedChatworkOperations))
@@ -281,7 +281,7 @@ func validateChatworkSnapshot(snapshot chatworkAPISnapshot, capabilities []capab
 			issues = append(issues, issue{Path: chatworkAPIPath, Message: fmt.Sprintf("reviewed operation %q is missing from the official snapshot", reviewed.ID)})
 		}
 	}
-	for id := range chatworkCapabilities {
+	for id := range mappingRequiredChatworkCapabilities {
 		if _, exists := mappedCapabilities[id]; !exists {
 			issues = append(issues, issue{Path: chatworkAPIPath, Message: fmt.Sprintf("Chatwork capability %q has no upstream operation mapping", id)})
 		}

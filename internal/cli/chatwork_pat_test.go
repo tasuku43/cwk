@@ -14,11 +14,12 @@ func TestProductionHelpDoesNotResolvePAT(t *testing.T) {
 	for _, test := range []struct {
 		args  []string
 		token string
+		want  int
 	}{
-		{args: []string{"--help"}},
-		{args: []string{"rooms", "--help"}, token: "synthetic-valid-token"},
-		{args: []string{"rooms", "list", "--help"}, token: "synthetic-valid-token"},
-		{args: []string{"help", "rooms", "--format", "agent"}, token: "synthetic-valid-token"},
+		{args: []string{"--help"}, want: ExitOK},
+		{args: []string{"rooms", "--help"}, token: "synthetic-valid-token", want: ExitOK},
+		{args: []string{"rooms", "list", "--help"}, token: "synthetic-valid-token", want: ExitOK},
+		{args: []string{"help", "rooms", "--format", "agent"}, token: "synthetic-valid-token", want: ExitUsage},
 	} {
 		t.Run(strings.Join(test.args, "_"), func(t *testing.T) {
 			t.Setenv(chatworkapi.TokenEnvironment, test.token)
@@ -28,8 +29,8 @@ func TestProductionHelpDoesNotResolvePAT(t *testing.T) {
 			if command.chatwork != nil || command.chatworkAuth != nil {
 				t.Fatal("production CLI eagerly constructed the authenticated adapter")
 			}
-			if code := command.RunContext(context.Background(), test.args); code != ExitOK {
-				t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
+			if code := command.RunContext(context.Background(), test.args); code != test.want {
+				t.Fatalf("exit = %d, want %d, stderr = %q", code, test.want, stderr.String())
 			}
 			if command.chatwork != nil || command.chatworkAuth != nil {
 				t.Fatal("help resolved the process-local PAT")

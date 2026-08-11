@@ -4,15 +4,16 @@ This validation asks whether an agent can translate a user's Chatwork request in
 
 ## Interaction budgets
 
-- Unknown outcome to complete scoped contract: at most two discovery invocations.
-- Known command path to complete invocation: one scoped-help invocation.
+- Unknown outcome to executable usage: at most two text-help invocations.
+- Known command path to executable usage: one exact text-help invocation whose
+  encoded output is at most 2,048 bytes.
 - Canonical reference reuse: no discovery or transformation invocation between producer and consumer.
 - Supported task reconstruction: zero `jq`, `grep`, custom parsers/joins, raw Chatwork-notation interpretation, source inspection, or exploratory API calls.
 - Failure recovery: the next corrective command comes from structured metadata.
 
 Direct extraction of a declared canonical reference or fact is allowed. Rebuilding semantics that `cwk` claims to provide is not.
 
-Provider-call evaluation uses the first-implementation ceilings: one attempt, 20 seconds for metadata/read/non-upload operations, 60 seconds for upload, 8 MiB successful response, 64 KiB provider error, 16 MiB output, 10,000 aggregate list items, five documented 100-item endpoint results, and 5 MiB upload. A transcript fails if it raises a limit, hides a lower provider bound, or treats a bound failure as partial success. Local message `--start-index`/`--count` selection is scored separately from the 100-message `source-limit`; it neither reduces provider response bytes nor creates provider pagination.
+Provider-call evaluation uses the first-implementation ceilings: one attempt, 20 seconds for metadata/read/non-upload operations, 60 seconds for upload, 8 MiB successful response, 64 KiB provider error, 16 MiB output, 10,000 aggregate list items, five documented 100-item endpoint results, and 5 MiB upload. A transcript fails if it raises a limit, hides a lower provider bound, or treats a bound failure as partial success. Local message `--start-index`/`--count` selection is scored separately from the 100-message `source-limit`; it neither reduces provider response bytes nor creates provider pagination. Optional `--max-bytes` is scored as a 1..16,777,216-byte presentation-delivery budget: it must not change the domain/provider request, provider-call count, provider `complete`, or selection `next-start-index`.
 
 ## Presentation-independent semantic fixture
 
@@ -39,7 +40,8 @@ Competition 1 evidence in place.
 
 ## Agent tasks and exact answers
 
-Using only root/namespace indexes, exact-command help, and one candidate's output, the agent must:
+Using only root/namespace text help, exact-command text help when needed, one
+candidate's output, and runtime structured errors, the agent must:
 
 1. choose the exact room-discovery and bounded-message tasks;
 2. identify the exact room reference used;
@@ -48,7 +50,11 @@ Using only root/namespace indexes, exact-command help, and one candidate's outpu
 5. state the retrieval bound and whether the result represents complete room history;
 6. distinguish candidate count, one-based start index, requested count, actual
    items per page, and next start index from the provider source bound,
-   including context added beyond the requested count;
+   including context added beyond the requested count; when a byte budget is
+   present, separately interpret `max-bytes`, `output-complete`, primary-anchor
+   `output-items`, always-present eligible-anchor `output-total-items`, and
+   optional newest-first `output-next-start-index` plus a count-bounded
+   `output-next-count` that replaces the original count;
 7. select the canonical reference required by a declared next command;
 8. select recovery from typed failure metadata.
 
@@ -58,6 +64,16 @@ take the selected canonical `account_ref` unchanged, and invoke
 `messages list --sender` without first dumping the message window. Its provider
 budget is one complete member read plus one bounded message read; external
 processing and full-message pre-dump budgets are both zero.
+
+The room-name scenario begins with only a Japanese or mixed-case room-name
+fragment. The agent chooses `rooms list --query`, receives every provider-order
+candidate after Unicode simple case folding, and passes one returned canonical
+positive-decimal `room_ref` unchanged as `--room <room-id>`. The provider budget
+is one rooms read plus the selected task; external `grep`, normalization,
+ranking, URL/`rid` conversion, and automatic unique-result selection are all
+zero. Zero, one, and multiple candidates remain distinguishable. A companion
+negative probe proves that a name, leading-zero decimal, `rid...`,
+`chatwork-room:...`, and browser URL all fail at the action boundary.
 
 Scoring compares answers with the shared key. Presentation-specific explanations are not accepted as substitutes for semantic correctness.
 
@@ -84,6 +100,19 @@ After that experiment, the project owner made a separate compatibility decision 
 
 The current headerless task projection is subtractive. It starts directly with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. Seven reviewed homogeneous collections declare one fixed schema and trust boundary, then emit provider-order positional records without aliases. `messages list` emits one fixed local schema line, deterministic document-local actor aliases with canonical dictionary entries, and one physical message record per selected typed item in original provider order. Without sender or index selection, output includes every provider item. An active selection adds one record with source count, optional exact senders, candidate count, applied start index, requested count, actual items per page, optional next start index, context, and primary anchors; gapped `#sequence` values retain the original window positions. The provider ceiling is separately named `source-limit`. Typed send time establishes newest-first rank and later provider position breaks equal-time ties, but neither changes physical output order. Direct reply context follows primary index/count selection and may increase displayed count beyond the requested count. The record's second field is the exact canonical message reference accepted unchanged by the next command; fixed message/time/body positions replace repeated labels. Explicit typed reply, To, quote, and unresolved facts remain distinguishable; one reply is scalar and multiple ordered replies are a compact list, while a valid multiple set is never relabeled unknown. Depth/thread/root/children, absent relation shells, and resolved-default labels are omitted. No presentation derives semantic records from raw Chatwork notation, and declared external text remains visible untrusted data that cannot inject CLI-authored structure.
 
+With `--max-bytes`, that same typed result gains one delivery record containing
+exactly `max-bytes`, `output-complete`, delivered-anchor `output-items`,
+always-present eligible-anchor `output-total-items`, and, only for an
+incomplete delivery, `output-next-start-index` plus conditional
+`output-next-count`. The former is the next omitted primary anchor's
+newest-first rank; the latter keeps a continuation inside an original count
+slice, while physical records remain in provider order. The delivery record is the absolute final line, including a terminating
+newline inside the budget. In a budgeted result, `relation-resolution targets`
+counts only relation targets actually emitted after that summary, while
+`fetch-attempts` retains the original execution's total attempts. The provider
+and selection completeness fields keep their unbudgeted values. Without the
+option, no delivery record exists and every output byte is unchanged.
+
 The active message probes use the shortest common invocation: omitted
 `--window` means the latest bounded `recent` window. The explicit
 `--window changes` form is reserved for a task that deliberately requests the
@@ -97,7 +126,10 @@ order, and recognizes the fourth-position `absent` atom as missing state rather
 than a command reference.
 
 The active message-sender-selection probe asks for messages from two exact
-accounts while retaining direct reply context. One synthetic bounded window
+accounts while omitting `--context`; the documented `replies` default must
+retain direct reply context. An explicit `--context none` control must omit the
+neighbor records, and context without any sender, period, or index must fail
+before authentication while naming valid alternatives. One synthetic bounded window
 contains interleaved speakers, branches, a deeper chain, hostile text, and raw
 `[To]`/`[rp]` canaries. The agent must identify repeated sender inputs as OR,
 distinguish sender-match anchors from added one-hop reply nodes, preserve gapped
@@ -112,11 +144,58 @@ choose `--count 2` and then `--start-index 3 --count 3` without redundant window
 flags; identify sender-before-rank, rank-before-index/count, and selection-before-context
 composition; distinguish candidate/start/requested/actual/next metadata from
 `source-limit=100`; preserve original source sequences and canonical references;
-and understand that explicit direct reply context may make displayed count
+and understand that the default direct reply context may make displayed count
 exceed the requested count. The budget is two provider task calls using only
 documented `force`, no provider cursor or offset, and zero external
 post-processing calls. Invalid index/count values and an over-coverage source
 must fail before provider I/O or local selection, respectively.
+
+A compatibility variant invokes the first slice with deprecated `--limit 2`.
+It must produce the same successful stdout/result as `--count 2`, emit the
+exact rename notice on stderr, and consume no extra provider call. The alias is
+catalog-declared for at least two minor releases. An unknown-flag variant must
+name the invalid flag, suggest a declared alternative deterministically, and
+make zero authentication/provider calls without rewriting or executing the
+suggestion.
+
+The active message-byte-delivery probe uses the same bounded source with one
+large body, shared direct reply context, and a reachable resolved/gap relation
+closure. The agent chooses one `--max-bytes` invocation instead of probing with
+several counts or redirecting output to `wc`. It must distinguish delivered
+primary `output-items` from eligible `output-total-items` and physical context
+records; observe every kept message, direct reply context, and reachable
+relation record as one atomic unit; and use `output-next-start-index` as the
+next newest-first anchor rank with the same filters. If the original invocation
+used `--count`, it must replace that value with `output-next-count` and prove the
+continuation does not expand the original slice. It must also verify that
+the final delivery line is last, its newline fits, projected
+`relation-resolution targets` equals the emitted target count, and
+`fetch-attempts` still reports all attempts already performed. Each invocation
+retains the one existing list request;
+the option enters no domain/provider request and changes no relation-read count.
+Provider `complete` and selection `next-start-index` must remain the same as in
+the unbudgeted fixture. A continuation variant has no repeated or skipped
+anchor. Exact-boundary and UTF-8 variants never split a body, record, or final
+newline. Fixed-envelope and first-unit underflow variants return typed
+`output_budget_too_small` with zero stdout. An omitted-option control is
+byte-for-byte identical to the established golden and has no delivery record.
+
+Routing compatibility probes accept `messages get` and `rooms members
+find|list|replace` while recording only the canonical command as intent. A
+dotted canonical or declared-alias help selector and a help flag anywhere in
+an exact task or selector invocation must return the same bounded static help
+with zero authentication or provider calls. Alias normalization follows active
+view resolution, and a hidden canonical target must not appear in an alias
+error. Broken local command-selection state may not suppress help, but
+root and namespace help must disclose the static catalog and point to `doctor`;
+it must still reject an ordinary aliased or canonical task before authentication.
+A routing-negative variant invokes `--eror-format` and `--hlep`, receives only
+the fixed global alternatives before command-selection loading, and proves no
+suggestion is executed. `help --hlep` names `cwk --help`. Another invokes
+`messages shwo`: it may suggest `cwk messages show` only when that canonical
+path is present in the active catalog. A saved view that hides `messages show`
+must not disclose it through the fault, and every variant makes zero task or
+authentication calls.
 
 The active message-period probe asks one question whose complete answer lies on
 one Tokyo calendar day inside a synthetic maximum-100 source window. The agent
@@ -137,6 +216,18 @@ limit five, attempts two, both canonical targets, and fetched provenance. The
 budget is three provider requests inside one task invocation and zero external
 post-processing or explicit `messages show` commands. The answer must not claim
 arbitrary history, To/quote/body expansion, or an unbounded thread.
+
+The exact-message direct-reply probe invokes
+`messages show --context replies --resolve-relations 0` for one synthetic
+anchor. One bounded recent source contains two typed direct children in
+provider order, one nonmatching typed edge, and body/To/quote canaries. The
+result must start with the anchor, publish source count/limit/completeness and
+access limitation, retain both child canonical references and source
+sequences, and issue exactly one exact plus one list request. It must not infer
+a child from prose or claim that zero visible children proves none outside the
+latest/restricted source. A parent-chain variant proves the fixed list read is
+not charged to the exact relation budget. Omitted and explicit `none` controls
+each make only the exact request.
 
 The active message-period-reachability probe reproduces T2 by requesting Tokyo
 day 2026-07-08 from a trustworthy latest-100 source whose oldest item is on
@@ -229,8 +320,9 @@ unsupported because the official empty/omission transition is not established.
 
 Authentication probes require the agent to:
 
-1. identify `CWK_API_TOKEN` from exact scoped help as the sole required
-   credential input and `pat` as the sole admitted method;
+1. identify `CWK_API_TOKEN` and the PAT-only boundary from the classified
+   runtime authentication fault/catalog-backed fixture rather than loading a
+   public machine contract;
 2. invoke the requested Chatwork task without probing for a login, profile,
    method selector, stored configuration, or credential status command;
 3. keep the token out of argv, command literals, stdout, stderr, fixtures,
@@ -238,8 +330,9 @@ Authentication probes require the agent to:
 4. distinguish missing or invalid token input from a valid account that lacks
    permission;
 5. recover `chatwork_token_missing` and `chatwork_token_invalid` through the
-   exact scoped-help action declared by the command, not a removed
-   authentication namespace;
+   exact `cwk doctor` action in the runtime structured error, use its
+   secret-free source/state report, and do not probe a removed authentication
+   namespace or retired agent-help format;
 6. understand that the token selects one account for one command process and
    that `cwk` neither persists nor revokes it.
 
@@ -271,9 +364,8 @@ reinforce an effect but never replaces its textual label.
 The scenario must prove all of the following without inspecting source or
 editing JSON directly:
 
-1. root and namespace human help, exact and trailing help, root and namespace
-   agent indexes, exact-command agent help, recovery actions, and reference
-   workflows expose none of the disabled paths; the empty contact-request
+1. root, namespace, exact, and trailing text help, recovery actions, and
+   reference workflows expose none of the disabled paths; the empty contact-request
    namespace is not advertised;
 2. invoking a disabled path returns the ordinary `unknown_command` result with
    zero PAT-resolution and zero provider calls;
@@ -283,12 +375,12 @@ editing JSON directly:
    `doctor` reports valid state, source, enabled/disabled/stale/legacy counts,
    and the actual fingerprint without performing a second mutation; an
    uncertain-save JSON fixture carries the candidate fingerprint, follows the
-   exact message grammar published by exact-command agent help, and distinguishes
+   exact message grammar validated by the internal catalog failure contract, and distinguishes
    `source=saved` from `state=unconfigured source=missing` and its
    empty-selection fingerprint;
 4. a second `config` run marks the three paths off and can re-enable them from
-   its complete catalog-derived selector, after which normal and agent help
-   expose them again;
+   its complete catalog-derived selector, after which text help exposes them
+   again;
 5. re-enabled contact-request commands still enforce their original PAT,
    canonical-reference, provider-permission, and `--confirm=access-change` or
    `--confirm=destructive` contracts; selection grants no authority; and
@@ -298,8 +390,8 @@ editing JSON directly:
 
 The saved-profile variant injects one synthetic catalog addition and verifies
 that it remains off until selected. The invalid-state variant proves ordinary
-commands and root help do not silently fall back to all enabled or a false
-empty view. Config help remains available; malformed serialized content may
+commands never fall back to all enabled, while root and namespace static help
+disclose the unreadable selection and exact help remains bounded. Config help remains available; malformed serialized content may
 enter the `config` repair selector, while unsafe or inaccessible filesystem
 state requires local repair followed by always-on `doctor`. A legacy profile
 containing formerly selectable `doctor` or `version` paths loads the remaining
@@ -342,25 +434,29 @@ Use the public Chatwork catalog and synthetic authentication/adapter fixtures:
 go run ./cmd/cwk --help
 go run ./cmd/cwk rooms --help
 go run ./cmd/cwk rooms list --help
-go run ./cmd/cwk help --format agent
-go run ./cmd/cwk help rooms --format agent
-go run ./cmd/cwk help messages list --format agent
-go run ./cmd/cwk help files list --format agent
+go run ./cmd/cwk help messages
+go run ./cmd/cwk messages list --help
+go run ./cmd/cwk files list --help
+! go run ./cmd/cwk help messages list --format agent # 廃止案内を確認
 go run ./cmd/cwk config --help
-go test ./internal/cli -run 'TestChatwork|TestAgent|TestRootTextHelp|TestTrailingHelp|TestProductionHelp|TestConfig|TestCommandSelection'
+go test ./internal/cli -run 'TestChatwork|TestHelp|TestRootTextHelp|TestTrailingHelp|TestProductionHelp|TestConfig|TestCommandSelection'
 go test ./internal/infra/terminalui
 GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./...
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build ./...
-go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex|MessagePeriod|MessageRelationClosure|MessageReachability)'
+go test ./tools/presentationeval -run 'TestActive(FileCollection|MessageAdjacency|MessageSenderSelection|MessageIndex|MessageDelivery|MessagePeriod|MessageRelationClosure|MessageReachability)'
 ```
 
-These prove the bounded human root-to-namespace-to-command navigation, the
-direct machine root-to-scope path, scoped contracts, structured output/error
-behavior, and exact Chatwork reference reuse without requiring a developer
-account. The config and terminal probes use only synthetic streams, preference
+These prove bounded root-to-namespace-to-command text navigation, namespace
+leaf usages and required flags, the exact-help 2,048-byte boundary, explicit
+retirement of the agent format, structured runtime output/error behavior, and
+exact Chatwork reference reuse without requiring a developer account. The
+config and terminal probes use only synthetic streams, preference
 state, and adapters; the public selector itself is exercised manually only with
 an attached stdin/stdout TTY and a temporary config home. Candidate-C evidence
 validates the first-stable baseline. Current headerless task-projection semantic, subtractive-field, hostile-text, canonical-reference, all-route, and golden tests validate the selected default. The active flat-message scenario additionally proves provider order, branch/interleaving recognition, unresolved-parent handling, one-line hostile-text framing, and reuse of a displayed canonical message reference as the next exact command input. The active sender-selection scenario proves exact sender OR semantics, direct typed reply context, stable gapped source sequences, anchor/context distinction, one bounded provider call, and zero external post-processing. The active file-collection scenario proves the fixed six-position schema, canonical file/room reuse, explicit missing-message state, hostile filename containment, and zero external post-processing.
+The sender and index tests also prove that active selection defaults to direct
+typed `replies`, exact `none` opts out, and context without a primary selection
+fails before authentication with the invalid input and usable alternatives.
 The broader message-index tests prove exact 1..100 validation, deterministic
 equal-time ties, a `force`-only provider request, and no provider pagination. The active
 scenario proves typed-time rank selection, unchanged provider-order output,
@@ -369,6 +465,19 @@ continuation without repeated ranks, context beyond requested count, two
 provider calls, the omitted-window recent default, canonical-reference reuse,
 and zero external post-processing. A separate runtime fixture preserves exact
 `--window changes` differential behavior.
+Exact-message context fixtures separately prove anchor-first direct-child
+output, one declared bounded latest read only for `replies`, canonical child
+references/source sequences, incomplete/access-limited evidence, typed-edge-
+only selection, independent parent-fetch accounting, and one-call
+omitted/`none` behavior.
+The active message-delivery scenario proves one budgeted invocation replaces
+count-guessing and `wc`, retains the existing provider call pattern, delivers
+whole anchor/context/relation units, and continues by newest-first anchor rank
+without changing provider `complete` or selection `next-start-index`. Boundary
+fixtures prove the exact delivery keys and total, absolute final-line/newline
+budgeting, projected relation targets with original fetch attempts,
+1..16,777,216-byte validation, zero-stdout typed underflow, and byte-for-byte
+compatibility when the option is omitted.
 The active message-period scenario proves sender-and-period composition,
 fixed-clock Tokyo day resolution, concrete effective bounds, unchanged source
 coverage/provider calls, context outside the primary period only through typed

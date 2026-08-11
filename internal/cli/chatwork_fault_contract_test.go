@@ -43,6 +43,9 @@ func TestChatworkMutationRecoveryNeverReplaysAWrite(t *testing.T) {
 				if next.Command == "help" || strings.HasPrefix(next.Command, "help ") {
 					continue
 				}
+				if next.Command == "doctor" {
+					continue
+				}
 				target, exists := byPath[next.Command]
 				if !exists {
 					t.Errorf("%s fault %s has unknown recovery %q", spec.Path, declared.Code, next.Command)
@@ -90,6 +93,17 @@ func TestChatworkAPIFaultsCoverPAT(t *testing.T) {
 		for code, expected := range want {
 			if got, exists := declared[code]; !exists || got != expected {
 				t.Errorf("%s fault %s = %+v, present=%t; want %+v", spec.Path, code, got, exists, expected)
+			}
+		}
+		for _, code := range []string{"chatwork_token_missing", "chatwork_token_invalid"} {
+			var recovery string
+			for _, candidate := range spec.Agent.Errors {
+				if candidate.Code == code && len(candidate.NextActions) == 1 {
+					recovery = candidate.NextActions[0].Command
+				}
+			}
+			if recovery != "doctor" {
+				t.Errorf("%s fault %s recovery = %q, want doctor", spec.Path, code, recovery)
 			}
 		}
 	}

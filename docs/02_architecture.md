@@ -121,6 +121,7 @@ which catalog paths may be selected or attach CLI recovery commands.
 - argument parsing and task-level validation;
 - help and public discovery;
 - output and error presentation;
+- presentation-only output budgets and atomic delivery planning;
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
 - derivation of the active command-attention view from the complete catalog and
@@ -135,7 +136,7 @@ which catalog paths may be selected or attach CLI recovery commands.
 
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
-- Domain defines provider-neutral message, participant, recipient, reply, quote, context coverage, access limitation, relation-set state, relation-resolution provenance/outcomes, reachability, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing, I/O, or rendering.
+- Domain defines provider-neutral message, participant, recipient, reply, quote, list-selection context, exact-message direct-child context with source sequences/coverage/access limitation, relation-set state, relation-resolution provenance/outcomes, reachability, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing, I/O, or rendering.
 - Infrastructure decodes Chatwork wire DTOs, validates the status/header combination that distinguishes normal zero, partial/all access restriction, restricted exact message, and not-found, and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity. A malformed recognized notation form returns the body with an unknown whole relation set rather than failing its list or retaining partial facts.
 - Application use cases select the bounded data required by one outcome,
   resolve only explicit relationships selected by that outcome, and return a
@@ -143,14 +144,43 @@ For Chatwork output, including relationship-aware message results and the curren
   here after the one provider response: repeated exact senders form one OR
   candidate set; typed send time establishes newest-first rank with later
   provider position breaking equal-time ties; optional one-based start index
-  and requested count select primary anchors; optional reply context then adds
-  only direct typed in-window parents/children. It then reuses original-source
+  and requested count select primary anchors; the CLI-defaulted reply context
+  then adds only direct typed in-window parents/children unless the caller chose
+  exact `none`. It then reuses original-source
   parents or spends the finite relation budget on exact same-room reads, one
   attempt per unique recursively reached target. Source sequences and final physical
   order remain those of the unfiltered provider window; supplemental context
   has separate provenance. Application-only sender/period/context/start-index/
   count/relation-budget fields are removed before each infrastructure call.
+  For explicit `messages show --context replies`, application first retains the
+  exact anchor, then issues one fixed force-recent list request with the same
+  context and authentication binding. It joins only typed same-room reply
+  edges targeting that anchor, preserves provider order/sequences and list
+  coverage/access evidence, and makes this list source available to the
+  independent outgoing-parent closure. The fixed list read does not decrement
+  the exact-message relation budget. After child selection, application resets
+  reply-resolution state and resolves it again against only the visible anchor
+  and children; a hidden recent-window target can become resolved only through
+  separately emitted parent-resolution evidence.
 - CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`; oldest reachability and period reachability come directly from domain values. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved source replies become scalar `reply=#N` or ordered compact `reply=[#N,#M]`, supplemental parents use canonical-reference reply edges plus separate `relation-context` provenance, and unavailable targets use typed `relation-gap` records. Unknown relation sets remain distinct from absent and complete multiple relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+
+`messages list --max-bytes` stays entirely in CLI request/presentation state.
+CLI removes it before constructing the domain request, receives the same fully
+selected and relation-resolved result, and plans an atomic rendered prefix. No
+domain or application request type and no infrastructure/provider request
+contains the byte budget. The omitted option enters the pre-existing renderer
+unchanged, preserving its output byte for byte.
+
+Message create/update keeps body-source ownership explicit across the same
+layers. CLI validates literal input and selects the 65,536-byte stdin bound;
+an infrastructure stream adapter performs the injected descriptor read with
+platform cancellation. A `--body-file` path remains typed request
+data through domain and application without either layer receiving filesystem
+access. Infrastructure alone dereferences it through the existing injected
+regular-file reader while building the reviewed form request, stops at 65,536
+bytes under the caller context, then validates nonempty UTF-8 and the 65,535-byte body ceiling before network I/O. The application port
+therefore remains task-specific and secret-free, and file or stdin failures
+cannot become provider calls.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -193,7 +223,9 @@ outcomes, so they cannot imply an unknown room-create result.
 
 ## Catalog as the public source of truth
 
-`cli.Catalog` contains every public `cli.CommandSpec`. Routing, root help, command help, uniqueness checks, catalog-wide effect tests, and structured human-help recipes derive from it.
+`cli.Catalog` contains every public `cli.CommandSpec`. Routing, root,
+namespace, and exact text help, uniqueness checks, catalog-wide effect tests,
+and structured examples derive from it.
 
 `DefaultCatalog` remains the complete public, capability, API-coverage, and
 release ledger. Each leaf declares whether it is configurable. Production
@@ -214,9 +246,9 @@ are omitted on the next confirmed save. This narrow migration does not make
 arbitrary always-on paths valid selection entries.
 
 The active view is loaded before trailing-help normalization and command
-matching. Root, namespace, exact, and trailing human help; root/namespace agent
-indexes and exact-command scopes; recovery projections; reference workflows; and routing consume that same
-view. A disabled command therefore takes the existing `unknown_command` path
+matching. Root, namespace, exact, and trailing text help; recovery projections;
+reference workflows; and routing consume that same view. A disabled command
+therefore takes the existing `unknown_command` path
 before lazy PAT resolution or provider I/O. View validation is deliberately
 narrower than full-catalog validation: a visible terminal producer may have no
 visible consumer, but each visible required-reference consumer must have a
@@ -224,12 +256,11 @@ reachable visible producer and every visible recovery action must resolve
 inside the view. Selection never auto-enables another command to repair an
 invalid graph.
 
-Human recipes are structured metadata attached to a public `CommandSpec`, not
-another dispatcher. Exact-command text help scans active catalog metadata,
-retains only recipes whose steps contain the selected command, and renders one
-only when every structured exact step exists in the active view. Root and
-namespace text help remain indexes. Recipes are absent from every agent-help
-shape, whose bounded discovery contract is unchanged.
+Examples are structured metadata attached to a public `CommandSpec`, not
+another dispatcher. Exact-command text help scans active catalog metadata and
+renders at most two examples whose exact steps exist in the active view. Root
+help remains an index; namespace help instead renders each leaf's complete
+usage, required flags, and catalog-declared required one-of input groups.
 
 `config` is one fixed-`tool_local`-target write and the sole public
 command-selection command. CLI builds its checkbox rows from
@@ -269,9 +300,9 @@ only when `doctor` reports both. An absent profile instead reports
 deterministic empty-selection fingerprint; the interactive selector still
 presents an all-selected initial draft. Missing state therefore cannot be
 mistaken for a persisted replacement.
-Exact-command agent help declares the exact runtime message grammar, and the JSON
-error contract is tested against it rather than leaving these dynamic values in
-undeclared prose. Malformed
+The internal catalog failure contract declares the exact runtime message
+grammar, and JSON/text error fixtures are tested against it rather than leaving
+these dynamic values in unvalidated prose. Malformed
 serialized content is
 the only load failure that
 `config` treats as in-tool repairable, and it still writes only after Enter.
@@ -281,26 +312,29 @@ repair or restore the filesystem outside `cwk` before running `doctor` or
 `config` again. Exact help remains available without treating invalid state as
 permission to enable Chatwork commands.
 
-Human text help is a hierarchical catalog projection, not another registry.
+Text help is a hierarchical catalog projection, not another registry.
 The root partitions the catalog into directly runnable single-word commands
 and first-seen top-level namespaces, renders the direct section before the
 namespace section, and preserves curated catalog-relative order within each
 section; each namespace appears once with its derived leaf count. Namespace
-help selects the same word-boundary prefix and renders its exact commands
-relative to that prefix. A trailing `--help` or `-h` is normalized to the
+help selects the same word-boundary prefix and renders every exact command's
+complete usage and required flags relative to that prefix. A trailing `--help`
+or `-h` is normalized to the
 existing local `help <selector>` task only after the catalog proves the
 preceding words are an exact command or namespace. Unknown selectors therefore
 preserve the normal unknown-command fault, and namespaces never become implicit
 executable operations.
 
-Exact human help projects `AgentContract.Inputs` rather than parsing usage text
-or maintaining flag prose. It emits required versus optional, repeatability,
-input source, allowed values, opaque-reference kind, and the validated
-description. Namespace help points first to an exact command's machine contract;
-the much larger all-namespace contract remains an explicitly labeled secondary
-choice.
+Exact help projects `AgentContract.Inputs` rather than parsing usage text or
+maintaining flag prose. It emits only one usage line, each flag's name, type,
+required, required-one-of, or optional state and one-line description,
+combination constraints, and at most two examples. A shared renderer enforces a 2,048-byte encoded
+ceiling for every exact command, and catalog validation rejects a declaration
+whose full or active-view minimum projection cannot fit it. Complete output, authentication, failure,
+mutation, and workflow metadata remains available to internal catalog
+validation and runtime structured errors, not as a public help dump.
 
-Because exact human help renders every input name as CLI-authored structure,
+Because exact text help renders every input name as CLI-authored structure,
 catalog validation applies UTF-8, Unicode whitespace, control/format, and line
 separator rejection to names from every input source, including environment,
 configuration, and stdin. A non-argv source cannot bypass terminal-safe help
@@ -315,6 +349,15 @@ complete typed account collection with exact substring semantics, changes the
 result task back to `members.find`, and attaches source-count/query provenance.
 Infrastructure therefore owns no display-name search policy or undocumented
 query parameter, while presentation receives only a validated candidate set.
+
+`rooms list --query` is a distinct application-derived discover projection.
+CLI treats the query as non-identity text, application clears it before one
+ordinary `rooms.list` provider call, then scans rune windows with Unicode simple
+case folding, preserving provider order and all matches. It performs no Unicode
+or whitespace normalization, trim, ranking, multi-rune case expansion, provider
+query, or automatic selection. The result carries query/source/candidate and
+completeness provenance with canonical room references. `members find` keeps
+its existing exact case-sensitive substring semantics.
 
 At minimum, catalog validation rejects:
 
@@ -331,7 +374,11 @@ At minimum, catalog validation rejects:
   one required CLI parent binding; reference-bound writes without a matching
   required CLI existing-target binding; fixed-target mutations with inputs or
   a mismatched target; and mutations without complete impact;
-- a root agent-index entry larger than 512 encoded bytes, which would let selection prose crowd detailed scoped contracts as the catalog grows;
+- an exact text-help projection larger than 2,048 encoded bytes, more than two
+  examples, or content outside the allowed invocation facts;
+- malformed or conflicting deprecated aliases, including an alias without a
+  finite compatibility declaration or one that does not bind one canonical
+  input;
 - command metadata that cannot produce consistent help and routing.
 
 ## Command roles and opaque reference flow
@@ -345,26 +392,20 @@ At minimum, catalog validation rejects:
 | `RoleAct` | Operates on required declared opaque references, or on one exact catalog-declared fixed `tool_local` singleton when no selection exists |
 | `RoleUnknown` | Invalid for a public command |
 
-Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. A fixed target instead declares a stable kind, ID, description, and `tool_local` scope directly on the agent contract; it cannot coexist with produced or consumed target references. The catalog derives the reference graph, scoped workflows, next actions, and fixed-target facts from those fields. A shared reference kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every reference kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Human help may stay concise; exact-command agent help exposes the exact graph, fixed target, pagination binding, and field meanings.
+Reference kinds live on `AgentContract.Output.Fields`, `AgentContract.Inputs`, and the top-level cursor field owned by `AgentContract.Pagination`. `ProducedRef` and `ConsumedRef` are compatibility projections, not a second declaration. A fixed target instead declares a stable kind, ID, description, and `tool_local` scope directly on the agent contract; it cannot coexist with produced or consumed target references. The catalog derives the reference graph, scoped workflows, next actions, and fixed-target facts from those fields. A shared reference kind is an explicit claim that every value of that kind is interchangeable at each matching input; use distinct kinds when fields or target roles are not interchangeable. Every reference kind needs a producer and consumer, and the required-reference dependency graph must be reachable from at least one command that can run without an unresolved required reference. Optional first-page cursors do not create a dependency. `CommandOutput.Fields` always describe values inside the declared JSON envelope; a public `paged` output owns its separate cursor name, string type, description, and shared opaque kind in `Pagination`. Its typed `completion: "empty_cursor"` rule makes an always-present empty string the sole completion marker. Public help stays concise; internal catalog checks expose and validate the full graph, fixed target, pagination binding, and field meanings.
 
-Agent-help schema version 4 separates selection from invocation detail at an
-exact-command boundary. Root `help --format agent` is an `index` view containing
-only each command's path, top-level namespace, summary, capability ID, outcome,
-effect, and role. A namespace selector returns the same compact fields for only
-that namespace plus an explicit namespace scope marker. Each encoded index entry
-has a 512-byte catalog budget. Both indexes name only `commands[].path` and
-`help <exact-command> --format agent` as the complete-contract request. An exact
-selector returns a `scope` view containing global I/O/error contracts, one
-complete `AgentContract`, and reference workflows touching that command.
-Structured inputs mark repeatable flags explicitly; argument parsing consumes
-that same catalog field rather than maintaining a second flag registry. Its I/O
-contract marks external text as untrusted data, declares visible structural
-projection, and distinguishes validated exact opaque references. A known path
-therefore needs one help invocation; an unknown outcome needs the root index and
-one exact request. Detailed inputs, outputs, authentication, failures, mutations,
-and workflows multiply in neither root nor namespace indexes.
+Public help has no agent schema. Root and namespace text views select a command;
+exact text help supplies only the bounded invocation facts above. Structured
+inputs still mark repeatable flags and deprecated aliases explicitly, and
+argument parsing consumes those same catalog fields rather than maintaining a
+second registry. Passing `--format agent` to help produces a typed retirement
+error directing the caller to `--help`. Unknown flags produce a deterministic
+did-you-mean suggestion from the selected command's declared flags and aliases,
+but parsing never rewrites or executes the suggestion automatically. Complete
+`AgentContract` I/O, failure, authentication, mutation, and workflow data stays
+an internal executable contract and drives runtime structured errors.
 
-Catalog `CommandOutput` metadata is executable compatibility data, not descriptive decoration. Generic CLI contract tests run each built-in JSON renderer and compare its `schema_version`, declared envelope, and every item key with the corresponding catalog declaration. Agent-help shape snapshots separately fix the intentionally different root index, namespace index, and exact scope views.
+Catalog `CommandOutput` metadata is executable compatibility data, not descriptive decoration. Generic CLI contract tests run each built-in JSON renderer and compare its `schema_version`, declared envelope, and every item key with the corresponding catalog declaration. Text-help snapshots separately fix root, namespace, exact, trailing, and retired-format behavior.
 
 ## Semantic and presentation boundary
 
@@ -398,7 +439,10 @@ mapping: recent emits `force=1`, while changes omits `force`. In particular,
 membership once over the bounded typed provider result, then ranks candidates
 by typed send time, applies optional one-based
 `--start-index` and maximum `--count` 1..100, and only then expands
-direct non-transitive `replies` context. A timestamp selects membership but
+direct non-transitive `replies` context. CLI assembly defaults an active
+selection's omitted context to `replies`; exact `none` skips this application
+expansion, and context without a primary selection fails before authentication.
+A timestamp selects membership but
 never changes provider-order output; equal timestamps prefer the later provider
 position. Omitted targets remain explicit unresolved canonical references
 until the bounded resolution phase; they are never guessed. Selection metadata carries source and
@@ -407,6 +451,67 @@ actual items per page, optional next start index, original source sequences,
 and primary anchors so presentation need not reconstruct policy. Explicit reply
 context may make displayed count exceed the requested primary count or include
 a direct neighbor outside the primary period.
+
+`messages list --limit` is catalog metadata for one deprecated alias of
+`--count`, not a second application input. CLI parsing binds either spelling to
+the same typed count, rejects simultaneous/conflicting uses, and emits the
+successful migration notice only on stderr. The alias remains for at least two
+minor releases. Other unknown flags fail before authentication/I/O and may
+suggest a declared spelling without silently changing argv.
+
+Command-path compatibility uses `CommandSpec.DeprecatedAliases`. Catalog
+validation rejects invalid, duplicate, canonical-colliding, command-boundary
+colliding, and alias-to-alias command/namespace-prefix-colliding spellings.
+Dispatch normalizes one exact alias prefix to its canonical path before
+resolving the active view, so aliases share the canonical handler, intent,
+help, and fail-closed selection policy. No router-owned alias map exists.
+Static help recognition is read-only and may use the complete catalog when the
+local command-selection store returns the declared invalid/unsafe/unavailable
+faults. Root and namespace rendering receives invocation-local fallback state
+and adds a static-catalog/`doctor` notice; exact help remains invocation-only.
+Non-help invocations keep the original fault.
+
+Leading root-option validation precedes catalog validation and active-view
+loading. A typo hint can therefore consult only the fixed global option set and
+cannot trigger configuration, authentication, or task I/O. After the active
+view is derived, unknown-command guidance ranks only its canonical
+`CommandSpec.Path` values; it never consults the disabled portion of
+`DefaultCatalog`, deprecated command aliases, or handlers, and it never
+normalizes the suggested argv.
+
+`messages list --max-bytes` is a distinct presentation bound, not message
+selection, application pagination, or provider pagination. CLI validates its
+decimal value in the inclusive range 1..16,777,216 before authentication. The
+normal use case still performs its one existing room-message list request and
+the same bounded exact-message relation reads; the budget neither reaches nor
+changes either request. After the complete result returns, CLI chooses the
+longest primary-anchor prefix in application-provided newest-first rank order,
+then renders the retained union in provider order.
+
+One delivery unit contains the whole primary message, its selected direct reply
+context, and the reachable relation-context and relation-gap closure needed for
+those retained records. Shared records may be deduplicated, but no message,
+body, actor binding, or relation record may be split. The complete encoded
+stdout envelope is measured, including the delivery record and final newline.
+The delivery record is the absolute final output line, and its terminating
+newline remains inside the hard budget. Its keys are exactly `max-bytes`,
+`output-complete`, `output-items`, always-present `output-total-items`, and
+optional `output-next-start-index` plus conditional `output-next-count`; the
+former is the next omitted anchor's newest-first rank, and the latter replaces
+an original count with the remaining anchors so continuation cannot expand the
+selected slice. `output-items` counts delivered primary anchors rather than
+physical records, while `output-total-items` counts every primary anchor
+eligible for delivery before projection. Provider `complete` and application
+selection `next-start-index` pass through unchanged and remain semantically
+independent from output delivery.
+For a budgeted projection, CLI recomputes `relation-resolution targets` from
+the relation-context and relation-gap targets it will actually emit after that
+summary line. It preserves `fetch-attempts` from the complete application
+result because that is the total work already performed before presentation.
+The projection changes neither value in the application result itself.
+When the fixed envelope or first atomic unit does not fit, CLI returns
+`output_budget_too_small` before writing stdout. A budgeted failure therefore
+cannot expose a partial prefix.
 
 Public CLI assembly defaults `--resolve-relations` to five and accepts 0..100.
 After selection, application walks every explicit same-room reply edge and
@@ -420,6 +525,16 @@ authentication binding and caller context are reused unchanged. Fetched
 context is not appended to provider sequences. Every explicit same-room reply
 on that context joins the breadth-first queue; duplicate and cyclic targets
 are visited once.
+
+For `messages show`, context remains a dedicated typed result rather than
+appending children to the exact-result `Messages` variant. `MessageShowContext`
+binds the requested anchor to an explicit child slice, original source
+sequences, visible source count, bounded latest-window coverage, and access
+limitation. Domain validation requires every child to be in the anchor room and
+to carry a resolved typed reply edge to the anchor. CLI renders the anchor
+first, then one bounded reply-context record and each child canonical record,
+then the existing parent-resolution records. Omitted/`none` requests cannot
+carry this context.
 
 CLI request assembly parses whole-second offset-bearing RFC3339 bounds and
 resolves `--on YYYY-MM-DD|today|yesterday` once with its injected clock and the
@@ -464,13 +579,17 @@ rooms list
        |
        | exact opaque value
        v
-messages list --room <room-ref>
+messages list --room <room-id>
   RoleAct
   consumes {kind: chatwork-room, argument: --room}
 ```
 
 The current task projection emits the exact canonical `room_ref` directly and
-defines no display alias; only that canonical value is accepted by the action.
+defines no display alias; only a leading-zero-free positive decimal value of 1
+through 32 digits is accepted unchanged by `--room <room-id>`. A display name,
+`rid...`, `chatwork-room:...`, or Chatwork browser URL is rejected. Name-first
+workflows use `rooms list --query`, whose one application-owned case-insensitive
+filter returns every candidate and never invokes an action.
 Historical candidate-C aliases were document-local and were never accepted by
 commands. Generic reference-graph tests use synthetic test-local catalog specs;
 the public Chatwork graph remains the only runnable discover-to-act evidence.

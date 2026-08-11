@@ -16,6 +16,86 @@ import (
 
 func noOpHandler(context.Context, *CLI, CommandSpec, operation.Intent, []string) int { return ExitOK }
 
+func TestCatalogRejectsInvalidCommandAliases(t *testing.T) {
+	for name, mutate := range map[string]func([]CommandSpec){
+		"canonical path": func(commands []CommandSpec) {
+			commands[0].DeprecatedAliases = []string{commands[0].Path}
+		},
+		"duplicate alias": func(commands []CommandSpec) {
+			commands[0].DeprecatedAliases = []string{"legacy command"}
+			commands[1].DeprecatedAliases = []string{"legacy command"}
+		},
+		"canonical collision": func(commands []CommandSpec) {
+			commands[0].DeprecatedAliases = []string{commands[1].Path}
+		},
+		"command boundary collision": func(commands []CommandSpec) {
+			commands[0].DeprecatedAliases = []string{commands[1].Path + " detail"}
+		},
+		"alias boundary collision": func(commands []CommandSpec) {
+			commands[0].DeprecatedAliases = []string{"legacy command"}
+			commands[1].DeprecatedAliases = []string{"legacy command detail"}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			commands := DefaultCatalog().Commands()
+			mutate(commands)
+			if err := NewCatalog(commands...).Validate(); err == nil {
+				t.Fatal("invalid command alias contract passed validation")
+			}
+		})
+	}
+}
+
+func TestCatalogClonesCommandAliases(t *testing.T) {
+	var source CommandSpec
+	for _, command := range DefaultCatalog().Commands() {
+		if command.Path == "messages show" {
+			source = command
+			break
+		}
+	}
+	if len(source.DeprecatedAliases) != 1 {
+		t.Fatalf("source aliases = %v", source.DeprecatedAliases)
+	}
+	catalog := NewCatalog(source)
+	source.DeprecatedAliases[0] = "changed alias"
+	stored, found := catalog.Lookup("messages show")
+	if !found || len(stored.DeprecatedAliases) != 1 || stored.DeprecatedAliases[0] != "messages get" {
+		t.Fatalf("stored aliases = %v, found=%t", stored.DeprecatedAliases, found)
+	}
+}
+
+func TestCatalogRejectsExactHelpThatCannotFitThePublicByteBudget(t *testing.T) {
+	command := utilitySpec("oversized")
+	for index := 0; index < 80; index++ {
+		command.HelpConstraints = append(command.HelpConstraints, "この合成併用制約は公開ヘルプの固定部分を意図的に増やします。")
+	}
+	if err := NewCatalog(command).Validate(); err == nil || !strings.Contains(err.Error(), "exact help exceeds") {
+		t.Fatalf("oversized exact help validation error = %v", err)
+	}
+}
+
+func TestActiveViewRejectsARecipeProjectionThatExceedsTheHelpBudget(t *testing.T) {
+	first := utilitySpec("helpers first")
+	second := utilitySpec("helpers second")
+	target := utilitySpec("items inspect")
+	first.Configurable = true
+	second.Configurable = true
+	target.Configurable = true
+	target.HumanRecipes = []HumanHelpRecipe{
+		{Title: "first", Steps: []HumanHelpRecipeStep{{Path: first.Path}, {Path: target.Path}}},
+		{Title: "second", Steps: []HumanHelpRecipeStep{{Path: second.Path}, {Path: target.Path}}},
+		{Title: "third", Steps: []HumanHelpRecipeStep{{Path: target.Path, Args: strings.Repeat("x", maxExactHelpBytes)}}},
+	}
+	catalog := NewCatalog(first, second, target)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("full catalog should project only its first two bounded recipes: %v", err)
+	}
+	if _, _, err := catalog.ActiveView([]string{target.Path}); err == nil || !strings.Contains(err.Error(), "exact help exceeds") {
+		t.Fatalf("active oversized recipe validation error = %v", err)
+	}
+}
+
 func utilitySpec(path string) CommandSpec {
 	return CommandSpec{
 		Path:    path,
@@ -231,6 +311,46 @@ func TestArgumentSyntaxRequiredAndAllowedValuesMatchAgentInputs(t *testing.T) {
 				t.Fatal("argument syntax mismatch passed validation")
 			}
 		})
+	}
+}
+
+func TestCatalogValidatesAndDeepCopiesExclusiveInputGroups(t *testing.T) {
+	valid := utilitySpec("items create")
+	valid.Args = "[--body <text>] [--body-file <path>]"
+	valid.Agent.Inputs = []CommandInput{
+		{Name: "--body", Source: InputSourceFlag, Description: "Literal body.", AllowedValues: []string{}},
+		{Name: "--body-file", Source: InputSourceFlag, Description: "Body file.", AllowedValues: []string{}},
+	}
+	valid.ExclusiveInputGroups = [][]string{{"--body", "--body-file"}}
+	if err := NewCatalog(valid).Validate(); err != nil {
+		t.Fatalf("valid exclusive input group: %v", err)
+	}
+
+	mutations := map[string]func(*CommandSpec){
+		"one member":       func(spec *CommandSpec) { spec.ExclusiveInputGroups[0] = []string{"--body"} },
+		"unknown member":   func(spec *CommandSpec) { spec.ExclusiveInputGroups[0][1] = "--missing" },
+		"required member":  func(spec *CommandSpec) { spec.Agent.Inputs[0].Required = true },
+		"duplicate member": func(spec *CommandSpec) { spec.ExclusiveInputGroups[0][1] = "--body" },
+		"multiple groups": func(spec *CommandSpec) {
+			spec.ExclusiveInputGroups = append(spec.ExclusiveInputGroups, []string{"--body", "--body-file"})
+		},
+	}
+	for name, mutate := range mutations {
+		t.Run(name, func(t *testing.T) {
+			spec := cloneCommandSpec(valid)
+			mutate(&spec)
+			if err := NewCatalog(spec).Validate(); err == nil {
+				t.Fatal("invalid exclusive input group passed validation")
+			}
+		})
+	}
+
+	catalog := NewCatalog(valid)
+	copy, _ := catalog.Lookup(valid.Path)
+	copy.ExclusiveInputGroups[0][0] = "--changed"
+	stored, _ := catalog.Lookup(valid.Path)
+	if stored.ExclusiveInputGroups[0][0] != "--body" {
+		t.Fatalf("stored exclusive input group was mutated: %+v", stored.ExclusiveInputGroups)
 	}
 }
 
@@ -543,9 +663,79 @@ func TestReferenceGraphAllowsMultipleInputsOfTheSameKind(t *testing.T) {
 	if len(consumed) != 2 || consumed[0].Argument != "--left-id" || consumed[1].Argument != "--right-id" {
 		t.Fatalf("ConsumedRefs() = %+v", consumed)
 	}
-	workflows := catalog.referenceWorkflows()
-	if len(workflows) != 2 {
-		t.Fatalf("reference workflows = %+v, want one per same-kind input", workflows)
+}
+
+func TestDeprecatedInputAliasesAreFlagOnlyLongAndCollisionFree(t *testing.T) {
+	valid := utilitySpec("items list")
+	valid.Args = "[--count <count>]"
+	valid.Agent.Inputs = []CommandInput{{
+		Name: "--count", Source: InputSourceFlag, Required: false,
+		Description: "Maximum item count.", AllowedValues: []string{},
+		DeprecatedAliases: []string{"--limit"},
+	}}
+	if err := validateAgentContract(valid); err != nil {
+		t.Fatalf("valid deprecated alias: %v", err)
+	}
+
+	tests := map[string]func(*CommandSpec){
+		"alias on argument": func(spec *CommandSpec) {
+			spec.Args = "[selector]"
+			spec.Agent.Inputs[0] = CommandInput{
+				Name: "selector", Source: InputSourceArgument, Required: false,
+				Description: "Optional selector.", AllowedValues: []string{}, DeprecatedAliases: []string{"--old"},
+			}
+		},
+		"short alias": func(spec *CommandSpec) {
+			spec.Agent.Inputs[0].DeprecatedAliases = []string{"-l"}
+		},
+		"canonical repeated as alias": func(spec *CommandSpec) {
+			spec.Agent.Inputs[0].DeprecatedAliases = []string{"--count"}
+		},
+		"duplicate aliases": func(spec *CommandSpec) {
+			spec.Agent.Inputs[0].DeprecatedAliases = []string{"--limit", "--limit"}
+		},
+		"alias collides with another canonical input": func(spec *CommandSpec) {
+			spec.Args = "[--count <count>] [--limit <count>]"
+			spec.Agent.Inputs = append(spec.Agent.Inputs, CommandInput{
+				Name: "--limit", Source: InputSourceFlag, Required: false,
+				Description: "Other limit.", AllowedValues: []string{},
+			})
+		},
+		"aliases collide across inputs": func(spec *CommandSpec) {
+			spec.Args = "[--count <count>] [--offset <count>]"
+			spec.Agent.Inputs = append(spec.Agent.Inputs, CommandInput{
+				Name: "--offset", Source: InputSourceFlag, Required: false,
+				Description: "Item offset.", AllowedValues: []string{}, DeprecatedAliases: []string{"--limit"},
+			})
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			candidate := cloneCommandSpec(valid)
+			mutate(&candidate)
+			if err := validateAgentContract(candidate); err == nil {
+				t.Fatal("invalid deprecated alias contract passed validation")
+			}
+		})
+	}
+}
+
+func TestDeprecatedInputAliasesAreDeepCopied(t *testing.T) {
+	spec := utilitySpec("items list")
+	spec.Args = "[--count <count>]"
+	spec.Agent.Inputs = []CommandInput{{
+		Name: "--count", Source: InputSourceFlag, Required: false,
+		Description: "Maximum item count.", AllowedValues: []string{}, DeprecatedAliases: []string{"--limit"},
+	}}
+	catalog := NewCatalog(spec)
+	copy, found := catalog.Lookup(spec.Path)
+	if !found {
+		t.Fatal("catalog lacks items list")
+	}
+	copy.Agent.Inputs[0].DeprecatedAliases[0] = "--changed"
+	stored, _ := catalog.Lookup(spec.Path)
+	if got := stored.Agent.Inputs[0].DeprecatedAliases[0]; got != "--limit" {
+		t.Fatalf("stored alias=%q, want --limit", got)
 	}
 }
 

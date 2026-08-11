@@ -49,26 +49,31 @@ When `cwk` claims to support a user outcome, it owns the deterministic selection
 
 ## Axiom 2: An agent reaches an executable task without guessing
 
-An agent that knows the user's desired outcome should reach the exact command contract through bounded, machine-readable discovery.
+An agent that knows the user's desired outcome should reach an executable
+invocation through bounded text help. Complete catalog metadata remains an
+internal validation source; recovery detail is delivered by the structured
+runtime error at the point where it is needed.
 
 ### Consequences
 
-- Root and namespace agent help are compact outcome indexes. A namespace never
-  aggregates complete command contracts.
-- An unknown outcome needs at most the root index and one exact-command request;
-  a known path needs one exact-command request. Direct namespace navigation
-  likewise needs only its compact index and one exact-command request.
-- Human text help narrows from one root namespace entry to that namespace's
-  exact commands instead of repeating every leaf command at the root. Direct
-  single-word utilities remain directly visible. Exact-command human help may
-  show reviewed multi-command recipes whose steps contain that command and are
-  all present in the active catalog. Root and namespace help remain indexes;
-  recipes never enter agent help or become a second routing registry.
-- Human and agent help are complementary projections: the human hierarchy
-  reduces visual duplication, while the machine root retains exact outcomes so
-  exact invocation detail remains at most one further request away. Complete
-  inputs, output, authentication, failures, mutation facts, and workflows are
-  returned only for one exact command.
+- `cwk --help`, `cwk <namespace> --help`, and exact-command `--help` are the
+  only public help projection. The retired `help ... --format agent` form fails
+  explicitly and directs the caller to `--help`; `--format json` remains a data
+  output choice only where a task declares it.
+- Root help is a compact namespace/outcome index. Namespace help emits every
+  visible leaf's complete usage line, required flags, and required one-of input
+  groups, so an agent can begin
+  composing the command after one namespace lookup rather than opening every
+  leaf in turn.
+- Exact-command help is at most 2,048 encoded bytes and contains only one usage
+  line, each flag's name/type/required, required-one-of, or optional state/one-line description,
+  combination constraints, and at most two examples. It does not preload
+  output schemas, authentication, failure catalogs, mutation facts, or
+  reference workflows.
+- `AgentContract` and other catalog metadata remain complete, structured, and
+  machine-validated behind that projection. Runtime structured errors own
+  `kind`, `code`, actionable `next_action`, and the applicable usage instead of
+  requiring a speculative full-contract help read.
 - The complete catalog remains the product and release contract, while a user
   may derive a smaller active attention view by enabling exact command paths.
   Routing and every help projection consume that same view so an irrelevant
@@ -94,17 +99,42 @@ An agent that knows the user's desired outcome should reach the exact command co
   active graph, restores the terminal, and only then crosses one mutation
   boundary.
 - Invalid persisted state never masquerades as a deliberately empty attention
-  view. Always-on local operations and their scoped help remain reachable, but
-  bare root help returns the typed load fault because it cannot truthfully
-  project a Chatwork view. Read-only `doctor` reports command-selection source,
-  state, enabled/disabled counts, and a deterministic fingerprint for
-  uncertain-save reconciliation. `help` describes commands; it does not
-  reconcile saved state.
-- Scoped help declares inputs, effects, authentication, output semantics, completeness, failures, recovery, and reference workflows.
+  view. Static root, namespace, and exact-command help remains available from
+  the immutable complete catalog, including through trailing `--help`; this is
+  read-only invocation documentation, not a claim that those tasks are enabled.
+  Root and namespace fallback help say that the selection could not be read and
+  direct recovery to `doctor`; exact help keeps its bounded invocation-only form.
+  Every non-help Chatwork invocation still returns the typed load fault.
+  Read-only `doctor` reports command-selection source, state, enabled/disabled
+  counts, and a deterministic fingerprint for uncertain-save reconciliation.
+  `help` describes commands; it does not reconcile saved state.
+- Public help declares the bounded invocation facts above; catalog validation
+  separately proves effects, authentication, output semantics, completeness,
+  failures, recovery, and reference workflows.
 - Commands do not silently search again, choose a display-name match, or rely on hidden defaults. A dedicated discover command may filter a complete typed candidate collection by external display text, but it returns every match with canonical references and never promotes one match to an act-command identity.
+- `rooms list --query <text>` owns the common room-name lookup without `grep`.
+  It performs Unicode simple-case-folded substring matching over one complete
+  typed room read, with no normalization, trimming, ranking, provider query, or
+  automatic selection. Zero, one, and many matches are all successful discover
+  outcomes in provider order. `members find` retains its separate exact
+  case-sensitive substring contract.
+- A catalog-declared deprecated flag alias may preserve a finite migration
+  without changing task semantics. `messages list --limit` aliases `--count`
+  for at least two minor releases, succeeds, and writes a migration warning to
+  stderr. Unknown flags fail without correction but include a deterministic
+  did-you-mean suggestion from that command's declared flags and aliases.
+- Finite command-path compatibility spellings also belong to the owning
+  `CommandSpec`; they are not a router-side registry. `messages get` normalizes
+  to `messages show`, and `rooms members find|list|replace` normalize to the
+  matching `members` command before active-view dispatch. The canonical path
+  remains intent, help, recovery, and handler identity.
 - The documented `messages list` default is the latest bounded `recent`
   window, matching the common conversation-understanding task. Provider-stateful
   differential retrieval is an explicit `--window changes` choice.
+- A sender, period, or index selection defaults its direct typed context to
+  `replies`, matching the measured common investigation path. Explicit
+  `--context none` is the lower-output opt-out. Context cannot be supplied by
+  itself because it has no primary anchor set.
 - The shortest `messages list` also owns five declared exact-message fetch slots
   for every unique explicit same-room reply target missing from that bounded source.
   `--resolve-relations 0` is the opt-out and 1..100 is a deliberate alternate
@@ -124,16 +154,18 @@ An agent that knows the user's desired outcome should reach the exact command co
   blocked unseen mutations, declared uncertain-error grammar, doctor
   fingerprint reconciliation, and migration of only the formerly selectable
   `doctor` and `version` paths.
-- First-run tests prove the control-only human and agent help views, the explicit
+- First-run tests prove the control-only text-help view, the explicit
   human help explanation, `state=unconfigured source=missing` diagnostics,
   exact `config` recovery, and zero PAT/provider calls for known Chatwork paths.
-- Root and namespace agent-index entries retain the 512-byte per-command budget.
-- Human-help tests prove that every catalog command belongs to exactly one root
-  entry and round-trips through its canonical namespace; exact-help recipe
-  steps resolve against the active catalog and disappear as a unit when any
-  step is hidden.
-- Agent-readiness tests reject command probing, whole-namespace contract
-  loading, prose scraping, and undeclared follow-up calls.
+- Catalog validation and text-help tests enforce the 2,048-byte exact-command
+  ceiling, the exact-help content boundary, namespace leaf
+  usage/required-flag/required-one-of projection, and explicit
+  rejection of the retired agent format.
+- Help tests prove that every catalog command belongs to exactly one root entry
+  and round-trips through its canonical namespace; examples resolve against the
+  active catalog and never exceed two for one exact command.
+- Agent-readiness tests reject command probing, full-contract preloading,
+  external help scraping, and undeclared follow-up calls.
 
 ## Axiom 3: Semantics precede presentation
 
@@ -213,9 +245,9 @@ Supplemental reply parents use distinct `relation-context` records with
 actual number of additional provider calls.
 
 When `messages list` selects exact senders, repeated sender inputs use OR
-semantics. The optional `replies` context is a bounded, direct one-hop expansion
+semantics. An active selection defaults to `replies`, a bounded, direct one-hop expansion
 over typed in-window reply edges; it does not mean a whole thread or include
-To/quote/body-derived neighbors. Selection preserves the original provider
+To/quote/body-derived neighbors. Explicit `none` skips that expansion. Selection preserves the original provider
 sequence, including gaps, distinguishes sender matches from added context once
 per document, and does not claim that two selected speakers form an exclusive
 conversation.
@@ -239,7 +271,8 @@ OR predicate when present and the half-open period predicate when present.
 Typed send time establishes candidate rank;
 equal times prefer the later provider position. Selected records are still
 emitted in their original provider order with original source sequences.
-Explicit `replies` context runs afterward and may therefore make displayed
+The default `replies` context runs afterward unless explicitly set to `none`,
+and may therefore make displayed
 count exceed `count` or add a direct neighbor outside the primary period.
 Selection metadata keeps effective period bounds, candidate count, start
 index, requested count, actual items per page, and optional next start index
@@ -258,6 +291,19 @@ visited set stops duplicates and cycles. Not-found and restricted are per-target
 rate, cancellation, malformed, and unclassified permission faults abort the
 whole command instead of returning partial success. This closure does not
 discover arbitrary history and does not follow cross-room references.
+
+`messages show --context replies` owns the distinct exact-anchor workflow that
+agents otherwise reconstruct with a second command. It performs the exact
+message read first, then one declared `recent` message-list read in the same
+room and authentication binding. Only provider-order messages whose typed,
+same-room reply edge points to the anchor become direct children; To, quotes,
+body text, names, and time proximity never qualify. The child source publishes
+its count, fixed 100-message limit, completeness, access limitation, and
+original sequences, so an empty list cannot imply that older or restricted
+children do not exist. This fixed read does not consume
+`--resolve-relations`; that separate 0..100 budget continues to resolve the
+anchor's outgoing reply-parent chain. Omitted context and explicit `none`
+retain the single exact read.
 
 For a nonempty, unrestricted `recent` source with valid typed send times, the
 oldest reachable boundary is the minimum source send time with provider order
@@ -317,8 +363,14 @@ chosen from available remote or credential state.
 ### Consequences
 
 - Every public command is `utility`, `discover`, or `act`.
-- Display names, positions, browser URLs, and presentation-derived shorthand are not authorization identities.
+- Display names, positions, browser URLs, `rid...` strings, kind-prefixed text,
+  and presentation-derived shorthand are not authorization identities.
 - An action never case-folds, decodes, trims, reconstructs, or substitutes a Chatwork identifier.
+- A Chatwork room action accepts only the discovered canonical room reference:
+  a leading-zero-free positive decimal value of 1 through 32 digits, passed
+  unchanged through `--room <room-id>`. A room name, `rid442804132`,
+  `chatwork-room:442804132`, or Chatwork browser URL must first be resolved with
+  `rooms list --query` and is rejected at the action boundary.
 - A fixed-target action declares a stable kind, ID, scope, and description,
   produces/consumes no target reference, and becomes invalid when the product
   admits multiple possible targets.
@@ -334,7 +386,8 @@ chosen from available remote or credential state.
 - Fixed singleton targets live on a separate structured catalog field and are
   mechanically excluded from provider-owned or reference-selected flows.
 - Whole-catalog graph tests prove producer/consumer reachability.
-- Round-trip and negative tests preserve exact identity and reject alternate forms before adapter access.
+- Round-trip and negative tests preserve exact identity, exercise room-name
+  discovery separately, and reject alternate room forms before adapter access.
 
 ## Axiom 7: Effects and uncertain outcomes are visible before repetition
 

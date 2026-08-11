@@ -222,6 +222,236 @@ func TestMessageRelationResolutionAbortsOnTransientFetchFailure(t *testing.T) {
 	}
 }
 
+func TestMessagesShowRepliesResolveTypedSameRoomChainAndStopCycle(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchorRef := relationshipReference(t, chatwork.ReferenceMessage, "103")
+	parentRef := relationshipReference(t, chatwork.ReferenceMessage, "102")
+	rootRef := relationshipReference(t, chatwork.ReferenceMessage, "101")
+	anchor := relationMessage(t, room, account, anchorRef.Value, 300)
+	anchor.Replies = []chatwork.Relation{{Kind: "reply", Target: parentRef, ExternalID: room.Value}}
+	parent := relationMessage(t, room, account, parentRef.Value, 200)
+	parent.Replies = []chatwork.Relation{{Kind: "reply", Target: rootRef, ExternalID: room.Value}}
+	root := relationMessage(t, room, account, rootRef.Value, 100)
+	root.Replies = []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: room.Value}}
+	child := relationMessage(t, room, account, "104", 400)
+	child.Replies = []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: room.Value}}
+
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesList {
+			if !request.ForceRecent || request.Message != (chatwork.Reference{}) || len(request.MessageFilter.Senders) != 0 ||
+				request.MessageFilter.Period != (chatwork.MessagePeriod{}) || request.MessageFilter.Context != "" ||
+				request.MessageFilter.StartIndex != 0 || request.MessageFilter.Count != 0 || request.MessageRelationFetchLimit != 0 {
+				t.Fatalf("local show context leaked to provider list request: %+v", request)
+			}
+			return relationListResult(request, []chatwork.Message{child}), nil
+		}
+		switch request.Message {
+		case anchorRef:
+			return relationShowResult(anchor), nil
+		case parentRef:
+			return relationShowResult(parent), nil
+		case rootRef:
+			return relationShowResult(root), nil
+		default:
+			t.Fatalf("unexpected exact target %v", request.Message)
+			return chatwork.Result{}, nil
+		}
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchorRef,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextReplies}, MessageRelationFetchLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(port.requests) != 4 || port.requests[0].Message != anchorRef || port.requests[1].Task != chatwork.TaskMessagesList || port.requests[2].Message != parentRef || port.requests[3].Message != rootRef {
+		t.Fatalf("provider requests = %+v", port.requests)
+	}
+	if len(result.Messages) != 1 || result.Messages[0].Ref != anchorRef || !result.Messages[0].Replies[0].Resolved {
+		t.Fatalf("anchor changed or remained unresolved: %+v", result.Messages)
+	}
+	resolution := result.MessageRelationResolution
+	if resolution == nil || resolution.FetchAttempts != 2 || len(resolution.Targets) != 2 ||
+		resolution.Targets[0].Target != parentRef || resolution.Targets[1].Target != rootRef ||
+		resolution.Targets[0].Message == nil || resolution.Targets[1].Message == nil {
+		t.Fatalf("resolution = %+v", resolution)
+	}
+	if !resolution.Targets[0].Message.Replies[0].Resolved || !resolution.Targets[1].Message.Replies[0].Resolved {
+		t.Fatalf("cycle relation state = %+v", resolution)
+	}
+	if result.MessageShowContext == nil || len(result.MessageShowContext.Children) != 1 || result.MessageShowContext.Children[0].Ref != child.Ref ||
+		!result.MessageShowContext.Children[0].Replies[0].Resolved {
+		t.Fatalf("direct reply children = %+v", result.MessageShowContext)
+	}
+}
+
+func TestMessagesShowRepliesRetainNotFoundAndRespectFetchBudget(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchorRef := relationshipReference(t, chatwork.ReferenceMessage, "103")
+	first := relationshipReference(t, chatwork.ReferenceMessage, "101")
+	second := relationshipReference(t, chatwork.ReferenceMessage, "102")
+	anchor := relationMessage(t, room, account, anchorRef.Value, 300)
+	anchor.Replies = []chatwork.Relation{
+		{Kind: "reply", Target: first, ExternalID: room.Value},
+		{Kind: "reply", Target: second, ExternalID: room.Value},
+	}
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesList {
+			return relationListResult(request, []chatwork.Message{}), nil
+		}
+		if request.Message == anchorRef {
+			return relationShowResult(anchor), nil
+		}
+		if request.Message == first {
+			return chatwork.Result{}, fault.New(fault.KindNotFound, "chatwork_not_found", "missing", false)
+		}
+		t.Fatalf("budget-exhausted target was fetched: %v", request.Message)
+		return chatwork.Result{}, nil
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchorRef,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextReplies}, MessageRelationFetchLimit: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolution := result.MessageRelationResolution
+	if len(port.requests) != 3 || port.requests[1].Task != chatwork.TaskMessagesList || resolution == nil || resolution.FetchAttempts != 1 || len(resolution.Targets) != 2 ||
+		resolution.Targets[0].State != chatwork.MessageRelationNotFound || resolution.Targets[1].State != chatwork.MessageRelationBudgetExhausted {
+		t.Fatalf("requests/resolution = %d / %+v", len(port.requests), resolution)
+	}
+}
+
+func TestMessagesShowRepliesWithZeroRelationBudgetStillFindsOnlyTypedDirectChildren(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchorRef := relationshipReference(t, chatwork.ReferenceMessage, "100")
+	anchor := relationMessage(t, room, account, anchorRef.Value, 100)
+	typed := relationMessage(t, room, account, "101", 200)
+	typed.Replies = []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: room.Value}}
+	typedSecond := relationMessage(t, room, account, "104", 500)
+	typedSecond.Replies = []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: room.Value}}
+	wrongRoom := relationMessage(t, room, account, "102", 300)
+	wrongRoom.Replies = []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: "999"}}
+	prose := relationMessage(t, room, account, "103", 400)
+	prose.Body = "[rp rid=42 mid=100] reply to 100"
+
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesShow {
+			return relationShowResult(anchor), nil
+		}
+		return relationListResult(request, []chatwork.Message{typed, anchor, wrongRoom, prose, typedSecond}), nil
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchorRef,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextReplies}, MessageRelationFetchLimit: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(port.requests) != 2 || port.requests[1].Task != chatwork.TaskMessagesList || !port.requests[1].ForceRecent {
+		t.Fatalf("provider requests = %+v", port.requests)
+	}
+	if result.MessageRelationResolution != nil || result.MessageShowContext == nil || len(result.MessageShowContext.Children) != 2 ||
+		result.MessageShowContext.Children[0].Ref != typed.Ref || result.MessageShowContext.Children[1].Ref != typedSecond.Ref ||
+		result.MessageShowContext.SourceSequences[0] != 1 || result.MessageShowContext.SourceSequences[1] != 5 {
+		t.Fatalf("typed direct children = %+v resolution=%+v", result.MessageShowContext, result.MessageRelationResolution)
+	}
+}
+
+func TestMessagesShowZeroBudgetDoesNotResolveTargetsHiddenByItsVisibleContext(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchorRef := relationshipReference(t, chatwork.ReferenceMessage, "100")
+	parentRef := relationshipReference(t, chatwork.ReferenceMessage, "99")
+	otherRef := relationshipReference(t, chatwork.ReferenceMessage, "98")
+	anchor := relationMessage(t, room, account, anchorRef.Value, 300)
+	anchor.Replies = []chatwork.Relation{{Kind: "reply", Target: parentRef, ExternalID: room.Value}}
+	child := relationMessage(t, room, account, "101", 400)
+	child.Replies = []chatwork.Relation{
+		{Kind: "reply", Target: anchorRef, ExternalID: room.Value},
+		{Kind: "reply", Target: otherRef, ExternalID: room.Value},
+	}
+	parent := relationMessage(t, room, account, parentRef.Value, 200)
+	other := relationMessage(t, room, account, otherRef.Value, 100)
+
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesShow {
+			return relationShowResult(anchor), nil
+		}
+		return relationListResult(request, []chatwork.Message{other, parent, anchor, child}), nil
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchorRef,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextReplies}, MessageRelationFetchLimit: 0,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.MessageRelationResolution != nil || result.Messages[0].Replies[0].Resolved {
+		t.Fatalf("hidden anchor parent was published as resolved: messages=%+v resolution=%+v", result.Messages, result.MessageRelationResolution)
+	}
+	if result.MessageShowContext == nil || len(result.MessageShowContext.Children) != 1 {
+		t.Fatalf("direct child context = %+v", result.MessageShowContext)
+	}
+	replies := result.MessageShowContext.Children[0].Replies
+	if len(replies) != 2 || !replies[0].Resolved || replies[1].Resolved {
+		t.Fatalf("child relations were not rebound to visible context: %+v", replies)
+	}
+}
+
+func TestMessagesShowRepliesPreservesIncompleteRestrictedRecentCoverage(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchor := relationMessage(t, room, account, "100", 100)
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesShow {
+			return relationShowResult(anchor), nil
+		}
+		result := relationListResult(request, []chatwork.Message{relationMessage(t, room, account, "99", 50)})
+		result.MessageAccess = chatwork.MessageAccessPartial
+		return result, nil
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchor.Ref,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextReplies},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	context := result.MessageShowContext
+	if context == nil || len(context.Children) != 0 || context.SourceCount != 1 || context.Coverage.Complete || context.Coverage.Limit != 100 || context.Access != chatwork.MessageAccessPartial {
+		t.Fatalf("show context coverage = %+v", context)
+	}
+}
+
+func TestMessagesShowNoneKeepsSingleExactRead(t *testing.T) {
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
+	anchorRef := relationshipReference(t, chatwork.ReferenceMessage, "102")
+	parentRef := relationshipReference(t, chatwork.ReferenceMessage, "101")
+	anchor := relationMessage(t, room, account, anchorRef.Value, 200)
+	anchor.Replies = []chatwork.Relation{{Kind: "reply", Target: parentRef, ExternalID: room.Value}}
+	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Message != anchorRef {
+			t.Fatalf("unexpected context fetch %v", request.Message)
+		}
+		return relationShowResult(anchor), nil
+	}}
+	result, err := New(port).Execute(context.Background(), testBinding(t), chatwork.Request{
+		Task: chatwork.TaskMessagesShow, Room: room, Message: anchorRef,
+		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(port.requests) != 1 || result.MessageRelationResolution != nil || result.Messages[0].Replies[0].Resolved {
+		t.Fatalf("provider requests/result = %d / %+v", len(port.requests), result)
+	}
+}
+
 func relationMessage(t *testing.T, room, account chatwork.Reference, id string, sendTime int64) chatwork.Message {
 	t.Helper()
 	return chatwork.Message{

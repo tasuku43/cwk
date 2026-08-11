@@ -28,14 +28,17 @@ cwk config
 
 ChatworkのAPIトークン（PAT）を環境変数 `CWK_API_TOKEN` に設定します。トークンはシークレットマネージャーなど安全な場所で管理してください。`cwk` 自体が保存することはありません。
 
+認証に失敗したら `cwk doctor` を実行してください。値を表示せずに、`CWK_API_TOKEN` の有無・形式と、設定ファイル／キーチェーンが未対応であることを診断します。現時点の認証探索先はコマンドプロセスの `CWK_API_TOKEN` だけです。
+
 ```sh
 cwk rooms list
 ```
 
-一覧で見つけた `room-ref` を使って、会話を読みます。
+一覧で見つけた `room-ref`（先頭ゼロなし・1〜32桁の正の10進数）を、
+`room-id` としてそのまま使って会話を読みます。
 
 ```sh
-cwk messages list --room <room-ref>
+cwk messages list --room <room-id>
 ```
 
 結果は、エージェントが少ないトークンで正確に読める形にまとまります。
@@ -62,27 +65,41 @@ cwk messages --help
 cwk messages list --help
 ```
 
-通常のヘルプは人向けです。エージェントが入力、出力、エラー、復旧手順まで確認するときは、正確なコマンドを指定してagent形式を使います。
-
-```sh
-cwk help --format agent
-cwk help messages list --format agent
-```
+ヘルプ経路はこのtext形式だけです。名前空間のヘルプには配下の各
+コマンドのusageと必須フラグが出るため、その場でコマンドを書き始められます。
+正確なコマンドのヘルプは2KB以内で、usage、フラグ、併用制約、例を最大2件
+だけ表示します。失敗時の復旧は、エラーに出る `kind`、`code`、
+`next_action` を使います。廃止済みの `--format agent` をhelpへ渡すと、
+`--help` を使うよう明示して失敗します。既存の JSON 出力は
+`cwk doctor --format json` で引き続き利用できます。Chatwork タスクの
+成功出力は従来どおり text 形式です。
 
 ## よく使う例
+
+ルーム名の一部しか分からないときは、候補を絞ります。大文字小文字を
+区別せず、日本語を含む部分一致で全候補を返します。
+
+```sh
+cwk rooms list --query コスト
+cwk messages list --room <room-id>
+```
+
+名前、`rid442804132`、`chatwork-room:442804132`、ChatworkのURLは
+`--room` へ直接渡せません。候補に表示された10進数の `room-ref` をそのまま
+使ってください。
 
 今日や昨日の会話だけを読みます。
 
 ```sh
-cwk messages list --room <room-ref> --on today
-cwk messages list --room <room-ref> --on yesterday
+cwk messages list --room <room-id> --on today
+cwk messages list --room <room-id> --on yesterday
 ```
 
 表示名から人物を探し、その人の投稿だけを読みます。
 
 ```sh
-cwk members find --room <room-ref> --query <name>
-cwk messages list --room <room-ref> --sender <account-ref>
+cwk members find --room <room-id> --query <name>
+cwk messages list --room <room-id> --sender <account-ref>
 ```
 
 `members find` は一致した候補をすべて返します。候補が複数あっても、cwkが人物を勝手に選ぶことはありません。
@@ -90,26 +107,85 @@ cwk messages list --room <room-ref> --sender <account-ref>
 件数や期間も絞れます。
 
 ```sh
-cwk messages list --room <room-ref> --count 10
-cwk messages list --room <room-ref> --start-index 11 --count 20
-cwk messages list --room <room-ref> \
+cwk messages list --room <room-id> --count 10
+cwk messages list --room <room-id> --start-index 11 --count 20
+cwk messages list --room <room-id> \
   --since 2026-07-17T12:00:00+09:00 \
   --until 2026-07-17T18:00:00+09:00
 ```
 
-返信の前後関係も含められます。
+旧 `--limit` は `--count` の別名として少なくとも2マイナーバージョン
+受理され、成功時にstderrへ改名案内を出します。新しい呼び出しでは
+`--count` を使ってください。不明なフラグは、近い有効名があれば候補を
+示して失敗し、勝手に置き換えて実行しません。
+
+件数ではなく出力サイズを先に制限したい場合は、1 byte〜16 MiBの予算を
+指定できます。
 
 ```sh
-cwk messages list --room <room-ref> --sender <account-ref> --context replies
+cwk messages list --room <room-id> --max-bytes 8192
 ```
 
-`messages list --help` には、そのコマンドに関係する短いレシピも表示されます。agent形式では、レシピの代わりに再利用できる参照の流れが構造化されます。
+`--max-bytes` は表示だけを制限します。Chatworkへの一覧取得は従来と同じ
+1回で、取得範囲や `complete`、通常の `next-start-index` は変わりません。
+予算で打ち切った結果は、たとえば
+`delivery max-bytes=8192 output-complete=false output-items=4 output-total-items=10 output-next-start-index=5`
+と絶対最終行に示します。`output-items` は表示できた主メッセージ数、
+`output-total-items` はこの呼び出しで配送対象だった主メッセージ総数、
+`output-next-start-index` は次に指定する新しい順の順位です。同じ絞り込みを
+保ったまま `--start-index 5 --max-bytes 8192` とすれば続きを取得できます。
+元の呼び出しに `--count` があった場合は最終行に `output-next-count` も出ます。
+続きでは `--count` をその残り件数へ置き換えるため、元の指定範囲を超えません。
+主メッセージ、その直接の返信コンテキスト、そこから到達する関係情報は
+一まとまりで、本文や行の途中では切りません。固定部分または最初の一まとまり
+さえ予算に入らない場合は `output_budget_too_small` で失敗し、stdoutには
+何も書きません。最終行の末尾改行も予算に含みます。予算付き出力の
+`relation-resolution targets=` は実際に後続出力したrelation target数、
+`fetch-attempts` は打ち切り前に実行済みの総取得回数です。
+`--max-bytes` を省略した出力は従来とbyte単位で同一です。
+
+送信者、日付、期間、順位で絞る場合は、明示的な返信元・返信先を1ホップ
+含める `replies` が既定です。返信コンテキストを省いて出力を軽くする場合だけ
+`--context none` を指定します。
+
+```sh
+cwk messages list --room <room-id> --sender <account-ref>
+cwk messages list --room <room-id> --sender <account-ref> --context none
+```
+
+`messages list --help` には、そのコマンドに関係する短い例を最大2件表示します。
+
+長文やChatwork記法を含む本文は、シェル展開を避けてファイルまたは標準入力から
+送信・更新できます。`--body` と `--body-file` はどちらか一方だけを指定します。
+
+```sh
+cwk messages send --room <room-id> --body-file ./message.txt
+cwk messages update --room <room-id> --message <message-ref> --body-file ./message.txt
+cwk messages send --room <room-id> --body - < ./message.txt
+```
+
+本文は空でないUTF-8の1〜65535バイトです。改行、Chatwork記法、`$` や `>`
+などの文字は本文としてそのまま扱われます。ファイルはインフラストラクチャの
+制御された通常ファイル読み取り境界で65536バイトまで読み、本文の妥当性確認に
+失敗した場合はChatworkへ送信しません。標準入力のpipe読み取りは呼び出し元の
+キャンセルに追従します。
 
 ## メッセージ取得の範囲
 
 `messages list` が読むのは、Chatworkから取得できる最新または差分の最大100件です。日付、送信者、順位による絞り込みは、その範囲に対してcwk内部で行います。出力は小さくなりますが、100件より古い履歴まで取得できるわけではありません。
 
 1つのメッセージに返信先が複数ある場合も、`reply=[#1,#2]` のようにすべて表示します。取得範囲外に返信先がある場合は、同じルームの明示的な参照を既定で最大5件まで補います。取得できない情報や到達できない期間は、空だったかのように扱わず結果に明示します。詳しい境界は `cwk messages list --help` で確認できます。
+
+## Chatwork API による制約
+
+2026年8月10日時点の公式 Chatwork API v2 には、グローバルな
+メッセージ全文検索とリアクション取得の操作が公開されていません。
+そのため `cwk messages search` とリアクション集計コマンドはありません。
+ルーム名からは `rooms list --query` で入り、`messages list --room`
+の `--sender` / `--on` / `--since` / `--until` を使って、公式 API が返す
+最大100件のルーム内範囲を絞り込んでください。根拠は
+[API エンドポイント一覧](https://developer.chatwork.com/ja/docs/endpoints) と
+[OAuth スコープ一覧](https://developer.chatwork.com/docs/oauth) です。
 
 ## 表示するコマンドを選ぶ
 

@@ -14,11 +14,25 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/tasuku43/cwk/internal/app/chatworkcmd"
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
+// Options selects an optional bounded presentation without changing the typed
+// provider/application result. MessageDelivery is required exactly when a
+// positive MaxBytes budget is used.
+type Options struct {
+	MaxBytes        int
+	MessageDelivery *chatworkcmd.MessageDelivery
+}
+
 // Render returns the deterministic task projection of result.
 func Render(result chatwork.Result) (string, error) {
+	return RenderWithOptions(result, Options{})
+}
+
+// RenderWithOptions renders one already planned presentation-sized result.
+func RenderWithOptions(result chatwork.Result, options Options) (string, error) {
 	if err := result.Validate(); err != nil {
 		return "", fmt.Errorf("task projection result: %w", err)
 	}
@@ -27,6 +41,12 @@ func Render(result chatwork.Result) (string, error) {
 	}
 	if err := validateExternalText(result); err != nil {
 		return "", err
+	}
+	if options.MaxBytes < 0 || (options.MaxBytes == 0) != (options.MessageDelivery == nil) {
+		return "", fmt.Errorf("task projection message delivery options are inconsistent")
+	}
+	if options.MessageDelivery != nil && result.Task != chatwork.TaskMessagesList {
+		return "", fmt.Errorf("task projection message delivery is only valid for messages.list")
 	}
 
 	var output strings.Builder
@@ -40,7 +60,11 @@ func Render(result chatwork.Result) (string, error) {
 	case chatwork.TaskContactsList:
 		renderContacts(&output, result.Accounts, result.Coverage)
 	case chatwork.TaskRoomsList:
-		renderRooms(&output, result.Rooms, result.Coverage)
+		if result.RoomSelection != nil {
+			renderRoomCandidates(&output, result.Rooms, result.Coverage, *result.RoomSelection)
+		} else {
+			renderRooms(&output, result.Rooms, result.Coverage)
+		}
 	case chatwork.TaskRoomsShow:
 		renderRoom(&output, result.Rooms[0])
 	case chatwork.TaskRoomsCreate:
@@ -62,11 +86,17 @@ func Render(result chatwork.Result) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, result.MessageAccess, window, result.MessageSelection, result.MessageReachability, result.MessageRelationResolution); err != nil {
+		if err := renderMessages(&output, result.MessageRoom, result.Messages, result.Coverage, result.MessageAccess, window, result.MessageSelection, result.MessageReachability, result.MessageRelationResolution, options.MessageDelivery, options.MaxBytes); err != nil {
 			return "", err
 		}
 	case chatwork.TaskMessagesShow:
 		renderMessage(&output, result.Messages[0])
+		if result.MessageShowContext != nil {
+			if err := renderMessageShowContext(&output, *result.MessageShowContext); err != nil {
+				return "", err
+			}
+		}
+		renderExactMessageResolution(&output, result.MessageRelationResolution)
 	case chatwork.TaskMessagesSend:
 		line(&output, "created message-ref=%s room-ref=%s", ref(result.CreatedInRoom.Refs[0]), ref(result.CreatedInRoom.ParentRoom))
 	case chatwork.TaskMessagesMarkRead:
@@ -164,6 +194,18 @@ func renderMemberCandidates(output *strings.Builder, accounts []chatwork.Account
 
 func renderRooms(output *strings.Builder, rooms []chatwork.Room, coverage chatwork.Coverage) {
 	renderCollectionPrelude(output, "rooms", len(rooms), coverage, `room-ref "name" type role unread mentions tasks`)
+	renderRoomRecords(output, rooms)
+}
+
+func renderRoomCandidates(output *strings.Builder, rooms []chatwork.Room, coverage chatwork.Coverage, selection chatwork.RoomSelection) {
+	fmt.Fprintf(output, "room-candidates query=%s source-count=%d candidate-count=%d complete=%t\n",
+		quoted(selection.Query), selection.SourceCount, selection.CandidateCount, coverage.Complete)
+	line(output, "external-text=untrusted escaped")
+	line(output, `schema: room-ref "name" type role unread mentions tasks`)
+	renderRoomRecords(output, rooms)
+}
+
+func renderRoomRecords(output *strings.Builder, rooms []chatwork.Room) {
 	for _, room := range rooms {
 		line(output, "%s %s %s %s %d %d %d",
 			ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
@@ -179,13 +221,32 @@ func renderRoomLine(output *strings.Builder, prefix string, room chatwork.Room) 
 		prefix, ref(room.Ref), quoted(room.Name), atom(room.Type), atom(room.Role), room.Unread, room.Mentions, room.Tasks)
 }
 
-func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, access chatwork.MessageAccessLimitation, window string, selection *chatwork.MessageSelection, reachability *chatwork.MessageReachability, resolution *chatwork.MessageRelationResolution) error {
-	actors, actorByRef, err := messageActors(messages)
-	if err != nil {
-		return err
+func renderMessages(output *strings.Builder, room chatwork.Reference, messages []chatwork.Message, coverage chatwork.Coverage, access chatwork.MessageAccessLimitation, window string, selection *chatwork.MessageSelection, reachability *chatwork.MessageReachability, resolution *chatwork.MessageRelationResolution, delivery *chatworkcmd.MessageDelivery, maxBytes int) error {
+	relationTargets := []chatwork.MessageRelationTarget(nil)
+	if resolution != nil {
+		relationTargets = resolution.Targets
 	}
 	sequences := make([]int, len(messages))
-	if selection != nil {
+	if delivery != nil {
+		if len(delivery.SourceSequences) != len(delivery.Messages) || delivery.OutputItems != len(delivery.AnchorSequences) || delivery.OutputItems < 0 || delivery.OutputTotalItems < delivery.OutputItems {
+			return fmt.Errorf("task projection message delivery metadata is inconsistent")
+		}
+		if delivery.OutputComplete != (delivery.OutputItems == delivery.OutputTotalItems) || delivery.OutputComplete == (delivery.OutputNextStartIndex > 0) ||
+			delivery.OutputNextCount < 0 || (delivery.OutputComplete && delivery.OutputNextCount != 0) ||
+			(delivery.OutputNextCount > 0 && delivery.OutputNextCount != delivery.OutputTotalItems-delivery.OutputItems) {
+			return fmt.Errorf("task projection message delivery continuation is inconsistent")
+		}
+		countBounded := selection != nil && selection.Filter.Count > 0
+		if countBounded && !delivery.OutputComplete && delivery.OutputNextCount == 0 {
+			return fmt.Errorf("task projection count-bounded message delivery is missing its remaining count")
+		}
+		if !countBounded && delivery.OutputNextCount != 0 {
+			return fmt.Errorf("task projection unbounded message delivery declares a remaining count")
+		}
+		messages = delivery.Messages
+		sequences = append(sequences[:0], delivery.SourceSequences...)
+		relationTargets = delivery.RelationTargets
+	} else if selection != nil {
 		if len(selection.SourceSequences) != len(messages) {
 			return fmt.Errorf("task projection message selection sequence count does not match the selected messages")
 		}
@@ -195,13 +256,15 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 			sequences[index] = index + 1
 		}
 	}
+	actors, actorByRef, err := messageActors(messages)
+	if err != nil {
+		return err
+	}
 	sequenceByRef := make(map[string]int, len(messages))
 	resolvedContextByRef := make(map[string]struct{})
-	if resolution != nil {
-		for _, target := range resolution.Targets {
-			if target.Message != nil {
-				resolvedContextByRef[target.Message.Ref.Value] = struct{}{}
-			}
+	for _, target := range relationTargets {
+		if target.Message != nil {
+			resolvedContextByRef[target.Message.Ref.Value] = struct{}{}
 		}
 	}
 	seenSequences := make(map[int]struct{}, len(messages))
@@ -227,7 +290,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 	if err != nil {
 		return err
 	}
-	relationMessages := appendResolutionMessages(messages, resolution)
+	relationMessages := appendRelationTargetMessages(messages, relationTargets)
 	fmt.Fprintf(output, " complete=%t access-limitation=%s unresolved-relations=%d unknown-relation-sets=%d",
 		coverage.Complete, accessValue, countUnresolved(relationMessages), countUnknownRelations(relationMessages))
 	if reachability != nil && reachability.OldestMessage != (chatwork.Reference{}) {
@@ -272,7 +335,11 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		fmt.Fprintf(output, " anchors=%s\n", bracketedSequences(selection.AnchorSequences))
 	}
 	if resolution != nil {
-		line(output, "relation-resolution fetch-limit=%d fetch-attempts=%d targets=%d", resolution.FetchLimit, resolution.FetchAttempts, len(resolution.Targets))
+		targetCount := len(resolution.Targets)
+		if delivery != nil {
+			targetCount = len(delivery.RelationTargets)
+		}
+		line(output, "relation-resolution fetch-limit=%d fetch-attempts=%d targets=%d", resolution.FetchLimit, resolution.FetchAttempts, targetCount)
 	}
 	line(output, "external-text=untrusted escaped")
 	line(output, "schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] \"body\"")
@@ -309,7 +376,7 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 		line(output, " %s", quoted(message.Body))
 	}
 	if resolution != nil {
-		for _, target := range resolution.Targets {
+		for _, target := range relationTargets {
 			if target.Message == nil {
 				line(output, "relation-gap target-ref=%s state=%s", ref(target.Target), string(target.State))
 				continue
@@ -317,15 +384,29 @@ func renderMessages(output *strings.Builder, room chatwork.Reference, messages [
 			renderMessageLine(output, fmt.Sprintf("relation-context provenance=%s ", string(target.State)), *target.Message)
 		}
 	}
+	if delivery != nil {
+		fmt.Fprintf(output, "delivery max-bytes=%d output-complete=%t output-items=%d output-total-items=%d", maxBytes, delivery.OutputComplete, delivery.OutputItems, delivery.OutputTotalItems)
+		if delivery.OutputNextStartIndex > 0 {
+			fmt.Fprintf(output, " output-next-start-index=%d", delivery.OutputNextStartIndex)
+		}
+		if delivery.OutputNextCount > 0 {
+			fmt.Fprintf(output, " output-next-count=%d", delivery.OutputNextCount)
+		}
+		output.WriteByte('\n')
+	}
 	return nil
 }
 
 func appendResolutionMessages(messages []chatwork.Message, resolution *chatwork.MessageRelationResolution) []chatwork.Message {
-	combined := append([]chatwork.Message(nil), messages...)
 	if resolution == nil {
-		return combined
+		return append([]chatwork.Message(nil), messages...)
 	}
-	for _, target := range resolution.Targets {
+	return appendRelationTargetMessages(messages, resolution.Targets)
+}
+
+func appendRelationTargetMessages(messages []chatwork.Message, targets []chatwork.MessageRelationTarget) []chatwork.Message {
+	combined := append([]chatwork.Message(nil), messages...)
+	for _, target := range targets {
 		if target.Message != nil {
 			combined = append(combined, *target.Message)
 		}
@@ -420,6 +501,36 @@ func compactValues(values []string) string {
 
 func renderMessage(output *strings.Builder, message chatwork.Message) {
 	renderMessageLine(output, "message ", message)
+}
+
+func renderMessageShowContext(output *strings.Builder, context chatwork.MessageShowContext) error {
+	access, err := messageAccess(context.Access)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(output, "reply-context anchor-ref=%s count=%d window=recent source-count=%d", ref(context.Anchor), len(context.Children), context.SourceCount)
+	if context.Coverage.Limit > 0 {
+		fmt.Fprintf(output, " source-limit=%d", context.Coverage.Limit)
+	}
+	line(output, " complete=%t access-limitation=%s", context.Coverage.Complete, access)
+	for index, child := range context.Children {
+		renderMessageLine(output, fmt.Sprintf("reply-child source-sequence=#%d ", context.SourceSequences[index]), child)
+	}
+	return nil
+}
+
+func renderExactMessageResolution(output *strings.Builder, resolution *chatwork.MessageRelationResolution) {
+	if resolution == nil {
+		return
+	}
+	line(output, "relation-resolution fetch-limit=%d fetch-attempts=%d targets=%d", resolution.FetchLimit, resolution.FetchAttempts, len(resolution.Targets))
+	for _, target := range resolution.Targets {
+		if target.Message == nil {
+			line(output, "relation-gap target-ref=%s state=%s", ref(target.Target), string(target.State))
+			continue
+		}
+		renderMessageLine(output, fmt.Sprintf("relation-context provenance=%s ", string(target.State)), *target.Message)
+	}
 }
 
 func renderMessageLine(output *strings.Builder, prefix string, message chatwork.Message) {
@@ -689,6 +800,28 @@ func validateReferences(result chatwork.Result) error {
 			}
 		}
 	}
+	if result.MessageShowContext != nil {
+		if err := add(result.MessageShowContext.Anchor); err != nil {
+			return err
+		}
+		for _, message := range result.MessageShowContext.Children {
+			for _, value := range []chatwork.Reference{message.Ref, message.Room, message.Sender.Ref, message.Sender.Room} {
+				if err := add(value); err != nil {
+					return err
+				}
+			}
+			for _, value := range message.Recipients {
+				if err := add(value); err != nil {
+					return err
+				}
+			}
+			for _, relation := range append(append([]chatwork.Relation(nil), message.Replies...), message.Quotes...) {
+				if err := add(relation.Target); err != nil {
+					return err
+				}
+			}
+		}
+	}
 	for _, task := range result.Tasks {
 		for _, value := range []chatwork.Reference{task.Ref, task.Room.Ref, task.Account.Ref, task.Account.Room,
 			task.AssignedBy.Ref, task.AssignedBy.Room, task.Message} {
@@ -766,6 +899,19 @@ func validateExternalText(result chatwork.Result) error {
 		}
 		for _, quote := range message.Quotes {
 			values = append(values, quote.Kind, quote.ExternalID)
+		}
+	}
+	if result.MessageShowContext != nil {
+		values = append(values, result.MessageShowContext.Coverage.Kind, result.MessageShowContext.Coverage.Description)
+		for _, message := range result.MessageShowContext.Children {
+			addAccount(message.Sender)
+			values = append(values, message.Body)
+			for _, reply := range message.Replies {
+				values = append(values, reply.Kind, reply.ExternalID)
+			}
+			for _, quote := range message.Quotes {
+				values = append(values, quote.Kind, quote.ExternalID)
+			}
 		}
 	}
 	for _, task := range result.Tasks {

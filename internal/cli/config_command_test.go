@@ -199,27 +199,17 @@ func TestMissingProfileRequiresConfigAndExplainsTheReducedHelpView(t *testing.T)
 	}
 
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help", "--format", "agent"}); code != ExitOK {
-		t.Fatalf("root agent help exit=%d stderr=%q", code, h.stderr.String())
+	if code := runCLI(h.command, []string{"help", "--format", "agent"}); code != ExitUsage {
+		t.Fatalf("retired agent help exit=%d stderr=%q", code, h.stderr.String())
 	}
-	var index agentIndexDocument
-	if err := json.Unmarshal(h.stdout.Bytes(), &index); err != nil {
-		t.Fatalf("root agent help JSON: %v\n%s", err, h.stdout.String())
-	}
-	if got, want := len(index.Commands), len(DefaultCatalog().AlwaysCommands()); got != want {
-		t.Fatalf("unconfigured agent commands=%d want=%d: %+v", got, want, index.Commands)
-	}
-	for _, command := range index.Commands {
-		if strings.Contains(command.Path, " ") {
-			t.Fatalf("unconfigured agent help leaked configurable command %+v", command)
-		}
+	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "agent 形式は廃止済み") || !strings.Contains(h.stderr.String(), "--help") {
+		t.Fatalf("retired agent help stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
 
 	for _, args := range [][]string{
 		{"rooms", "list"},
 		{"help", "rooms"},
 		{"rooms", "--help"},
-		{"help", "messages", "list", "--format", "agent"},
 	} {
 		h.reset(strings.NewReader(""))
 		if code := runCLI(h.command, args); code != ExitRejected {
@@ -615,11 +605,11 @@ func TestMalformedProfileFailsTasksButAlwaysOnHelpAndExplicitConfigRepairRemainA
 	}
 
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help"}); code != ExitUsage {
+	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
 		t.Fatalf("root help under invalid profile exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
-		t.Fatalf("root help masqueraded as a valid always-only view: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	if !strings.Contains(h.stdout.String(), "Chatwork CLI\n") || !strings.Contains(h.stdout.String(), "rooms") || h.stderr.Len() != 0 {
+		t.Fatalf("root help did not use the static full catalog: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"help", "config"}); code != ExitOK {
@@ -640,11 +630,11 @@ func TestMalformedProfileFailsTasksButAlwaysOnHelpAndExplicitConfigRepairRemainA
 		t.Fatalf("doctor lacks invalid selection diagnostic:\n%s", h.stdout.String())
 	}
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help", "rooms"}); code != ExitUsage {
+	if code := runCLI(h.command, []string{"help", "rooms"}); code != ExitOK {
 		t.Fatalf("scoped task help under invalid profile exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if !strings.Contains(h.stderr.String(), "code: command_selection_invalid") {
-		t.Fatalf("scoped task help masqueraded as unknown: %q", h.stderr.String())
+	if !strings.Contains(h.stdout.String(), "名前空間: rooms") || h.stderr.Len() != 0 {
+		t.Fatalf("scoped task help did not use the static full catalog: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
 
 	h.reset(strings.NewReader("q"))
@@ -682,11 +672,11 @@ func TestUnsafeProfileKeepsAlwaysOnDiagnosticsAvailableAndRefusesSelector(t *tes
 		t.Fatal(err)
 	}
 
-	if code := runCLI(h.command, []string{"help"}); code != ExitUnavailable {
+	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
 		t.Fatalf("unsafe root help exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 	}
-	if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_selection_unsafe") {
-		t.Fatalf("unsafe root help masqueraded as valid: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
+	if !strings.Contains(h.stdout.String(), "Chatwork CLI\n") || !strings.Contains(h.stdout.String(), "rooms") || h.stderr.Len() != 0 {
+		t.Fatalf("unsafe root help did not use the static full catalog: stdout=%q stderr=%q", h.stdout.String(), h.stderr.String())
 	}
 	h.reset(strings.NewReader(""))
 	if code := runCLI(h.command, []string{"help", "config"}); code != ExitOK {
@@ -1007,17 +997,11 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 	}
 
 	h.reset(strings.NewReader(""))
-	if code := runCLI(h.command, []string{"help", "--format", "agent"}); code != ExitOK {
-		t.Fatalf("root agent help exit=%d stderr=%q", code, h.stderr.String())
+	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
+		t.Fatalf("root help exit=%d stderr=%q", code, h.stderr.String())
 	}
-	var index agentIndexDocument
-	if err := json.Unmarshal(h.stdout.Bytes(), &index); err != nil {
-		t.Fatalf("root agent help JSON: %v\n%s", err, h.stdout.String())
-	}
-	for _, command := range index.Commands {
-		if strings.HasPrefix(command.Path, "contact-requests ") {
-			t.Fatalf("root agent help leaked disabled command %+v", command)
-		}
+	if strings.Contains(h.stdout.String(), "contact-requests") {
+		t.Fatalf("root help leaked disabled namespace: %s", h.stdout.String())
 	}
 
 	namespaces := make(map[string]struct{})
@@ -1031,7 +1015,7 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 	sort.Strings(ordered)
 	for _, namespace := range ordered {
 		h.reset(strings.NewReader(""))
-		args := []string{"help", namespace, "--format", "agent"}
+		args := []string{"help", namespace}
 		if code := runCLI(h.command, args); code != ExitOK {
 			t.Fatalf("scoped help %v exit=%d stderr=%q", args, code, h.stderr.String())
 		}
@@ -1180,20 +1164,13 @@ func TestUnclassifiedSaveOutcomeDoesNotMistakeMissingProfileForPersistedCandidat
 }
 
 func TestUnclassifiedSaveOutcomePublishesAndFollowsItsMessageGrammar(t *testing.T) {
-	helpHarness := newCommandSelectionHarness(t, strings.NewReader(""))
-	if code := runCLI(helpHarness.command, []string{"help", "config", "--format=agent"}); code != ExitOK {
-		t.Fatalf("help exit=%d stdout=%q stderr=%q", code, helpHarness.stdout.String(), helpHarness.stderr.String())
-	}
-	var helpDocument agentDocument
-	if err := json.Unmarshal(helpHarness.stdout.Bytes(), &helpDocument); err != nil {
-		t.Fatalf("config agent help: %v\n%s", err, helpHarness.stdout.String())
-	}
-	if len(helpDocument.Commands) != 1 || helpDocument.Commands[0].Path != "config" {
-		t.Fatalf("config help commands=%+v", helpDocument.Commands)
+	config, found := DefaultCatalog().Lookup("config")
+	if !found {
+		t.Fatal("default catalog lacks config")
 	}
 	var declared *CommandError
-	for index := range helpDocument.Commands[0].Contract.Errors {
-		candidate := &helpDocument.Commands[0].Contract.Errors[index]
+	for index := range config.Agent.Errors {
+		candidate := &config.Agent.Errors[index]
 		if candidate.Code == "unclassified_mutation_outcome" {
 			declared = candidate
 			break

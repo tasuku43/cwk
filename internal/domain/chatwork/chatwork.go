@@ -122,6 +122,10 @@ const (
 	// DefaultMessageRelationFetches closes ordinary reply chains without an
 	// extra option while retaining a small deterministic provider-call bound.
 	DefaultMessageRelationFetches = 5
+	// MaxMessageBodyBytes is the fixed UTF-8 byte ceiling for one created or
+	// updated Chatwork message regardless of whether it came from argv, stdin,
+	// or an infrastructure-owned file read.
+	MaxMessageBodyBytes = 65535
 )
 
 var messageDayLocation = time.FixedZone(MessageDayTimeZone, 9*60*60)
@@ -223,6 +227,20 @@ type MessageRelationResolution struct {
 	Targets       []MessageRelationTarget
 }
 
+// MessageShowContext records the bounded latest-window evidence used to find
+// direct replies to one exact messages.show anchor. Children retain provider
+// order through their original one-based source sequences. This is separate
+// from MessageRelationResolution: the fixed latest-window read does not spend
+// the caller's exact-message relation-fetch budget.
+type MessageShowContext struct {
+	Anchor          Reference
+	Children        []Message
+	SourceSequences []int
+	SourceCount     int
+	Coverage        Coverage
+	Access          MessageAccessLimitation
+}
+
 // Request is the typed union consumed by the application task boundary.
 // Fields unused by the selected Task must remain zero; Validate enforces this
 // incrementally as task implementations are added.
@@ -246,6 +264,7 @@ type Request struct {
 	Description               string
 	Icon                      string
 	Body                      string
+	BodyFile                  string
 	Status                    string
 	RoomAction                string
 	Limit                     int64
@@ -262,6 +281,7 @@ type Request struct {
 	FilePath                  string
 	FileMessage               string
 	MemberQuery               string
+	RoomQuery                 string
 	MessageFilter             MessageFilter
 	MessageRelationFetchLimit int
 }
@@ -306,7 +326,7 @@ func (r Request) Validate() error {
 	}
 	for name, value := range map[string]string{
 		"name": r.Name, "description": r.Description, "body": r.Body,
-		"file message": r.FileMessage, "member query": r.MemberQuery,
+		"body file": r.BodyFile, "file message": r.FileMessage, "member query": r.MemberQuery, "room query": r.RoomQuery,
 	} {
 		if err := validateText(name, value, 65535); err != nil {
 			return err
@@ -321,6 +341,14 @@ func (r Request) Validate() error {
 		}
 	} else if r.MemberQuery != "" {
 		return fmt.Errorf("member query is only valid for members.find")
+	}
+	if r.RoomQuery != "" {
+		if r.Task != TaskRoomsList {
+			return fmt.Errorf("room query is only valid for rooms.list")
+		}
+		if len(r.RoomQuery) > 255 {
+			return fmt.Errorf("room discovery query must contain 1 to 255 UTF-8 bytes")
+		}
 	}
 	if r.Task == TaskRoomsCreate {
 		if r.Account.Value == "" {
@@ -359,17 +387,58 @@ func (r Request) Validate() error {
 			return fmt.Errorf("invite-link update requires an explicit nonempty description")
 		}
 	}
-	if r.Task != TaskMessagesList && messageFilterActive(r.MessageFilter) {
-		return fmt.Errorf("message filter is only valid for messages.list")
+	if r.Task == TaskMessagesSend || r.Task == TaskMessagesUpdate {
+		if (r.Body == "") == (r.BodyFile == "") {
+			return fmt.Errorf("message mutation requires exactly one literal or file body source")
+		}
+		if r.Body != "" {
+			if err := ValidateMessageBody(r.Body); err != nil {
+				return err
+			}
+		}
+	} else if r.BodyFile != "" {
+		return fmt.Errorf("message body file is only valid for messages.send or messages.update")
 	}
 	if r.MessageRelationFetchLimit < 0 || r.MessageRelationFetchLimit > MaxMessageRelationFetches {
 		return fmt.Errorf("message relation fetch limit must be between 0 and %d", MaxMessageRelationFetches)
 	}
-	if r.Task != TaskMessagesList && r.MessageRelationFetchLimit != 0 {
-		return fmt.Errorf("message relation fetch limit is only valid for messages.list")
+	switch r.Task {
+	case TaskMessagesList:
+		if err := validateMessageFilter(r.MessageFilter); err != nil {
+			return err
+		}
+	case TaskMessagesShow:
+		if err := validateMessageShowFilter(r.MessageFilter); err != nil {
+			return err
+		}
+		if r.MessageRelationFetchLimit > 0 && r.MessageFilter.Context != MessageContextReplies {
+			return fmt.Errorf("exact message relation fetches require replies context")
+		}
+	default:
+		if messageFilterActive(r.MessageFilter) {
+			return fmt.Errorf("message filter is only valid for messages.list or messages.show")
+		}
+		if r.MessageRelationFetchLimit != 0 {
+			return fmt.Errorf("message relation fetch limit is only valid for messages.list or messages.show")
+		}
 	}
-	if err := validateMessageFilter(r.MessageFilter); err != nil {
-		return err
+	return nil
+}
+
+// ValidateMessageBody applies the provider-independent message payload bound
+// without exposing any of the caller-supplied text in an error.
+func ValidateMessageBody(value string) error {
+	if value == "" {
+		return fmt.Errorf("message body must not be empty")
+	}
+	if !utf8.ValidString(value) {
+		return fmt.Errorf("message body must be valid UTF-8")
+	}
+	if len(value) > MaxMessageBodyBytes {
+		return fmt.Errorf("message body exceeds the %d-byte limit", MaxMessageBodyBytes)
+	}
+	if strings.IndexByte(value, 0) >= 0 {
+		return fmt.Errorf("message body must not contain NUL")
 	}
 	return nil
 }
@@ -490,6 +559,18 @@ func validateMessageFilter(filter MessageFilter) error {
 		seen[sender] = struct{}{}
 	}
 	return nil
+}
+
+func validateMessageShowFilter(filter MessageFilter) error {
+	if len(filter.Senders) != 0 || filter.Period != (MessagePeriod{}) || filter.StartIndex != 0 || filter.Count != 0 {
+		return fmt.Errorf("messages.show context does not accept sender, period, or index selection")
+	}
+	switch filter.Context {
+	case "", MessageContextNone, MessageContextReplies:
+		return nil
+	default:
+		return fmt.Errorf("messages.show context is invalid")
+	}
 }
 
 func messageFilterActive(filter MessageFilter) bool {
@@ -713,6 +794,16 @@ type MemberSelection struct {
 	SourceCount int
 }
 
+// RoomSelection records how the application projected the complete joined-room
+// collection by a case-insensitive display-name query. CandidateCount is kept
+// explicit so presentation does not have to infer provenance from the result
+// slice. A result remains a candidate set even when it contains one room.
+type RoomSelection struct {
+	Query          string
+	SourceCount    int
+	CandidateCount int
+}
+
 // Result is a typed semantic union. Only fields relevant to Task are populated.
 type Result struct {
 	Task     Task
@@ -738,9 +829,11 @@ type Result struct {
 	Acknowledgement           *Acknowledgement
 	MembershipCounts          *MembershipCounts
 	MemberSelection           *MemberSelection
+	RoomSelection             *RoomSelection
 	MessageSelection          *MessageSelection
 	MessageReachability       *MessageReachability
 	MessageRelationResolution *MessageRelationResolution
+	MessageShowContext        *MessageShowContext
 }
 
 // Validate proves that the semantic union uses the one result variant owned by
@@ -763,11 +856,17 @@ func (r Result) Validate() error {
 	if r.Task != TaskMessagesList && r.MessageReachability != nil {
 		return fmt.Errorf("Chatwork result message reachability is only valid for messages.list")
 	}
-	if r.Task != TaskMessagesList && r.MessageRelationResolution != nil {
-		return fmt.Errorf("Chatwork result message relation resolution is only valid for messages.list")
+	if r.Task != TaskMessagesList && r.Task != TaskMessagesShow && r.MessageRelationResolution != nil {
+		return fmt.Errorf("Chatwork result message relation resolution is only valid for messages.list or messages.show")
+	}
+	if r.Task != TaskMessagesShow && r.MessageShowContext != nil {
+		return fmt.Errorf("Chatwork result exact-message context is only valid for messages.show")
 	}
 	if r.Task != TaskMembersFind && r.MemberSelection != nil {
 		return fmt.Errorf("Chatwork result member selection is only valid for members.find")
+	}
+	if r.Task != TaskRoomsList && r.RoomSelection != nil {
+		return fmt.Errorf("Chatwork result room selection is only valid for rooms.list")
 	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
@@ -812,6 +911,24 @@ func (r Result) Validate() error {
 	}
 
 	switch r.Task {
+	case TaskRoomsList:
+		if r.RoomSelection != nil {
+			if err := validateText("room selection query", r.RoomSelection.Query, 255); err != nil || r.RoomSelection.Query == "" {
+				return fmt.Errorf("rooms.list result query is invalid")
+			}
+			if r.RoomSelection.SourceCount < 0 || r.RoomSelection.CandidateCount < 0 {
+				return fmt.Errorf("rooms.list result selection counts must not be negative")
+			}
+			if r.RoomSelection.CandidateCount != len(r.Rooms) {
+				return fmt.Errorf("rooms.list candidate count does not match its rooms")
+			}
+			if r.RoomSelection.SourceCount < r.RoomSelection.CandidateCount {
+				return fmt.Errorf("rooms.list source count is smaller than its candidate count")
+			}
+			if !r.Coverage.Complete {
+				return fmt.Errorf("queried rooms.list requires a complete joined-room source")
+			}
+		}
 	case TaskMembersFind:
 		if r.MemberSelection == nil {
 			return fmt.Errorf("members.find result is missing selection metadata")
@@ -861,6 +978,19 @@ func (r Result) ValidateFor(request Request) error {
 	}
 
 	switch r.Task {
+	case TaskRoomsList:
+		if request.RoomQuery != "" {
+			if r.RoomSelection == nil || r.RoomSelection.Query != request.RoomQuery {
+				return fmt.Errorf("rooms.list result query does not match the request")
+			}
+			for _, room := range r.Rooms {
+				if !ContainsFold(room.Name, request.RoomQuery) {
+					return fmt.Errorf("rooms.list result contains a non-matching room")
+				}
+			}
+		} else if r.RoomSelection != nil {
+			return fmt.Errorf("unqueried rooms.list result must not contain selection metadata")
+		}
 	case TaskMembersFind:
 		if r.MemberSelection.Query != request.MemberQuery {
 			return fmt.Errorf("members.find result query does not match the request")
@@ -901,6 +1031,20 @@ func (r Result) ValidateFor(request Request) error {
 	case TaskMessagesShow:
 		if len(r.Messages) != 1 || r.Messages[0].Room != request.Room || r.Messages[0].Ref != request.Message {
 			return fmt.Errorf("Chatwork exact message result does not match the requested room and message")
+		}
+		if request.MessageFilter.Context == MessageContextReplies {
+			if r.MessageShowContext == nil || r.MessageShowContext.Anchor != request.Message {
+				return fmt.Errorf("Chatwork exact message reply context does not match the request")
+			}
+		} else if r.MessageShowContext != nil {
+			return fmt.Errorf("Chatwork exact message result without replies context must not contain reply children")
+		}
+		if request.MessageRelationFetchLimit > 0 {
+			if r.MessageRelationResolution == nil || r.MessageRelationResolution.FetchLimit != request.MessageRelationFetchLimit {
+				return fmt.Errorf("Chatwork exact message relation resolution does not match the request budget")
+			}
+		} else if r.MessageRelationResolution != nil {
+			return fmt.Errorf("Chatwork exact message result without a relation budget must not declare relation resolution")
 		}
 	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
 		if r.CreatedInRoom.ParentRoom != request.Room {
@@ -1041,8 +1185,17 @@ func (r Result) validateVariantFacts() error {
 				return err
 			}
 		}
-		if r.Task == TaskMessagesList && r.MessageRelationResolution != nil {
-			if err := validateMessageRelationResolution(*r.MessageRelationResolution, r.Messages, r.MessageRoom); err != nil {
+		if r.MessageRelationResolution != nil {
+			room := r.MessageRoom
+			if r.Task == TaskMessagesShow {
+				room = r.Messages[0].Room
+			}
+			if err := validateMessageRelationResolution(*r.MessageRelationResolution, r.Messages, room); err != nil {
+				return err
+			}
+		}
+		if r.Task == TaskMessagesShow && r.MessageShowContext != nil {
+			if err := validateMessageShowContext(*r.MessageShowContext, r.Messages[0], r.MessageRelationResolution); err != nil {
 				return err
 			}
 		}
@@ -1434,6 +1587,90 @@ func validateMessageRelationResolution(resolution MessageRelationResolution, mes
 			if err := checkReplyState(*target.Message); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+func validateMessageShowContext(context MessageShowContext, anchor Message, resolution *MessageRelationResolution) error {
+	if context.Anchor != anchor.Ref {
+		return fmt.Errorf("Chatwork exact-message context anchor does not match the displayed message")
+	}
+	if context.Children == nil || context.SourceSequences == nil {
+		return fmt.Errorf("Chatwork exact-message reply children and provenance must be explicit")
+	}
+	if context.Coverage.Kind != "latest_window" && context.Coverage.Kind != "recent-window" {
+		return fmt.Errorf("Chatwork exact-message context must come from a latest message window")
+	}
+	if context.Coverage.Limit < 1 || context.Coverage.Limit > MaxMessageSelectionCount {
+		return fmt.Errorf("Chatwork exact-message context source limit is outside its declared bound")
+	}
+	if context.SourceCount < 0 || context.SourceCount > context.Coverage.Limit || len(context.Children) > context.SourceCount {
+		return fmt.Errorf("Chatwork exact-message context source count is outside its bounded window")
+	}
+	if len(context.SourceSequences) != len(context.Children) {
+		return fmt.Errorf("Chatwork exact-message child provenance does not match its children")
+	}
+	if context.Access != MessageAccessNone && context.Access != MessageAccessPartial && context.Access != MessageAccessAll {
+		return fmt.Errorf("Chatwork exact-message context access limitation is invalid")
+	}
+	if context.Access == MessageAccessAll && context.SourceCount != 0 {
+		return fmt.Errorf("Chatwork fully restricted exact-message context must not claim visible source messages")
+	}
+	if context.Access == MessageAccessPartial && context.SourceCount == 0 {
+		return fmt.Errorf("Chatwork partially restricted exact-message context must retain a visible source message")
+	}
+	previousSequence := 0
+	seen := make(map[Reference]struct{}, len(context.Children))
+	available := make(map[Reference]struct{}, len(context.Children)+1)
+	available[anchor.Ref] = struct{}{}
+	for _, child := range context.Children {
+		available[child.Ref] = struct{}{}
+	}
+	checkVisibleResolution := func(message Message) error {
+		for _, reply := range message.Replies {
+			if reply.Kind != "reply" || reply.ExternalID != anchor.Room.Value || !reply.Resolved {
+				continue
+			}
+			if _, visible := available[reply.Target]; !visible {
+				return fmt.Errorf("Chatwork exact-message context marks a hidden reply target as resolved")
+			}
+		}
+		return nil
+	}
+	if resolution == nil {
+		if err := checkVisibleResolution(anchor); err != nil {
+			return err
+		}
+	}
+	for index, child := range context.Children {
+		sequence := context.SourceSequences[index]
+		if sequence <= previousSequence || sequence > context.SourceCount {
+			return fmt.Errorf("Chatwork exact-message child sequences must preserve provider order")
+		}
+		previousSequence = sequence
+		if child.Ref == anchor.Ref || child.Room != anchor.Room {
+			return fmt.Errorf("Chatwork exact-message reply child does not belong to the anchor room")
+		}
+		if _, duplicate := seen[child.Ref]; duplicate {
+			return fmt.Errorf("Chatwork exact-message context contains a duplicate reply child")
+		}
+		seen[child.Ref] = struct{}{}
+		if err := validateResultMessage(fmt.Sprintf("message reply child[%d]", index), child); err != nil {
+			return err
+		}
+		direct := false
+		for _, reply := range child.Replies {
+			if reply.Kind == "reply" && reply.ExternalID == anchor.Room.Value && reply.Target == anchor.Ref && reply.Resolved {
+				direct = true
+				break
+			}
+		}
+		if !direct {
+			return fmt.Errorf("Chatwork exact-message context contains a message without a typed direct reply to its anchor")
+		}
+		if err := checkVisibleResolution(child); err != nil {
+			return err
 		}
 	}
 	return nil
