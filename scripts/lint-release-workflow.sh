@@ -202,7 +202,7 @@ build_checkout=$(printf '%s\n' "$build_job" | awk '
 ')
 require_line_count "$build_checkout" 4 "matrix build checkout"
 require_exact_line "$build_checkout" \
-  '      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7' \
+  '      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7' \
   "matrix build checkout"
 require_exact_line "$build_checkout" "$release_revision_ref" "matrix build checkout"
 require_exact_line "$build_checkout" '          persist-credentials: false' "matrix build checkout"
@@ -221,7 +221,7 @@ done
 publish_checkout=$(extract_named_step "$publish_job" "正確なrelease tagをcheckout")
 require_line_count "$publish_checkout" 6 "GitHub Release tag checkout"
 for required in \
-  '        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7' \
+  '        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7' \
   '        with:' \
   '          ref: ${{ needs.preflight.outputs.tag }}' \
   '          fetch-depth: 0' \
@@ -324,7 +324,7 @@ fi
 source_checkout=$(extract_named_step "$formula_job" "正確なrelease sourceをcheckout")
 require_line_count "$source_checkout" 5 "exact release source checkout"
 require_exact_line "$source_checkout" \
-  '        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7' \
+  '        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7' \
   "exact release source checkout"
 require_exact_line "$source_checkout" "$release_revision_ref" "exact release source checkout"
 require_exact_line "$source_checkout" '          persist-credentials: false' "exact release source checkout"
@@ -333,7 +333,7 @@ require_with_keys "$source_checkout" $'ref\npersist-credentials' "exact release 
 checksum_step=$(extract_named_step "$formula_job" "checksumをdownload")
 require_line_count "$checksum_step" 5 "Formula checksum download step"
 for required in \
-  '        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8' \
+  '        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8' \
   '        with:' \
   '          name: release-checksums' \
   '          path: dist'; do
@@ -378,7 +378,7 @@ done
 formula_upload_step=$(extract_named_step "$formula_job" "audit済みFormulaをupload")
 require_line_count "$formula_upload_step" 7 "audited Formula upload step"
 for required in \
-  '        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7' \
+  '        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7' \
   '        with:' \
   '          name: audited-homebrew-formula' \
   '          path: ${{ steps.formula.outputs.path }}' \
@@ -393,7 +393,7 @@ require_with_keys "$formula_upload_step" \
 formula_download_step=$(extract_named_step "$formula_publish_job" "audit済みFormulaをdownload")
 require_line_count "$formula_download_step" 5 "audited Formula download step"
 for required in \
-  '        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8' \
+  '        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8' \
   '        with:' \
   '          name: audited-homebrew-formula' \
   '          path: ${{ runner.temp }}/audited-formula'; do
@@ -452,7 +452,7 @@ fi
 tap_checkout=$(extract_named_step "$formula_publish_job" "共有Homebrew tapをcheckout")
 require_line_count "$tap_checkout" 8 "shared Homebrew tap checkout"
 for required in \
-  '        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7' \
+  '        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7' \
   '          repository: tasuku43/homebrew-tap' \
   '          ref: main' "$app_token" \
   '          path: homebrew-tap' \

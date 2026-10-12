@@ -1,6 +1,6 @@
 THIRD-PARTY SOFTWARE NOTICES
 
-Go standard library and runtime go1.26.5
+Go standard library and runtime go1.26.9
 ------------------------------------------
 Copyright 2009 The Go Authors.
 
@@ -55,7 +55,7 @@ infringement, or inducement of patent infringement, then any patent
 rights granted to you under this License for this implementation of Go
 shall terminate as of the date such litigation is filed.
 
-golang.org/x/term v0.36.0
+golang.org/x/term v0.47.0
 --------------------------
 Copyright 2009 The Go Authors.
 
@@ -85,7 +85,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-golang.org/x/sys v0.37.0
+golang.org/x/sys v0.49.0
 -------------------------
 Copyright 2009 The Go Authors.
 
