@@ -470,6 +470,7 @@ func TestDoctorRejectsArgumentsBeforeInspection(t *testing.T) {
 }
 
 func TestE2EDoctorUsesProductionOfflineAdapter(t *testing.T) {
+	t.Setenv("CWK_API_TOKEN", "synthetic-test-token")
 	var stdout, stderr bytes.Buffer
 	command := New(strings.NewReader(""), &stdout, &stderr)
 	if code := runCLI(command, []string{"doctor"}); code != ExitOK {

@@ -234,8 +234,8 @@ targets=(
 )
 reviewed_notice_modules=$release_root/reviewed-notice-modules
 printf '%s\n' \
-  'golang.org/x/sys v0.37.0' \
-  'golang.org/x/term v0.36.0' >"$reviewed_notice_modules"
+  'golang.org/x/sys v0.49.0' \
+  'golang.org/x/term v0.47.0' >"$reviewed_notice_modules"
 production_modules_raw=$release_root/production-modules-raw
 : >"$production_modules_raw"
 for target in "${targets[@]}"; do
@@ -272,16 +272,16 @@ done
 expected_notices=$release_root/expected-third-party-notices
 {
   printf '%s\n\n' 'THIRD-PARTY SOFTWARE NOTICES'
-  printf '%s\n%s\n' 'Go standard library and runtime go1.26.5' '------------------------------------------'
+  printf '%s\n%s\n' 'Go standard library and runtime go1.26.9' '------------------------------------------'
   cat -- "$go_license"
   printf '\n'
   printf '%s\n%s\n' 'Go standard library and runtime PATENTS' '---------------------------------------'
   cat -- "$go_patents"
   printf '\n'
-  printf '%s\n%s\n' 'golang.org/x/term v0.36.0' '--------------------------'
+  printf '%s\n%s\n' 'golang.org/x/term v0.47.0' '--------------------------'
   cat -- "$term_license"
   printf '\n'
-  printf '%s\n%s\n' 'golang.org/x/sys v0.37.0' '-------------------------'
+  printf '%s\n%s\n' 'golang.org/x/sys v0.49.0' '-------------------------'
   cat -- "$sys_license"
 } >"$expected_notices"
 if ! cmp -s THIRD_PARTY_NOTICES "$expected_notices"; then
