@@ -1,7 +1,6 @@
 class @@FORMULA_CLASS@@ < Formula
   desc "@@DESCRIPTION@@"
   homepage "@@REPOSITORY_URL@@"
-  version "@@VERSION@@"
   license "@@LICENSE_SPDX@@"
 
   on_macos do

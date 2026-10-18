@@ -67,7 +67,7 @@ template=Formula/${binary}.rb.template
 test -f "$template"
 
 for required in \
-  '@@FORMULA_CLASS@@' '@@DESCRIPTION@@' '@@LICENSE_SPDX@@' '@@REPOSITORY_URL@@' '@@VERSION@@' \
+  '@@FORMULA_CLASS@@' '@@DESCRIPTION@@' '@@LICENSE_SPDX@@' '@@REPOSITORY_URL@@' \
   '@@MACOS_ARM64_URL@@' '@@MACOS_AMD64_URL@@' \
   '@@MACOS_ARM64_SHA256@@' '@@MACOS_AMD64_SHA256@@' '@@BINARY_NAME@@'; do
   grep -qF "$required" "$template" || {
@@ -75,6 +75,10 @@ for required in \
     exit 1
   }
 done
+if grep -qE '^[[:space:]]*version[[:space:]]+' "$template"; then
+  echo "Formula template must derive its version from the versioned release URL" >&2
+  exit 1
+fi
 for required_install in \
   'bin.install "@@BINARY_NAME@@"' \
   'doc.install "LICENSE", "THIRD_PARTY_NOTICES"'; do
@@ -484,7 +488,6 @@ arm64_sha=$(awk -v asset="$arm64_asset" '$2 == asset { print $1 }' "$checksums")
 amd64_sha=$(awk -v asset="$amd64_asset" '$2 == asset { print $1 }' "$checksums")
 for expected_formula in \
   "class $formula_class < Formula" \
-  "version \"${release_tag#v}\"" \
   "$repository_url/releases/download/$release_tag/$arm64_asset" \
   "$repository_url/releases/download/$release_tag/$amd64_asset" \
   "sha256 \"$arm64_sha\"" \
@@ -495,6 +498,10 @@ for expected_formula in \
     exit 1
   fi
 done
+if grep -qE '^[[:space:]]*version[[:space:]]+' "$formula"; then
+  echo "rendered Formula must not duplicate the version encoded in its URLs" >&2
+  exit 1
+fi
 if grep -qE '@@[A-Z0-9_]+@@' "$formula"; then
   echo "positive Formula render retained a placeholder" >&2
   exit 1

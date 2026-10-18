@@ -27,6 +27,7 @@ if ! command -v "$brew_command" >/dev/null 2>&1; then
   echo "Homebrew command not found: $brew_command" >&2
   exit 2
 fi
+brew_bin=$(command -v "$brew_command")
 
 tap_marker=$(mktemp -d "${TMPDIR:-/tmp}/${binary}-homebrew-tap.XXXXXXXX")
 suffix=${tap_marker##*.}
@@ -37,12 +38,19 @@ if [[ -z $suffix ]]; then
 fi
 tap=${binary}-ci-${suffix}/audit
 tap_created=false
+homebrew_config=$tap_marker/homebrew-config
+mkdir -p "$homebrew_config"
+
+# Keep formula trust and developer-mode overrides scoped to this owned temp dir.
+brew() {
+  XDG_CONFIG_HOME="$homebrew_config" HOMEBREW_DEVELOPER=1 "$brew_bin" "$@"
+}
 
 cleanup() {
   status=$?
   trap - EXIT
   if [[ $tap_created == true ]]; then
-    if ! "$brew_command" untap "$tap" >/dev/null 2>&1; then
+    if ! brew untap "$tap" >/dev/null 2>&1; then
       echo "failed to remove owned temporary tap: $tap" >&2
       status=1
     fi
@@ -55,15 +63,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-installed_taps=$("$brew_command" tap)
+installed_taps=$(brew tap)
 if printf '%s\n' "$installed_taps" | grep -Fxq "$tap"; then
   echo "generated temporary tap already exists; refusing to modify it: $tap" >&2
   exit 1
 fi
 
-"$brew_command" tap-new --no-git "$tap" >/dev/null
+brew tap-new --no-git "$tap" >/dev/null
 tap_created=true
-tap_dir=$("$brew_command" --repository "$tap")
+tap_dir=$(brew --repository "$tap")
 if [[ ! -d $tap_dir/Formula ]]; then
   echo "temporary tap has no Formula directory: $tap_dir" >&2
   exit 1
@@ -71,4 +79,5 @@ fi
 staged_formula=$tap_dir/Formula/${binary}.rb
 cp "$formula" "$staged_formula"
 chmod 0644 "$staged_formula"
-"$brew_command" audit --strict "$tap/$binary"
+brew trust --formula "$tap/$binary"
+brew audit --strict "$tap/$binary"

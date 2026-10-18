@@ -25,7 +25,6 @@ binary=$(go run ./tools/projectmeta --field binary_name)
 formula_class=$(go run ./tools/projectmeta --field formula_class)
 description=$(go run ./tools/projectmeta --field description)
 license_spdx=$(go run ./tools/projectmeta --field license_spdx)
-version=${tag#v}
 arm64_asset=${binary}_${tag}_darwin_arm64.tar.gz
 amd64_asset=${binary}_${tag}_darwin_amd64.tar.gz
 
@@ -68,7 +67,6 @@ sed \
   -e "s|@@DESCRIPTION@@|$(escape_sed "$description")|g" \
   -e "s|@@LICENSE_SPDX@@|$(escape_sed "$license_spdx")|g" \
   -e "s|@@REPOSITORY_URL@@|$(escape_sed "$repository_url")|g" \
-  -e "s|@@VERSION@@|$(escape_sed "$version")|g" \
   -e "s|@@MACOS_ARM64_URL@@|$(escape_sed "$arm64_url")|g" \
   -e "s|@@MACOS_AMD64_URL@@|$(escape_sed "$amd64_url")|g" \
   -e "s|@@MACOS_ARM64_SHA256@@|$arm64_sha|g" \
