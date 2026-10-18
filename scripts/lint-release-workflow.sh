@@ -422,7 +422,7 @@ token_step=$(extract_named_step "$formula_publish_job" "Homebrew tap用GitHub Ap
 require_line_count "$token_step" 10 "Homebrew App token step"
 for required in \
   '        id: homebrew-token' \
-  '        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3' \
+  '        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3' \
   "$app_id_input" "$private_key_input" \
   '          owner: tasuku43' \
   '          repositories: homebrew-tap' \
