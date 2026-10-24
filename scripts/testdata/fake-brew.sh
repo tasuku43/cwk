@@ -4,6 +4,11 @@ set -euo pipefail
 : "${FAKE_BREW_LOG:?}"
 : "${FAKE_BREW_ROOT:?}"
 : "${FAKE_BREW_EXISTING_TAP:?}"
+: "${FAKE_BREW_EXPECT_CONFIG_ROOT:?}"
+
+[[ ${HOMEBREW_DEVELOPER:-} == 1 ]]
+[[ ${XDG_CONFIG_HOME:-} == "$FAKE_BREW_EXPECT_CONFIG_ROOT"/* ]]
+[[ -d ${XDG_CONFIG_HOME:?} ]]
 
 command_name=${1:-}
 shift || true
@@ -42,10 +47,22 @@ case "$command_name" in
     [[ $(<"$FAKE_BREW_ROOT/created-tap") == "$tap" ]]
     tap_path "$tap"
     ;;
+  trust)
+    [[ ${1:-} == --formula ]]
+    formula=${2:?}
+    tap=${formula%/*}
+    binary=${formula##*/}
+    [[ -f $FAKE_BREW_ROOT/created-tap ]]
+    [[ $(<"$FAKE_BREW_ROOT/created-tap") == "$tap" ]]
+    [[ -f "$(tap_path "$tap")/Formula/${binary}.rb" ]]
+    printf '%s' "$formula" >"$FAKE_BREW_ROOT/trusted-formula"
+    ;;
   audit)
+    formula_ref=${2:?}
+    [[ -f $FAKE_BREW_ROOT/trusted-formula ]]
+    [[ $(<"$FAKE_BREW_ROOT/trusted-formula") == "$formula_ref" ]]
     if [[ -n ${FAKE_BREW_EXPECT_FORMULA_MODE:-} ]]; then
       [[ ${1:-} == --strict ]]
-      formula_ref=${2:?}
       tap=${formula_ref%/*}
       binary=${formula_ref##*/}
       formula_path=$(tap_path "$tap")/Formula/${binary}.rb
@@ -67,7 +84,9 @@ case "$command_name" in
     fi
     [[ -f $FAKE_BREW_ROOT/created-tap ]]
     [[ $(<"$FAKE_BREW_ROOT/created-tap") == "$tap" ]]
+    [[ -f $FAKE_BREW_ROOT/trusted-formula ]]
     rm -rf -- "$(tap_path "$tap")"
+    rm -f -- "$FAKE_BREW_ROOT/trusted-formula"
     ;;
   *)
     echo "unexpected fake brew command: $command_name" >&2

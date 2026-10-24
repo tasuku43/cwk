@@ -31,6 +31,7 @@ run_case() {
   audit_failure=$2
   case_root=$test_root/$expected
   mkdir -p "$case_root"
+  mkdir -p "$case_root/tmp"
   log=$case_root/brew.log
   : >"$log"
 
@@ -38,8 +39,10 @@ run_case() {
   FAKE_BREW_LOG=$log \
     FAKE_BREW_ROOT=$case_root \
     FAKE_BREW_EXISTING_TAP=$legacy_tap \
+    FAKE_BREW_EXPECT_CONFIG_ROOT=$case_root/tmp \
     FAKE_BREW_AUDIT_FAIL=$audit_failure \
     FAKE_BREW_EXPECT_FORMULA_MODE=644 \
+    TMPDIR=$case_root/tmp \
     BREW_COMMAND=$fake_brew \
     AUDIT_FORMULA_BINARY=cwk \
     scripts/audit-formula.sh "$formula" >/dev/null 2>&1
@@ -65,6 +68,18 @@ run_case() {
   fi
   if [[ $(grep -Fc "untap $created_tap" "$log") -ne 1 ]]; then
     echo "audit-formula did not clean up exactly its owned tap" >&2
+    exit 1
+  fi
+  formula_ref=$created_tap/cwk
+  if [[ $(grep -Fc "trust --formula $formula_ref" "$log") -ne 1 ]]; then
+    echo "audit-formula did not trust only its exact temporary Formula" >&2
+    exit 1
+  fi
+  trust_line=$(grep -n -F "trust --formula $formula_ref" "$log" | cut -d: -f1)
+  audit_line=$(grep -n -F "audit --strict $formula_ref" "$log" | cut -d: -f1)
+  untap_line=$(grep -n -F "untap $created_tap" "$log" | cut -d: -f1)
+  if ((trust_line >= audit_line || audit_line >= untap_line)); then
+    echo "audit-formula trust, audit, and cleanup order is invalid" >&2
     exit 1
   fi
 }

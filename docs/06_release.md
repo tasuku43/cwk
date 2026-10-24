@@ -99,6 +99,10 @@ Archive creation uses the Go standard library rather than host-specific `tar`, `
 
 The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation and canonical header verification themselves have no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
 
+The stable Homebrew Formula derives its version from the versioned archive URL. Do not add an explicit `version` field: Homebrew already scans that URL and strict audit rejects the duplicate value.
+
+The isolated Formula audit grants trust only to the generated Formula, using a temporary `XDG_CONFIG_HOME`, then removes the owned tap and temporary trust state. It does not persist a new trust entry in the release owner's Homebrew configuration. The audit invokes `tap-new` with developer mode set only in that command environment so Homebrew does not toggle the release owner's persistent setting.
+
 The workflow runs the canonical full, security, release, and public profiles
 explicitly in the Ubuntu preflight. The later macOS Formula job is deliberately
 narrower: it renders the checksum-pinned Formula, runs `ruby -c`, performs the
