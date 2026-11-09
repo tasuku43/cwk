@@ -16,6 +16,8 @@ bash -n \
   scripts/render-formula.sh \
   scripts/audit-formula.sh \
   scripts/lint-release-workflow.sh \
+  scripts/release-input-fingerprint.sh \
+  scripts/test-release-input-fingerprint.sh \
   scripts/test-audit-formula.sh \
   scripts/test-check-environment.sh \
   scripts/test-release-workflow.sh \
@@ -175,7 +177,8 @@ release_input_roots=(
   LICENSE
   THIRD_PARTY_NOTICES
   .harness/project.json
-  .codex
+  AGENTS.md
+  .agents
   .github/workflows/release.yml
   Formula
   Taskfile.yml
@@ -184,42 +187,8 @@ release_input_roots=(
   internal
   tools
 )
-for optional_input in go.sum vendor; do
-  if [[ -e $optional_input ]]; then
-    release_input_roots+=("$optional_input")
-  fi
-done
-release_input_fingerprint() {
-  local diagnostic=${1:-}
-  local manifest path_list unsafe_path_list path digest
-  manifest=$(mktemp "$release_root/package-inputs.XXXXXXXX")
-  path_list=$(mktemp "$release_root/package-input-paths.XXXXXXXX")
-  unsafe_path_list=$(mktemp "$release_root/package-input-unsafe-paths.XXXXXXXX")
-  : >"$manifest"
-  find "${release_input_roots[@]}" ! -type d ! -type f -print0 >"$unsafe_path_list"
-  if [[ -s $unsafe_path_list ]]; then
-    echo "release inputs must contain only regular files and directories" >&2
-    return 1
-  fi
-  find "${release_input_roots[@]}" -type f -print0 | LC_ALL=C sort -z >"$path_list"
-  if [[ ! -s $path_list ]]; then
-    echo "release input set is empty" >&2
-    return 1
-  fi
-  if [[ -n $diagnostic ]]; then
-    : >"$diagnostic"
-  fi
-  while IFS= read -r -d '' path; do
-    digest=$(sha256_of "$path")
-    printf '%s\0%s\0' "$path" "$digest" >>"$manifest"
-    if [[ -n $diagnostic ]]; then
-      printf '%s  %q\n' "$digest" "$path" >>"$diagnostic"
-    fi
-  done <"$path_list"
-  digest=$(sha256_of "$manifest")
-  rm -f -- "$manifest" "$path_list" "$unsafe_path_list"
-  printf '%s' "$digest"
-}
+source scripts/release-input-fingerprint.sh
+scripts/test-release-input-fingerprint.sh
 
 report_release_input_drift() {
   local phase=$1
@@ -276,7 +245,7 @@ done
 expected_notices=$release_root/expected-third-party-notices
 {
   printf '%s\n\n' 'THIRD-PARTY SOFTWARE NOTICES'
-  printf '%s\n%s\n' 'Go standard library and runtime go1.26.9' '------------------------------------------'
+  printf '%s\n%s\n' 'Go standard library and runtime go1.26.10' '------------------------------------------'
   cat -- "$go_license"
   printf '\n'
   printf '%s\n%s\n' 'Go standard library and runtime PATENTS' '---------------------------------------'
