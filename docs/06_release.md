@@ -97,6 +97,14 @@ Archive creation uses the Go standard library rather than host-specific `tar`, `
     token consumer, changed audited Formula binding, ignored audit/PR failure,
     or an incompatible title.
 
+Release input fingerprints include the tracked `AGENTS.md` and `.agents`
+guidance. Optional `go.sum` and `vendor` are rediscovered for every fingerprint,
+including dangling symlinks. Each fingerprint records entries observed during
+that scan; it is not an atomic snapshot, so concurrent changes during or between
+scans may be missed. Enumeration, sorting, path-list reading, digest computation,
+and diagnostic-output failures fail the release profile even inside command
+substitutions. Synthetic negative tests exercise those failure paths.
+
 The profile requires `tar`, `unzip`, either `sha256sum` or `shasum`, ShellCheck `0.9.0` or newer, and Ruby. Archive creation and canonical header verification themselves have no host `zip` dependency. ShellCheck covers every publishable `.sh` file rather than a hand-maintained subset. It is a system prerequisite with an explicit compatibility floor, not an exact repository pin: the floor accepts the `0.9.0` analyzer supplied by the documented Linux runner and newer compatible analyzers such as `0.11.x`. A missing or older ShellCheck, or a missing Ruby executable, is a failed release check rather than a skipped check. A developer without these tools must use the documented CI release gate and treat its result as required evidence before tagging.
 
 The stable Homebrew Formula derives its version from the versioned archive URL. Do not add an explicit `version` field: Homebrew already scans that URL and strict audit rejects the duplicate value.
