@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -154,6 +155,112 @@ func TestBuildRequestReadsMessageBodyFileWithoutChangingText(t *testing.T) {
 				t.Fatalf("reads = %d body = %q", reads, values.Get("body"))
 			}
 		})
+	}
+}
+
+func TestBuildMessageSendExpandsOrderedTypedNotationWithoutParsingOriginalBody(t *testing.T) {
+	input := completeRequest(chatwork.TaskMessagesSend)
+	input.Body = "日本語 [To:77] 手書き [rp aid=8 to=2-3] を残す"
+	input.MessageRecipients = []chatwork.Reference{
+		testRef(chatwork.ReferenceAccount, "9"),
+		testRef(chatwork.ReferenceAccount, "3"),
+	}
+	input.MessageReplyTarget = &chatwork.MessageReplyTarget{
+		Message: testRef(chatwork.ReferenceMessage, "3"),
+		Sender:  testRef(chatwork.ReferenceAccount, "7"),
+	}
+	spec, err := (&Client{}).buildRequestContext(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := io.ReadAll(spec.body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := url.ParseQuery(string(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[To:9] [To:3] [rp aid=7 to=2-3] " + input.Body
+	if got := values.Get("body"); got != want {
+		t.Fatalf("expanded form body = %q, want exact prefix + original bytes %q", got, want)
+	}
+	if values.Get("self_unread") != "1" {
+		t.Fatalf("send form = %v, missing original self-unread setting", values)
+	}
+}
+
+func TestBuildMessageSendExpandsTypedNotationsAfterReadingBodyFile(t *testing.T) {
+	payload := "[To:77] $(literal)\n本文"
+	reads := 0
+	client := newClient("http://example.test", "synthetic-token", http.DefaultClient,
+		func() (string, error) { return "send-file-binding", nil },
+		func(path string) ([]byte, error) {
+			reads++
+			if path != "message.txt" {
+				t.Fatalf("body file path = %q", path)
+			}
+			return []byte(payload), nil
+		})
+	input := completeRequest(chatwork.TaskMessagesSend)
+	input.Body = ""
+	input.BodyFile = "message.txt"
+	input.MessageRecipients = []chatwork.Reference{testRef(chatwork.ReferenceAccount, "9"), testRef(chatwork.ReferenceAccount, "3")}
+	spec, err := client.buildRequestContext(context.Background(), input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := io.ReadAll(spec.body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := url.ParseQuery(string(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "[To:9] [To:3] " + payload
+	if reads != 1 || values.Get("body") != want {
+		t.Fatalf("reads = %d, body = %q, want exactly one read and %q", reads, values.Get("body"), want)
+	}
+}
+
+func TestExpandedMessageBodyUsesUTF8ByteLimitAndOversizeFailsBeforeHTTP(t *testing.T) {
+	input := completeRequest(chatwork.TaskMessagesSend)
+	input.MessageRecipients = []chatwork.Reference{testRef(chatwork.ReferenceAccount, "7")}
+	input.Body = strings.Repeat("語", 21842) + "ab" // 65,528 UTF-8 bytes; one typed prefix adds seven.
+	spec, err := (&Client{}).buildRequestContext(context.Background(), input)
+	if err != nil {
+		t.Fatalf("exact 65,535-byte expanded body failed: %v", err)
+	}
+	encoded, err := io.ReadAll(spec.body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := url.ParseQuery(string(encoded))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len([]byte(values.Get("body"))); got != chatwork.MaxMessageBodyBytes {
+		t.Fatalf("expanded UTF-8 body length = %d, want %d", got, chatwork.MaxMessageBodyBytes)
+	}
+
+	providerCalls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		providerCalls++
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	defer server.Close()
+	client, binding := authenticatedClient(t, server)
+	providerCalls = 0
+	input.Body = strings.Repeat("x", chatwork.MaxMessageBodyBytes)
+	_, err = client.Execute(context.Background(), binding, input)
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "chatwork_message_body_too_large" || structured.Retryable {
+		t.Fatalf("oversized expanded-body error = %#v", err)
+	}
+	if providerCalls != 0 {
+		t.Fatalf("body expansion failure dispatched %d provider calls", providerCalls)
 	}
 }
 
@@ -321,6 +428,7 @@ func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) 
 			Senders: []chatwork.Reference{testRef(chatwork.ReferenceAccount, "1")},
 			Context: chatwork.MessageContextReplies,
 		},
+		"body term":   {Contains: []string{"literal"}, Context: chatwork.MessageContextNone},
 		"count":       {StartIndex: 1, Count: 10},
 		"start index": {StartIndex: 10},
 		"period":      {Period: chatwork.MessagePeriod{Since: 100, Until: 200}, Context: chatwork.MessageContextNone},
@@ -338,6 +446,11 @@ func TestBuildMessageListRequestRejectsApplicationSelectionFields(t *testing.T) 
 	if _, err := (&Client{}).buildRequestContext(context.Background(), input); err == nil {
 		t.Fatal("application-owned message relation fetch budget crossed the Chatwork request boundary")
 	}
+	input = completeRequest(chatwork.TaskMessagesList)
+	input.MessageAround = &chatwork.MessageAroundRequest{Count: 1}
+	if _, err := (&Client{}).buildRequestContext(context.Background(), input); err == nil {
+		t.Fatal("application-owned message around selection crossed the Chatwork request boundary")
+	}
 }
 
 func TestBuildMessageShowRequestRejectsApplicationContextFields(t *testing.T) {
@@ -345,8 +458,14 @@ func TestBuildMessageShowRequestRejectsApplicationContextFields(t *testing.T) {
 		"context": func(input *chatwork.Request) {
 			input.MessageFilter.Context = chatwork.MessageContextReplies
 		},
+		"body term": func(input *chatwork.Request) {
+			input.MessageFilter.Contains = []string{"literal"}
+		},
 		"relation budget": func(input *chatwork.Request) {
 			input.MessageRelationFetchLimit = 5
+		},
+		"around selection": func(input *chatwork.Request) {
+			input.MessageAround = &chatwork.MessageAroundRequest{Count: 1}
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -156,7 +156,7 @@ func (p ExplicitSavePolicy) Check(ctx context.Context, intent operation.Intent) 
 	if !p.Confirmed {
 		return errors.New("Enter confirmation is required")
 	}
-	if intent != Intent() {
+	if !intent.Equal(Intent()) {
 		return errors.New("command selection confirmation requires the exact config intent")
 	}
 	return nil

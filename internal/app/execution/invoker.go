@@ -3,6 +3,7 @@ package execution
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/tasuku43/cwk/internal/app/portcheck"
@@ -25,11 +26,12 @@ type Action func(context.Context, operation.Intent) error
 // expectations. All fields are values so the invoker can snapshot them before
 // policy evaluation.
 type Request struct {
-	Intent          operation.Intent
-	ExpectedCommand string
-	ExpectedEffect  operation.Effect
-	ExpectedTarget  operation.TargetRef
-	ExpectedImpact  operation.Impact
+	Intent                operation.Intent
+	ExpectedCommand       string
+	ExpectedEffect        operation.Effect
+	ExpectedTarget        operation.TargetRef
+	ExpectedImpact        operation.Impact
+	ExpectedPreflightRefs []operation.PreflightRef
 }
 
 // Invoker is the only reusable application boundary supplied for mutations.
@@ -49,6 +51,8 @@ func New(policy Policy) *Invoker {
 // call guarantees zero mutation attempts.
 func (i *Invoker) Invoke(ctx context.Context, request Request, action Action) error {
 	snapshot := request
+	snapshot.Intent.PreflightRefs = append([]operation.PreflightRef(nil), request.Intent.PreflightRefs...)
+	snapshot.ExpectedPreflightRefs = append([]operation.PreflightRef(nil), request.ExpectedPreflightRefs...)
 	if err := validateRequest(snapshot); err != nil {
 		return fault.Wrap(fault.KindContract, "invalid_mutation_contract", "変更契約は無効です", false, err)
 	}
@@ -65,6 +69,13 @@ func (i *Invoker) Invoke(ctx context.Context, request Request, action Action) er
 		return fault.New(fault.KindRejected, "missing_mutation_policy", "変更ポリシーが設定されていません", false)
 	}
 	if err := i.policy.Check(ctx, snapshot.Intent); err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return fault.Wrap(fault.KindCanceled, "operation_canceled", "ポリシー評価中に変更がキャンセルされました", true, err)
+		}
+		if rejected, ok := fault.PublicCopy(err); ok && rejected.Kind == fault.KindRejected &&
+			rejected.Code == "mutation_rejected" && !rejected.Retryable {
+			return rejected
+		}
 		return fault.Wrap(fault.KindRejected, "mutation_rejected", "変更ポリシーが処理を拒否しました", false, err)
 	}
 	if err := ctx.Err(); err != nil {
@@ -111,5 +122,20 @@ func validateRequest(request Request) error {
 	if request.Intent.Impact != request.ExpectedImpact {
 		return fmt.Errorf("intent impact does not match the declared impact")
 	}
+	if !samePreflightRefs(request.Intent.PreflightRefs, request.ExpectedPreflightRefs) {
+		return fmt.Errorf("intent preflight references do not match the parsed references")
+	}
 	return nil
+}
+
+func samePreflightRefs(left, right []operation.PreflightRef) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }

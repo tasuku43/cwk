@@ -28,7 +28,7 @@ func TestChatworkPublicFaultCodesHaveOneExactSignature(t *testing.T) {
 	}
 }
 
-func TestChatworkMutationRecoveryNeverReplaysAWrite(t *testing.T) {
+func TestChatworkMutationRecoveryReplaysOnlyWhenPreDispatchIsProven(t *testing.T) {
 	specs := chatworkCommandSpecs()
 	byPath := make(map[string]CommandSpec, len(specs))
 	for _, spec := range specs {
@@ -39,6 +39,19 @@ func TestChatworkMutationRecoveryNeverReplaysAWrite(t *testing.T) {
 			continue
 		}
 		for _, declared := range spec.Agent.Errors {
+			if declared.Code == "chatwork_mutation_not_dispatched" {
+				if !declared.Retryable || len(declared.NextActions) != 1 || declared.NextActions[0].Command != spec.Path {
+					t.Errorf("%s pre-dispatch recovery = %+v, want retryable same-command guidance", spec.Path, declared)
+				}
+				continue
+			}
+			safePreflightRetry := spec.chatwork.Task == chatwork.TaskMessagesSend && declared.Retryable &&
+				(declared.Code == "chatwork_send_preflight_not_completed" || declared.Code == "chatwork_send_body_preflight_not_completed" || declared.Code == "chatwork_reply_preflight_failed" ||
+					declared.Code == "chatwork_rate_limited" || declared.Code == "chatwork_unavailable")
+			if declared.Code == "operation_canceled" &&
+				(len(declared.NextActions) != 1 || declared.NextActions[0].Command != "help "+spec.Path) {
+				t.Errorf("%s generic cancellation = %+v, want scoped help without replay guidance", spec.Path, declared)
+			}
 			for _, next := range declared.NextActions {
 				if next.Command == "help" || strings.HasPrefix(next.Command, "help ") {
 					continue
@@ -51,7 +64,7 @@ func TestChatworkMutationRecoveryNeverReplaysAWrite(t *testing.T) {
 					t.Errorf("%s fault %s has unknown recovery %q", spec.Path, declared.Code, next.Command)
 					continue
 				}
-				if target.Effect != operation.EffectRead {
+				if target.Effect != operation.EffectRead && !(safePreflightRetry && next.Command == spec.Path) {
 					t.Errorf("%s fault %s recovers through mutating command %q", spec.Path, declared.Code, next.Command)
 				}
 			}
@@ -79,6 +92,14 @@ func TestChatworkRateLimitRecoverySeparatesReadsFromMutations(t *testing.T) {
 		if matched == nil || matched.Kind != fault.KindRateLimited || matched.Retryable != wantRetryable ||
 			len(matched.NextActions) != 1 || matched.NextActions[0].Command != wantCommand {
 			t.Errorf("%s rate-limit contract = %+v, want code=%s retryable=%t recovery=%q", spec.Path, matched, code, wantRetryable, wantCommand)
+		}
+		if spec.chatwork.Task == chatwork.TaskMessagesSend {
+			for _, candidate := range spec.Agent.Errors {
+				if candidate.Code == "chatwork_rate_limited" && (candidate.Kind != fault.KindRateLimited || !candidate.Retryable ||
+					len(candidate.NextActions) != 1 || candidate.NextActions[0].Command != spec.Path) {
+					t.Errorf("%s reply-preflight rate-limit contract = %+v, want retryable same-command recovery", spec.Path, candidate)
+				}
+			}
 		}
 	}
 }
@@ -118,11 +139,13 @@ func TestChatworkTaskSpecificFaultsAreNotAdvertisedElsewhere(t *testing.T) {
 			t.Errorf("%s mutation outcome fault present=%t, want %t", spec.Path, hasUnknown, wantMutation)
 		}
 		_, hasUnavailable := declared["chatwork_unavailable"]
-		if hasUnavailable != !wantMutation {
+		wantUnavailable := !wantMutation || spec.chatwork.Task == chatwork.TaskMessagesSend
+		if hasUnavailable != wantUnavailable {
 			t.Errorf("%s provider unavailable fault present=%t, want %t", spec.Path, hasUnavailable, !wantMutation)
 		}
 		_, hasReadRateLimit := declared["chatwork_rate_limited"]
-		if hasReadRateLimit != !wantMutation {
+		wantReadRateLimit := !wantMutation || spec.chatwork.Task == chatwork.TaskMessagesSend
+		if hasReadRateLimit != wantReadRateLimit {
 			t.Errorf("%s read rate-limit fault present=%t, want %t", spec.Path, hasReadRateLimit, !wantMutation)
 		}
 		_, hasMutationRateLimit := declared["chatwork_mutation_rate_limited"]
@@ -130,13 +153,13 @@ func TestChatworkTaskSpecificFaultsAreNotAdvertisedElsewhere(t *testing.T) {
 			t.Errorf("%s mutation rate-limit fault present=%t, want %t", spec.Path, hasMutationRateLimit, wantMutation)
 		}
 
-		wantMessageRead := spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow
+		wantMessageRead := spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow || spec.chatwork.Task == chatwork.TaskMessagesSend || spec.chatwork.Task == chatwork.TaskMessagesReconcileSend
 		_, hasLimitation := declared["chatwork_message_limitation_invalid"]
 		if hasLimitation != wantMessageRead {
 			t.Errorf("%s limitation fault present=%t, want %t", spec.Path, hasLimitation, wantMessageRead)
 		}
 		_, hasRestricted := declared["chatwork_message_restricted"]
-		wantRestricted := spec.chatwork.Task == chatwork.TaskMessagesShow
+		wantRestricted := spec.chatwork.Task == chatwork.TaskMessagesShow || spec.chatwork.Task == chatwork.TaskMessagesSend || spec.chatwork.Task == chatwork.TaskMessagesReconcileSend
 		if hasRestricted != wantRestricted {
 			t.Errorf("%s restricted-message fault present=%t, want %t", spec.Path, hasRestricted, wantRestricted)
 		}

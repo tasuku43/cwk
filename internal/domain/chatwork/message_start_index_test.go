@@ -72,6 +72,7 @@ func TestMessageIndexedSelectionBindsExactRequestAndNextStartIndex(t *testing.T)
 func cloneMessageSelection(selection *MessageSelection) *MessageSelection {
 	copy := *selection
 	copy.Filter.Senders = append([]Reference(nil), selection.Filter.Senders...)
+	copy.Filter.Contains = append([]string(nil), selection.Filter.Contains...)
 	copy.SourceSequences = append([]int(nil), selection.SourceSequences...)
 	copy.AnchorSequences = append([]int(nil), selection.AnchorSequences...)
 	return &copy

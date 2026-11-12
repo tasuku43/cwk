@@ -310,8 +310,8 @@ func (c *CLI) saveConfigSelection(
 
 func configSaveSuccessOutput(visible, hidden, changed, cleaned int) []byte {
 	var output strings.Builder
-	output.WriteString("コマンド表示を保存しました。\n")
-	fmt.Fprintf(&output, "%d件を表示し、%d件を非表示にしました（%d件変更）。\n", visible, hidden, changed)
+	output.WriteString("コマンドの実行範囲を保存しました。\n")
+	fmt.Fprintf(&output, "%d件を有効にし、%d件を無効にしました（%d件変更）。\n", visible, hidden, changed)
 	if cleaned > 0 {
 		fmt.Fprintf(&output, "古い設定を%d件整理しました。\n", cleaned)
 	}
@@ -329,7 +329,7 @@ func buildConfigExecutionRequest(command CommandSpec, base operation.Intent) (ex
 		Intent: intent, ExpectedCommand: command.Path, ExpectedEffect: command.Effect,
 		ExpectedTarget: intent.Target, ExpectedImpact: intent.Impact,
 	}
-	if intent != configcmd.Intent() {
+	if !intent.Equal(configcmd.Intent()) {
 		return execution.Request{}, fmt.Errorf("catalog and application command-selection targets differ")
 	}
 	return request, nil

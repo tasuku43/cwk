@@ -56,7 +56,7 @@ func TestInvokerAppliesPolicyAndExecutesExactlyOnce(t *testing.T) {
 	request := mutationRequest()
 	err := New(policy).Invoke(context.Background(), request, func(_ context.Context, got operation.Intent) error {
 		actionCalls++
-		if got != request.Intent {
+		if !got.Equal(request.Intent) {
 			t.Fatalf("intent = %+v, want %+v", got, request.Intent)
 		}
 		return nil
@@ -64,8 +64,42 @@ func TestInvokerAppliesPolicyAndExecutesExactlyOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Invoke() error = %v", err)
 	}
-	if policy.calls != 1 || policy.seen != request.Intent || actionCalls != 1 {
+	if policy.calls != 1 || !policy.seen.Equal(request.Intent) || actionCalls != 1 {
 		t.Fatalf("policy calls = %d, action calls = %d", policy.calls, actionCalls)
+	}
+}
+
+func TestInvokerBindsOrderedPreflightReferencesBeforePolicyAndAction(t *testing.T) {
+	request := mutationRequest()
+	request.Intent.PreflightRefs = []operation.PreflightRef{
+		{Input: "--to", Kind: "account", Value: "9"},
+		{Input: "--to", Kind: "account", Value: "3"},
+		{Input: "--reply-to", Kind: "message", Value: "101"},
+	}
+	request.ExpectedPreflightRefs = append([]operation.PreflightRef(nil), request.Intent.PreflightRefs...)
+	policy := &policyStub{}
+	actionCalls := 0
+	err := New(policy).Invoke(context.Background(), request, func(_ context.Context, intent operation.Intent) error {
+		actionCalls++
+		if !intent.Equal(request.Intent) {
+			t.Fatalf("action intent = %+v, want %+v", intent, request.Intent)
+		}
+		return nil
+	})
+	if err != nil || policy.calls != 1 || actionCalls != 1 || !policy.seen.Equal(request.Intent) {
+		t.Fatalf("error = %v, policy calls = %d, action calls = %d", err, policy.calls, actionCalls)
+	}
+
+	request.ExpectedPreflightRefs[0].Value = "10"
+	policy = &policyStub{}
+	actionCalls = 0
+	err = New(policy).Invoke(context.Background(), request, func(context.Context, operation.Intent) error {
+		actionCalls++
+		return nil
+	})
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "invalid_mutation_contract" || policy.calls != 0 || actionCalls != 0 {
+		t.Fatalf("mismatched preflight refs: error=%#v, policy calls=%d, action calls=%d", err, policy.calls, actionCalls)
 	}
 }
 
@@ -131,6 +165,37 @@ func TestInvokerFailuresBeforeExecutionMakeZeroMutationAttempts(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestInvokerPreservesSafeStructuredPolicyRefusal(t *testing.T) {
+	policyFault := fault.New(fault.KindRejected, "mutation_rejected", "この操作には --confirm=destructive が必要です。", false)
+	policy := &policyStub{err: policyFault}
+	actionCalls := 0
+	err := New(policy).Invoke(context.Background(), mutationRequest(), func(context.Context, operation.Intent) error {
+		actionCalls++
+		return nil
+	})
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != fault.KindRejected || structured.Code != "mutation_rejected" ||
+		structured.Retryable || structured.Message != policyFault.Message || errors.Unwrap(structured) != nil || actionCalls != 0 {
+		t.Fatalf("Invoke() error = %#v, action calls = %d; want detached policy refusal", err, actionCalls)
+	}
+}
+
+func TestInvokerKeepsCancellationDuringPolicyEvaluationAsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	policy := &policyStub{err: context.Canceled}
+	actionCalls := 0
+	err := New(policy).Invoke(ctx, mutationRequest(), func(context.Context, operation.Intent) error {
+		actionCalls++
+		return nil
+	})
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != fault.KindCanceled || structured.Code != "operation_canceled" ||
+		!structured.Retryable || actionCalls != 0 {
+		t.Fatalf("Invoke() error = %#v, action calls = %d; want retryable cancellation before action", err, actionCalls)
+	}
+	cancel()
 }
 
 func TestInvokerPreservesStructuredMutationOutcomeAndStripsCause(t *testing.T) {

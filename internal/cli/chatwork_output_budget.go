@@ -13,7 +13,10 @@ import (
 // chatworkPresentationOptions contains invocation-local projection controls.
 // These values are removed before the provider-independent request is built.
 type chatworkPresentationOptions struct {
-	MaxBytes int
+	MaxBytes           int
+	MaxBodyBytes       int
+	LimitMessageBodies bool
+	IncludeSendTimeJST bool
 }
 
 func splitChatworkPresentationArguments(command CommandSpec, arguments chatworkArguments) (chatworkArguments, chatworkPresentationOptions, error) {
@@ -21,19 +24,50 @@ func splitChatworkPresentationArguments(command CommandSpec, arguments chatworkA
 	for name, values := range arguments {
 		requestArguments[name] = append([]string(nil), values...)
 	}
-	values := requestArguments["--max-bytes"]
-	if len(values) == 0 {
-		return requestArguments, chatworkPresentationOptions{}, nil
+	options := chatworkPresentationOptions{}
+	if values := requestArguments["--jst"]; len(values) > 0 {
+		if command.chatwork == nil || (command.chatwork.Task != chatwork.TaskMessagesList && command.chatwork.Task != chatwork.TaskMessagesShow) || len(values) != 1 || values[0] != "true" {
+			return nil, chatworkPresentationOptions{}, fmt.Errorf("--jst は messages list または messages show で値なしのフラグとして指定できます")
+		}
+		options.IncludeSendTimeJST = true
+		delete(requestArguments, "--jst")
 	}
-	if command.chatwork == nil || command.chatwork.Task != chatwork.TaskMessagesList || len(values) != 1 {
-		return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-bytes は messages list で1回だけ指定できます")
+	if values := requestArguments["--max-bytes"]; len(values) > 0 {
+		if command.chatwork == nil || command.chatwork.Task != chatwork.TaskMessagesList || len(values) != 1 {
+			return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-bytes は messages list で1回だけ指定できます")
+		}
+		maxBytes, err := strconv.Atoi(values[0])
+		if err != nil || maxBytes < 1 || maxBytes > maxChatworkOutputBytes {
+			return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-bytes は 1 から %d までの整数で指定してください", maxChatworkOutputBytes)
+		}
+		options.MaxBytes = maxBytes
+		delete(requestArguments, "--max-bytes")
 	}
-	maxBytes, err := strconv.Atoi(values[0])
-	if err != nil || maxBytes < 1 || maxBytes > maxChatworkOutputBytes {
-		return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-bytes は 1 から %d までの整数で指定してください", maxChatworkOutputBytes)
+	if values := requestArguments["--max-body-bytes"]; len(values) > 0 {
+		if command.chatwork == nil || command.chatwork.Task != chatwork.TaskMessagesList || len(values) != 1 {
+			return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-body-bytes は messages list で1回だけ指定できます")
+		}
+		maxBodyBytes, err := parseNonNegativeDecimal(values[0])
+		if err != nil || maxBodyBytes > chatwork.MaxMessageBodyBytes {
+			return nil, chatworkPresentationOptions{}, fmt.Errorf("--max-body-bytes は 0 から %d までの十進整数で指定してください", chatwork.MaxMessageBodyBytes)
+		}
+		options.MaxBodyBytes = maxBodyBytes
+		options.LimitMessageBodies = true
+		delete(requestArguments, "--max-body-bytes")
 	}
-	delete(requestArguments, "--max-bytes")
-	return requestArguments, chatworkPresentationOptions{MaxBytes: maxBytes}, nil
+	return requestArguments, options, nil
+}
+
+func parseNonNegativeDecimal(value string) (int, error) {
+	if value == "" {
+		return 0, fmt.Errorf("empty decimal value")
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return 0, fmt.Errorf("value is not an ASCII decimal integer")
+		}
+	}
+	return strconv.Atoi(value)
 }
 
 // renderChatworkResult applies a byte budget to the already assembled result.
@@ -41,6 +75,13 @@ func splitChatworkPresentationArguments(command CommandSpec, arguments chatworkA
 // in every budget measurement.
 func renderChatworkResult(result chatwork.Result, options chatworkPresentationOptions) (string, error) {
 	if options.MaxBytes == 0 {
+		if options.LimitMessageBodies || options.IncludeSendTimeJST {
+			return capsule.RenderWithOptions(result, capsule.Options{
+				MaxBodyBytes:       options.MaxBodyBytes,
+				LimitMessageBodies: options.LimitMessageBodies,
+				IncludeSendTimeJST: options.IncludeSendTimeJST,
+			})
+		}
 		return capsule.Render(result)
 	}
 	if options.MaxBytes < 0 || options.MaxBytes > maxChatworkOutputBytes {
@@ -56,8 +97,11 @@ func renderChatworkResult(result chatwork.Result, options chatworkPresentationOp
 			return "", planErr
 		}
 		return capsule.RenderWithOptions(result, capsule.Options{
-			MaxBytes:        options.MaxBytes,
-			MessageDelivery: &delivery,
+			MaxBytes:           options.MaxBytes,
+			MaxBodyBytes:       options.MaxBodyBytes,
+			LimitMessageBodies: options.LimitMessageBodies,
+			IncludeSendTimeJST: options.IncludeSendTimeJST,
+			MessageDelivery:    &delivery,
 		})
 	}
 

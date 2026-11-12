@@ -124,8 +124,8 @@ which catalog paths may be selected or attach CLI recovery commands.
 - presentation-only output budgets and atomic delivery planning;
 - the composition root that wires use cases to concrete adapters;
 - the controlled handoff to side-effect execution.
-- derivation of the active command-attention view from the complete catalog and
-  the persisted exact-path selection.
+- derivation of the active command scope from the complete catalog and the
+  persisted exact-path selection, and refusal to dispatch disabled tasks.
 - the pure command-selector model, fragmented key-sequence parser, bounded
   viewport, effect badges, and terminal frame rendered over the infrastructure
   terminal session.
@@ -134,9 +134,18 @@ which catalog paths may be selected or attach CLI recovery commands.
   metadata. Stable machine identifiers remain in their existing ASCII forms;
   locale handling never crosses into opaque-reference or provider-text values.
 
+For `room-tasks create --limit`, CLI accepts the legacy positive decimal
+Unix-seconds form or strict whole-second RFC3339 with explicit `Z` or numeric
+`±HH:MM` zone and converts the timestamp to positive Unix seconds exactly once
+before building the domain request. It rejects fractional, offset-free,
+unknown-offset, invalid-calendar/offset, nonpositive, and overflowing input
+before authentication. The domain and provider retain the existing integer
+`Limit` contract; `LimitType` is passed independently and keeps its existing
+meaning.
+
 For Chatwork output, including relationship-aware message results and the current headerless task projection, the layers divide responsibility further:
 
-- Domain defines provider-neutral message, participant, recipient, reply, quote, list-selection context, exact-message direct-child context with source sequences/coverage/access limitation, relation-set state, relation-resolution provenance/outcomes, reachability, and unresolved-reference values. It rejects impossible or internally inconsistent graphs but performs no parsing, I/O, or rendering.
+- Domain defines provider-neutral message, participant, recipient, reply, quote, quote-candidate evidence/state, list-selection context, exact-message direct-child context with source sequences/coverage/access limitation, relation-set state, relation-resolution provenance/outcomes, reachability, and unresolved-reference values. Quote-candidate validation binds exact room/author/whole-timestamp evidence and any visible sequence without claiming message identity. It rejects impossible or internally inconsistent graphs but performs no parsing, I/O, or rendering.
 - Infrastructure decodes Chatwork wire DTOs, validates the status/header combination that distinguishes normal zero, partial/all access restriction, restricted exact message, and not-found, and parses provider-specific message notation into typed facts. It preserves external text as untrusted data and never invents a reply from To, display names, prose, or temporal proximity. A malformed recognized notation form returns the body with an unknown whole relation set rather than failing its list or retaining partial facts.
 - Application use cases select the bounded data required by one outcome,
   resolve only explicit relationships selected by that outcome, and return a
@@ -162,7 +171,35 @@ For Chatwork output, including relationship-aware message results and the curren
   reply-resolution state and resolves it again against only the visible anchor
   and children; a hidden recent-window target can become resolved only through
   separately emitted parent-resolution evidence.
-- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata directly from application. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`; oldest reachability and period reachability come directly from domain values. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; only optional typed edges and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved source replies become scalar `reply=#N` or ordered compact `reply=[#N,#M]`, supplemental parents use canonical-reference reply edges plus separate `relation-context` provenance, and unavailable targets use typed `relation-gap` records. Unknown relation sets remain distinct from absent and complete multiple relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
+  Explicit `messages show --around N` (0..100) reuses that same one bounded
+  force-recent source, even when reply context is omitted or explicitly none.
+  After the exact anchor read, the application finds the exact reference in
+  provider order and selects up to N adjacent source positions on each side.
+  If the anchor is absent from an unrestricted source it publishes
+  `outside-window`; if absent under restricted access it publishes `unknown`.
+  Neither absent-anchor state has neighbors. A found anchor remains
+  `in-window`, with source access limitation reported separately. The result
+  retains source positions/count/limit/completeness and access evidence. Around
+  positions are not relation evidence: the visible
+  child/around union is re-resolved only from typed explicit edges, and a
+  reference in both slices is rendered once. Around does not consume the
+  independent outgoing-parent fetch budget. For quotes, application computes
+  source-window candidates once from the whole original bounded list result
+  before local selection or byte delivery. Exact same-room author and whole
+  Unix timestamp matches retain canonical references and source provenance;
+  filtered or delivered subsets may clear only a sequence whose target is no
+  longer visible, never recompute ambiguity. Exact-message `show` without a
+  recent source reports unknown with no candidate; `--context replies` and
+  `--around` reuse their existing recent read. Quote matching creates no reply
+  edge and spends no provider-call budget.
+- For `messages resources`, application runs only the selected existing file
+  and room-task list tasks, in files-then-room-tasks order for `all`, passing
+  the caller context and validated authentication binding unchanged. Each
+  source request contains only the exact room scope. It filters typed records
+  by exact same-room `Message` reference, preserves all provider-order matches,
+  and aborts the whole result if any selected source fails. It neither fetches
+  the message nor parses body notation.
+- CLI presentation projects that same typed result through a release-versioned text contract. The current headerless task projection starts with the result noun and emits only catalog-declared task facts, exact canonical references, task-relevant bounds/completeness/uncertainty, and trust framing for external text. A shared collection prelude emits trust and one fixed schema for the reviewed contacts, rooms, members, personal-task, room-task, file, and contact-request lists; their positional records preserve the application result slice order without aliases. For `messages list`, presentation assigns first-sender-order actor aliases, consumes application-provided original source sequences, and emits one flat record per selected item in unchanged source order. An active selection receives source count, candidate count, optional exact senders and body terms, effective period bounds/day/zone, start index, requested count, actual items per page, optional next start index, context, and anchor metadata from application. The text projection emits `candidate-count` for body-term, period, or index/count selection; sender-only output keeps its established shape. The provider ceiling is rendered separately as `source-limit`; provider restriction is separately `access-limitation=none|partial|all`; oldest reachability and period reachability come directly from domain values. One fixed schema assigns the positional sequence, canonical message reference, actor, send time, and terminal-safe quoted body; optional quote candidates and an affected record's `relation-state=unknown` retain labels. It never traverses or infers a thread: typed resolved source replies become scalar `reply=#N` or ordered compact `reply=[#N,#M]`, supplemental parents use canonical-reference reply edges plus separate `relation-context` provenance, unavailable targets use typed `relation-gap` records, and quote matches use canonical message references with `scope=source-window` and `identity=unproven`. Collection counts separately report unresolved replies, unresolved quotes, and unknown relation sets; quote candidates do not reduce unresolved quotes. Unknown relation sets remain distinct from absent and complete multiple relations, and aliases remain document-local. It adds no global version/task preamble, standalone provider coverage record, raw Chatwork notation as semantic structure, provider/wire extras, empty optional shells, or non-contract defaults. Presentation does not define relationship truth, completeness, identity, or task policy. Future candidate renderers must consume the same boundary.
 
 `messages list --max-bytes` stays entirely in CLI request/presentation state.
 CLI removes it before constructing the domain request, receives the same fully
@@ -181,6 +218,27 @@ regular-file reader while building the reviewed form request, stops at 65,536
 bytes under the caller context, then validates nonempty UTF-8 and the 65,535-byte body ceiling before network I/O. The application port
 therefore remains task-specific and secret-free, and file or stdin failures
 cannot become provider calls.
+
+`messages send --to` and `--reply-to` are typed task inputs. The catalog binds
+only `--room` as the create parent and keeps ordered recipient/reply references
+in `MutationContract.PreflightInputs` and `operation.Intent.PreflightRefs`; they
+do not replace or extend the mutation target. The application validates
+recipients before entering the port. When a reply target exists, it performs
+one exact `messages.show` read in the same room with the unchanged context and
+`BindingID`, validates the returned room, message, and sender account, then
+passes that sender in the one send request. With no reply target, it performs
+no extra read. Infrastructure resolves the body source, emits To tags in input
+order followed by the reply tag, preserves the original body bytes, and checks
+the complete UTF-8 body against the 65,535-byte ceiling before constructing or
+dispatching the POST. For `--reply-to --body-file`, infrastructure first reads
+and validates the body once through its bounded regular-file reader, before
+the reply GET, then passes an opaque one-use handle through the application to
+the same client for the POST. The application receives neither filesystem
+access nor body bytes, and the adapter does not reread the path. Invalid,
+missing, unreadable, or oversized body-file input therefore makes zero GET and
+zero POST calls. The final generated-prefix size depends on the verified
+sender ID, so an otherwise-valid source may be rejected after the reply GET;
+that path still makes zero POST calls.
 
 `cmd/cwk/main.go` is a thin executable entry point. It should not contain product logic or construct adapters independently of the CLI composition root.
 
@@ -229,8 +287,9 @@ and structured examples derive from it.
 
 `DefaultCatalog` remains the complete public, capability, API-coverage, and
 release ledger. Each leaf declares whether it is configurable. Production
-loads an exact-path enabled allowlist and derives one catalog-order active view;
-it does not construct a second command registry or mutate the complete catalog.
+loads an exact-path enabled allowlist and derives one catalog-order active
+operation scope; it does not construct a second command registry or mutate the
+complete catalog. A disabled task is outside what that `cwk` process dispatches.
 `help`, `doctor`, `version`, and the single exact `config` write are always-on;
 the Chatwork task leaves are independently configurable. Missing selection
 state derives an unconfigured active view containing only those four control
@@ -246,20 +305,61 @@ are omitted on the next confirmed save. This narrow migration does not make
 arbitrary always-on paths valid selection entries.
 
 The active view is loaded before trailing-help normalization and command
-matching. Root, namespace, exact, and trailing text help; recovery projections;
-reference workflows; and routing consume that same view. A disabled command
-therefore takes the existing `unknown_command` path
-before lazy PAT resolution or provider I/O. View validation is deliberately
+matching. A bare one-token namespace is normalized to the existing
+`help <namespace>` selector only when it exactly matches a root namespace derived
+from the complete catalog. Namespace membership is not a second command
+registry, and unknown or incomplete multiword paths are not rewritten. Root and
+namespace active details, recovery projections, reference workflows, examples,
+typo suggestions, and routing consume that same view. For a saved valid profile,
+CLI additionally checks the immutable complete catalog for an exact disabled
+canonical command or declared alias. Execution and exact scoped/trailing help
+for that task fail as non-retryable `command_disabled` before dispatch, PAT
+resolution, or provider I/O. Other unknown and incomplete paths remain
+`unknown_command`; an unconfigured profile retains
+`command_selection_required`. Namespace help can expose disabled canonical
+names in a distinct name-only section without exposing usage details. Unsafe or
+unavailable selection state retains the existing static-catalog help fallback
+and never dispatches a configurable task. View validation is deliberately
 narrower than full-catalog validation: a visible terminal producer may have no
 visible consumer, but each visible required-reference consumer must have a
 reachable visible producer and every visible recovery action must resolve
 inside the view. Selection never auto-enables another command to repair an
 invalid graph.
 
+Human-readable hints for unsupported task inputs and unknown task paths are
+separate from structured recovery. CLI may name a task-specific exact help
+selector only when that command is present in the resolved active catalog;
+saved disabled paths and unsafe static-help fallback never supply such hints.
+For a recognized task selector that has no dedicated namespace, such as
+`help tasks`, CLI derives the finite `room-tasks` and `personal-tasks` choices
+from catalog paths in the active view. An unconfigured profile is rejected
+before that hint is rendered. The selector-hint text must not echo argument
+values or rewrite argv. `next_action` remains the exact catalog-declared
+recovery and is never assembled from the hint.
+
+This is a dispatch boundary inside the current `cwk` process, not an OS-user
+security boundary or human-identity check. The same OS user can edit or remove
+the preference, automate a terminal, change the configuration base, install
+another executable, or use a PAT outside `cwk`. Provider authentication,
+permissions, reference validation, mutation intent, and confirmations remain
+independent controls.
+
 Examples are structured metadata attached to a public `CommandSpec`, not
 another dispatcher. Exact-command text help scans active catalog metadata and
 renders at most two examples whose exact steps exist in the active view. Root
-help remains an index; namespace help instead renders each leaf's complete
+help remains a catalog-derived namespace/outcome index. It reuses each leaf's
+required Summary text, not a second help registry; each namespace shows at most
+three distinct active outcomes with exact leaf --help routes, and a remaining
+count points to exact namespace help. Disabled leaves contribute no summaries,
+disabled-only namespaces stay name-only, and unconfigured help stays on the
+control plane. Each Summary must be terminal-safe one-line text within 192
+encoded bytes. Root and static-fallback UTF-8 byte lengths are measured without
+a root-wide hard ceiling. The link-discovery guide uses only the active catalog's
+exact messages resolve-link path and its --help selector; the separate show
+route is present only when that leaf is active. Saved resolver-only root help
+asks a person to enable show via config. Marked static fallback projects the full
+catalog and does not assert active selection. Namespace help instead
+renders each leaf's complete
 usage, required flags, and catalog-declared required one-of input groups.
 
 `config` is one fixed-`tool_local`-target write and the sole public
@@ -292,7 +392,7 @@ success is not overwritten by later cancellation.
 result is augmented with command-selection state, source, enabled/disabled and
 stale/legacy counts, plus a versioned SHA-256 fingerprint over the ordered
 canonical enabled paths. Confirmed `config` success is projected separately as
-a short human-readable visible/hidden/change summary with conditional cleanup;
+a short human-readable enabled/disabled/change summary with conditional cleanup;
 it does not duplicate the fingerprint. An uncertain fault names the expected
 `source=saved` as well as its candidate fingerprint; reconciliation succeeds
 only when `doctor` reports both. An absent profile instead reports
@@ -435,8 +535,13 @@ an omitted `messages list --window` to recent before the application boundary;
 explicit `recent` preserves that value and explicit `changes` selects the
 differential request. Infrastructure remains a policy-free boolean-to-query
 mapping: recent emits `force=1`, while changes omits `force`. In particular,
-`messages list` evaluates exact-sender OR and optional half-open period
-membership once over the bounded typed provider result, then ranks candidates
+`messages list` evaluates exact-sender OR, literal body-term OR, and optional
+half-open period membership once over the bounded typed provider result;
+different predicate groups combine with AND. `--contains` is case-sensitive
+literal matching on typed `Message.Body`; terms remain byte-for-byte caller
+input and are not trimmed, normalized, parsed as provider notation, or sent to
+the API. Request validation rejects empty, invalid-UTF-8, over-1,024-byte, or
+more than 100 terms before authentication. The application then ranks candidates
 by typed send time, applies optional one-based
 `--start-index` and maximum `--count` 1..100, and only then expands
 direct non-transitive `replies` context. CLI assembly defaults an active
@@ -446,7 +551,7 @@ A timestamp selects membership but
 never changes provider-order output; equal timestamps prefer the later provider
 position. Omitted targets remain explicit unresolved canonical references
 until the bounded resolution phase; they are never guessed. Selection metadata carries source and
-candidate counts, concrete period bounds/day, start index, requested count,
+candidate counts, exact body terms, concrete period bounds/day, start index, requested count,
 actual items per page, optional next start index, original source sequences,
 and primary anchors so presentation need not reconstruct policy. Explicit reply
 context may make displayed count exceed the requested primary count or include
@@ -504,6 +609,29 @@ physical records, while `output-total-items` counts every primary anchor
 eligible for delivery before projection. Provider `complete` and application
 selection `next-start-index` pass through unchanged and remain semantically
 independent from output delivery.
+
+`messages list --max-body-bytes` has the same CLI-only ownership. CLI removes
+and validates the 0..65,535 value before authentication. The capsule renderer
+applies it only after the application has finished body-term selection,
+reply-context assembly, quote-candidate resolution, and relation closure. It
+uses raw UTF-8 byte length and a complete-rune prefix before visible text
+escaping, then marks only affected emitted body records with the original raw
+byte length. Primary anchors, selected reply context, and emitted supplemental
+relation context share this rule; records omitted by delivery planning remain
+omitted. The limit never enters an application/domain/provider request and
+does not change typed bodies, relationships, source coverage, selection
+continuation, or output-delivery completeness. When both presentation limits
+are present, body projection runs before the final escaped `--max-bytes`
+measurement.
+`--jst` follows the same CLI-only ownership: it is removed before typed
+request construction and preserved as renderer state through any
+`--max-bytes` redraw. The renderer appends the optional timestamp after each
+emitted message's unchanged Unix send time, including list/show reply, around,
+and relation-context records. It uses a fixed nine-hour offset, never host-local
+time or timezone data. Before calling `time.Unix`, it checks the signed
+Unix-second value against the instants whose local `+09:00` year is `0000`
+through `9999`; values outside that inclusive range render as `unavailable`.
+This adds no application/provider input, I/O, or domain timestamp.
 For a budgeted projection, CLI recomputes `relation-resolution targets` from
 the relation-context and relation-gap targets it will actually emit after that
 summary line. It preserves `fetch-attempts` from the complete application
@@ -536,13 +664,22 @@ first, then one bounded reply-context record and each child canonical record,
 then the existing parent-resolution records. Omitted/`none` requests cannot
 carry this context.
 
+`MessageShowAround` is a separate typed result slice. It binds the anchor to an
+`in-window`, `outside-window`, or `unknown` state; when in-window it carries
+provider-order before/after messages and their original sequences, requested
+and actual side counts, source count, bounded coverage, and access limitation.
+An absent anchor has empty side slices. Domain validation checks positions
+against the anchor and source bounds. Presentation merges it with reply
+children in source order and deduplicates by exact canonical reference, while
+preserving explicit child edges and never deriving relations from adjacency.
+
 CLI request assembly parses whole-second offset-bearing RFC3339 bounds and
 resolves `--on YYYY-MM-DD|today|yesterday` once with its injected clock and the
 fixed `Asia/Tokyo` calendar. Only the effective Unix interval and optional
 concrete day/zone cross the application boundary; the relative word and host
 local zone do not. Missing clocks and invalid or conflicting period syntax fail
 before authentication. Application removes those period fields together with
-sender/context/index/relation-budget fields before calling infrastructure.
+sender/body-term/context/index/relation-budget fields before calling infrastructure.
 
 Application derives oldest reachability from the complete typed source before
 local selection. A nonempty, unrestricted `recent` source with positive send
@@ -555,14 +692,30 @@ Chatwork documents no limit, cursor, or offset for the list endpoint.
 Infrastructure issues exactly one list request with only the documented
 `force` query, then zero through N distinct exact-message requests selected by
 application's declared budget. Each infrastructure operation remains one
-request and one attempt. The adapter rejects application-only sender/period/
-index/context/relation-budget state if it crosses the port. The
+request and one attempt. The adapter rejects application-only sender/body-term/
+period/index/context/relation-budget state if it crosses the port. The
 provider's maximum-100 coverage is a `source-limit`, not the public requested
 count or a provider page size. An over-bound source result fails before
 application selection, and invalid public index/count values fail before
 authentication or I/O. The catalog result remains one complete bounded task
 result with no `AgentContract.Pagination` binding. The SCIM-derived public
 vocabulary does not manufacture a provider cursor or snapshot guarantee.
+
+`messages reconcile-send` is a separate read-only application task. It first
+validates and snapshots the exact literal or bounded file body in the adapter,
+then, when `--reply-to` is present, reads the exact same-room message with the
+same context and authentication binding to obtain its current typed sender.
+Infrastructure finalizes a one-use opaque matcher through the same expanded-
+body builder used by `messages send`. Application reads the current account
+once under the same binding and context, fails closed on a missing or invalid result, then issues exactly one
+`force=1` list request under that same context and binding. It matches at most
+100 source bodies, discards temporary body references and returns only matches
+whose typed sender reference equals the current account. The result carries
+an always-present `account_ref`, exact candidates whose `sender_ref` equals it,
+the full-window source count, limit,
+completeness, access limitation, and outcome `unknown`. No submitted body or
+body-file path is returned, and no mutation is called. This replaces the prior
+all-author candidate set as an intentional pre-1.0 compatibility change.
 
 Candidate C (`cwk-context-capsule/1`) is the first stable public presentation baseline and retains that historical evidence. Competition 1 was inconclusive because benchmark defects made its promotion result non-authoritative. A P-derived task projection (`cwk-task-projection/1`) was selected afterward by an explicit owner compatibility decision, then hardened beyond the frozen candidate. The current default further removes its in-band schema/task preamble and standalone provider coverage line through a second explicit pre-1.0 compatibility decision. Neither decision describes P as the benchmark winner. Future alternatives may be developed in isolated worktrees against the same semantic fixtures, answer key, trust rules, canonical references, and output-boundary requirements. Candidate-specific schemas, grammars, ordering, shorthand, or visual hierarchy remain outside domain and application code, and raw experimental evidence remains immutable decision input.
 
@@ -669,6 +822,21 @@ mutations remain non-retryable and route to scoped help. CLI presentation maps
 missing timing to text `unknown` and JSON `null`; timing never overrides the
 catalog retry decision.
 
+For read transport errors, the adapter distinguishes deadline wording only
+when `errors.Is(ctx.Err(), context.DeadlineExceeded)` or
+`errors.Is(err, context.DeadlineExceeded)` matches. It keeps the existing
+`operation_canceled` kind, code, retryability, and exit status, while ordinary
+caller cancellation retains cancellation wording and other I/O failures remain
+`chatwork_unavailable`. A fixed room-membership possibility phrase appears
+only on tasks with a selected room target or scope. It never includes provider
+error text.
+
+The Chatwork confirmation policy may return a human-readable `mutation_rejected`
+message with the exact expected confirmation only for the reviewed
+`access-change` and `destructive` catalog values. The invoker preserves that
+validated structured refusal and still applies catalog recovery; cancellation
+during policy evaluation remains `operation_canceled`.
+
 Public fault messages and next-action reasons are Japanese, while kind, code,
 retryability, retry-after representation, next command, JSON keys, and exit
 status remain locale-neutral contracts. Internal validation strings may remain
@@ -703,3 +871,14 @@ Concrete schema generators, update checks, credential stores, OAuth libraries, t
 - dependency and maintenance cost;
 - failure behavior;
 - mechanical checks and release impact.
+
+## Local message-link reference discovery
+
+The configurable `messages resolve-link` read is a catalog-declared discover
+leaf, not a Chatwork API adapter. A pure domain interpretation accepts only the
+reviewed exact ASCII message-link form and returns two validated exact-byte room
+and message references; CLI owns argument parsing and safe rendering. The
+result states verification was not performed. The command performs no external
+I/O or authentication, and does not modify the provider operation manifest.
+Selection does not implicitly enable this leaf or its consumer. If the resolver is active but show is disabled, root help describes only extraction and tells the agent to ask a person to enable show through config; it does not present a disabled action as executable. The reference
+flow derives from catalog output and input kinds, including active-view tests.

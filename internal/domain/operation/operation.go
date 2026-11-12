@@ -190,6 +190,15 @@ type Impact struct {
 	Destructive  Declaration `json:"destructive,omitempty"`
 }
 
+// PreflightRef records an exact opaque CLI reference that informs a mutation
+// without selecting the mutation's existing object or parent scope. Input
+// names identify the catalog-declared role that supplied the value.
+type PreflightRef struct {
+	Input string `json:"input"`
+	Kind  string `json:"kind"`
+	Value string `json:"value"`
+}
+
 // IsZero reports whether no impact declaration was supplied.
 func (i Impact) IsZero() bool {
 	return i == (Impact{})
@@ -215,10 +224,26 @@ func (i Impact) Validate() error {
 
 // Intent is the complete side-effect declaration for one execution.
 type Intent struct {
-	Command string    `json:"command"`
-	Effect  Effect    `json:"effect"`
-	Target  TargetRef `json:"target,omitempty"`
-	Impact  Impact    `json:"impact,omitempty"`
+	Command       string         `json:"command"`
+	Effect        Effect         `json:"effect"`
+	Target        TargetRef      `json:"target,omitempty"`
+	Impact        Impact         `json:"impact,omitempty"`
+	PreflightRefs []PreflightRef `json:"preflight_refs,omitempty"`
+}
+
+// Equal reports whether two operation declarations are identical, including
+// the order of their typed preflight references.
+func (i Intent) Equal(other Intent) bool {
+	if i.Command != other.Command || i.Effect != other.Effect || i.Target != other.Target || i.Impact != other.Impact ||
+		len(i.PreflightRefs) != len(other.PreflightRefs) {
+		return false
+	}
+	for index := range i.PreflightRefs {
+		if i.PreflightRefs[index] != other.PreflightRefs[index] {
+			return false
+		}
+	}
+	return true
 }
 
 // Validate enforces the target shape required by each effect.
@@ -229,6 +254,19 @@ func (i Intent) Validate() error {
 	if err := i.Effect.Validate(); err != nil {
 		return err
 	}
+	seenPreflightRefs := make(map[PreflightRef]struct{}, len(i.PreflightRefs))
+	for index, ref := range i.PreflightRefs {
+		if !strings.HasPrefix(ref.Input, "--") || !validName(strings.TrimPrefix(ref.Input, "--")) {
+			return fmt.Errorf("preflight reference %d input is missing or invalid", index)
+		}
+		if !validName(ref.Kind) || !validRefPart(ref.Value) {
+			return fmt.Errorf("preflight reference %d kind or value is missing or invalid", index)
+		}
+		if _, exists := seenPreflightRefs[ref]; exists {
+			return fmt.Errorf("preflight reference %d is duplicated", index)
+		}
+		seenPreflightRefs[ref] = struct{}{}
+	}
 
 	switch i.Effect {
 	case EffectRead:
@@ -237,6 +275,9 @@ func (i Intent) Validate() error {
 		}
 		if !i.Impact.IsZero() {
 			return fmt.Errorf("read intent must not declare mutation impact")
+		}
+		if len(i.PreflightRefs) != 0 {
+			return fmt.Errorf("read intent must not declare mutation preflight references")
 		}
 	case EffectCreate:
 		if !validName(i.Target.Kind) || !validRefPart(i.Target.ParentID) || i.Target.ID != "" {

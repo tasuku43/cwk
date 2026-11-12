@@ -69,6 +69,15 @@ func cloneMessages(messages []chatwork.Message) []chatwork.Message {
 		if messages[index].Quotes != nil {
 			cloned[index].Quotes = append([]chatwork.Relation{}, messages[index].Quotes...)
 		}
+		if messages[index].QuoteMatches != nil {
+			cloned[index].QuoteMatches = make([]chatwork.MessageQuoteMatch, len(messages[index].QuoteMatches))
+			for matchIndex, match := range messages[index].QuoteMatches {
+				cloned[index].QuoteMatches[matchIndex] = match
+				if match.Candidates != nil {
+					cloned[index].QuoteMatches[matchIndex].Candidates = append([]chatwork.MessageQuoteCandidate{}, match.Candidates...)
+				}
+			}
+		}
 		if messages[index].Replies != nil {
 			cloned[index].Replies = append([]chatwork.Relation{}, messages[index].Replies...)
 		}

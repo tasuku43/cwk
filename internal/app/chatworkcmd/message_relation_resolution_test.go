@@ -25,16 +25,20 @@ func TestMessageRelationResolutionReusesCountOmittedSourceWithoutFetch(t *testin
 	account := relationshipReference(t, chatwork.ReferenceAccount, "7")
 	parent := relationMessage(t, room, account, "101", 100)
 	child := relationMessage(t, room, account, "102", 200)
+	child.Body = "contains target"
 	child.Replies = []chatwork.Relation{{Kind: "reply", Target: parent.Ref, ExternalID: room.Value}}
 	port := &relationResolutionPort{execute: func(request chatwork.Request) (chatwork.Result, error) {
 		if request.Task != chatwork.TaskMessagesList {
 			t.Fatalf("unexpected task %s", request.Task)
 		}
+		if len(request.MessageFilter.Contains) != 0 {
+			t.Fatalf("local body query leaked to provider request: %+v", request.MessageFilter)
+		}
 		return relationListResult(request, []chatwork.Message{parent, child}), nil
 	}}
 	request := chatwork.Request{
 		Task: chatwork.TaskMessagesList, Room: room, ForceRecent: true,
-		MessageFilter:             chatwork.MessageFilter{StartIndex: 1, Count: 1, Context: chatwork.MessageContextNone},
+		MessageFilter:             chatwork.MessageFilter{Contains: []string{"target"}, StartIndex: 1, Count: 1, Context: chatwork.MessageContextNone},
 		MessageRelationFetchLimit: 1,
 	}
 	result, err := New(port).Execute(context.Background(), testBinding(t), request)

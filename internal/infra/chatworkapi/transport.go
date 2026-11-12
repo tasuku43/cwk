@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -65,6 +66,69 @@ type httpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+type preparedMessageBody struct {
+	mu      sync.Mutex
+	owner   *Client
+	binding authn.BindingID
+	source  chatwork.Request
+	bytes   []byte
+	used    bool
+}
+
+func (*preparedMessageBody) IsPreparedMessageBody() {}
+
+func (*preparedMessageBody) String() string { return "[prepared Chatwork message body]" }
+
+func (*preparedMessageBody) GoString() string { return "[prepared Chatwork message body]" }
+
+func (p *preparedMessageBody) consume(owner *Client, binding authn.BindingID, request chatwork.Request) (string, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.used || p.owner != owner || p.binding != binding || !samePreparedMessageBodySource(p.source, request) {
+		return "", false
+	}
+	p.used = true
+	body := string(p.bytes)
+	clear(p.bytes)
+	p.bytes = nil
+	p.source = chatwork.Request{}
+	p.binding = authn.BindingID{}
+	p.owner = nil
+	return body, true
+}
+
+func (p *preparedMessageBody) discard(owner *Client) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.owner != owner {
+		return
+	}
+	clear(p.bytes)
+	p.bytes = nil
+	p.source = chatwork.Request{}
+	p.binding = authn.BindingID{}
+	p.owner = nil
+	p.used = true
+}
+
+func samePreparedMessageBodySource(source, request chatwork.Request) bool {
+	if request.Task != chatwork.TaskMessagesSend || request.Body != "" || request.BodyFile != source.BodyFile ||
+		request.Room != source.Room || request.SelfUnread != source.SelfUnread ||
+		len(request.MessageRecipients) != len(source.MessageRecipients) {
+		return false
+	}
+	for index := range source.MessageRecipients {
+		if request.MessageRecipients[index] != source.MessageRecipients[index] {
+			return false
+		}
+	}
+	if source.MessageReplyTarget == nil || request.MessageReplyTarget == nil ||
+		source.MessageReplyTarget.Message != request.MessageReplyTarget.Message {
+		return false
+	}
+	return true
+}
+
 func productionHTTPClient() *http.Client {
 	transport := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
@@ -93,7 +157,7 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		return chatwork.Result{}, fault.New(fault.KindContract, "missing_context", "Chatwork タスクコンテキストが設定されていません", false)
 	}
 	if err := ctx.Err(); err != nil {
-		return chatwork.Result{}, fault.Wrap(fault.KindCanceled, "operation_canceled", "実行前に Chatwork タスクがキャンセルされました", true, err)
+		return chatwork.Result{}, cancellationBeforeDispatch(input.Task, err)
 	}
 	if err := input.Validate(); err != nil {
 		return chatwork.Result{}, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_request", "Chatwork タスク入力は無効です", false, err)
@@ -108,6 +172,9 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 	}
 	spec, err := c.buildRequestContext(ctx, input)
 	if err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return chatwork.Result{}, cancellationBeforeDispatch(input.Task, ctxErr)
+		}
 		return chatwork.Result{}, err
 	}
 	policy, err := CallPolicy(input.Task)
@@ -122,6 +189,7 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_request_contract_invalid", "Chatwork リクエストを構築できませんでした", false)
 	}
 	request.Header.Set("Accept", "application/json")
+	request.Header.Set("User-Agent", c.userAgent)
 	if err := record.credential.authorize(request); err != nil {
 		return chatwork.Result{}, err
 	}
@@ -131,12 +199,19 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 	if c.http == nil {
 		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_transport_missing", "Chatwork トランスポートが設定されていません", false)
 	}
+	// This check is the last provable no-dispatch boundary. Cancellation after
+	// it may race with Do and must be classified as an unknown mutation outcome.
+	if err := callCtx.Err(); err != nil {
+		return chatwork.Result{}, cancellationBeforeDispatch(input.Task, err)
+	}
 	response, err := c.http.Do(request)
 	if err != nil {
 		return chatwork.Result{}, transportFault(input.Task, callCtx, err)
 	}
 	if response == nil || response.Body == nil {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_response_invalid", "Chatwork が無効なレスポンスを返しました", false)
+		return chatwork.Result{}, mutationResponseFailure(input.Task,
+			fault.New(fault.KindContract, "chatwork_response_invalid", "Chatwork が無効なレスポンスを返しました", false),
+		)
 	}
 	defer response.Body.Close()
 	messageAccess, err := messageAccessFromResponse(input.Task, response.StatusCode, response.Header)
@@ -150,11 +225,15 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		return chatwork.Result{}, providerFault(input.Task, response, c.currentTime())
 	}
 	if response.StatusCode != http.StatusOK && response.StatusCode != http.StatusNoContent {
-		return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない成功ステータスを返しました", false)
+		return chatwork.Result{}, mutationResponseFailure(input.Task,
+			fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない成功ステータスを返しました", false),
+		)
 	}
 	if response.StatusCode == http.StatusNoContent {
 		if !allowsNoContent(input.Task) {
-			return chatwork.Result{}, fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない空レスポンスを返しました", false)
+			return chatwork.Result{}, mutationResponseFailure(input.Task,
+				fault.New(fault.KindContract, "chatwork_unexpected_response", "Chatwork が文書化されていない空レスポンスを返しました", false),
+			)
 		}
 		result := emptyResult(input)
 		result.MessageAccess = messageAccess
@@ -162,11 +241,16 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 	}
 	body, err := readBounded(response.Body, MaxSuccessResponseBytes)
 	if err != nil {
-		return chatwork.Result{}, err
+		return chatwork.Result{}, mutationResponseFailure(input.Task, err)
 	}
 	result, err := mapResponse(input, body)
 	if err != nil {
-		return chatwork.Result{}, err
+		return chatwork.Result{}, mutationResponseFailure(input.Task, err)
+	}
+	if mutating(input.Task) {
+		if err := result.ValidateFor(input); err != nil {
+			return chatwork.Result{}, mutationOutcomeUnknown()
+		}
 	}
 	if input.Task == chatwork.TaskMessagesList {
 		result.MessageAccess = messageAccess
@@ -175,6 +259,91 @@ func (c *Client) Execute(ctx context.Context, binding authn.BindingID, input cha
 		}
 	}
 	return result, nil
+}
+
+// PrepareMessageBody reads and validates a reply-send body file through the
+// existing infrastructure-owned reader before the application performs its
+// reply GET. The returned one-use handle keeps the exact bytes in this adapter
+// so the later POST does not reread a mutable path.
+func (c *Client) PrepareMessageBody(ctx context.Context, binding authn.BindingID, input chatwork.Request) (chatwork.PreparedMessageBody, error) {
+	if ctx == nil {
+		return nil, fault.New(fault.KindContract, "missing_context", "Chatwork タスクコンテキストが設定されていません", false)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, cancellationBeforeDispatch(input.Task, err)
+	}
+	if input.Task != chatwork.TaskMessagesSend || input.BodyFile == "" || input.Body != "" || input.MessageReplyTarget == nil {
+		return nil, invalidRequest("reply body-file preparation requires one messages.send body file and exact reply target")
+	}
+	if err := input.Validate(); err != nil {
+		return nil, fault.Wrap(fault.KindInvalidInput, "invalid_chatwork_request", "Chatwork タスク入力は無効です", false, err)
+	}
+	if _, err := c.resolve(binding); err != nil {
+		return nil, err
+	}
+	body, err := c.messageBody(ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if err := chatwork.ValidateMessageBody(body); err != nil {
+		return nil, fault.New(fault.KindInvalidInput, "chatwork_message_body_invalid", "メッセージ本文ファイルには空でない65535バイト以下の有効なUTF-8が必要です", false)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, cancellationBeforeDispatch(input.Task, err)
+	}
+	return &preparedMessageBody{
+		owner: c, binding: binding, source: clonePreparedMessageBodySource(input), bytes: []byte(body),
+	}, nil
+}
+
+// ExecutePreparedMessageSend consumes a body-file handle created by this same
+// client and binding, then executes the ordinary single-attempt send path with
+// the prepared bytes as its literal body source.
+func (c *Client) ExecutePreparedMessageSend(ctx context.Context, binding authn.BindingID, input chatwork.Request, prepared chatwork.PreparedMessageBody) (chatwork.Result, error) {
+	body, ok := prepared.(*preparedMessageBody)
+	if !ok || body == nil {
+		return chatwork.Result{}, invalidRequest("prepared message body handle is invalid")
+	}
+	value, ok := body.consume(c, binding, input)
+	if !ok {
+		return chatwork.Result{}, invalidRequest("prepared message body handle does not match this send")
+	}
+	input.Body = value
+	input.BodyFile = ""
+	return c.Execute(ctx, binding, input)
+}
+
+// DiscardPreparedMessageBody releases an unused body-file snapshot after a
+// reply preflight failure. Foreign and already-consumed handles are ignored.
+func (c *Client) DiscardPreparedMessageBody(prepared chatwork.PreparedMessageBody) {
+	if body, ok := prepared.(*preparedMessageBody); ok && body != nil {
+		body.discard(c)
+	}
+}
+
+func clonePreparedMessageBodySource(input chatwork.Request) chatwork.Request {
+	copy := input
+	copy.MessageRecipients = append([]chatwork.Reference(nil), input.MessageRecipients...)
+	if input.MessageReplyTarget != nil {
+		target := *input.MessageReplyTarget
+		copy.MessageReplyTarget = &target
+	}
+	return copy
+}
+
+func cancellationBeforeDispatch(task chatwork.Task, cause error) error {
+	if mutating(task) {
+		return fault.New(
+			fault.KindCanceled,
+			"chatwork_mutation_not_dispatched",
+			"キャンセルされたため、変更要求は Chatwork への送信前に停止しました",
+			true,
+		)
+	}
+	if errors.Is(cause, context.DeadlineExceeded) {
+		return fault.New(fault.KindCanceled, "operation_canceled", "Chatwork の読み取りが時間内に完了しませんでした", true)
+	}
+	return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行前に Chatwork タスクがキャンセルされました", true, cause)
 }
 
 func messageAccessFromResponse(task chatwork.Task, status int, header http.Header) (chatwork.MessageAccessLimitation, error) {
@@ -276,27 +445,57 @@ func (c *Client) multipartRequest(path string, input chatwork.Request) (requestS
 }
 
 func (c *Client) messageBody(ctx context.Context, input chatwork.Request) (string, error) {
-	if input.BodyFile == "" {
-		return input.Body, nil
-	}
-	if c == nil || c.readBodyFile == nil {
-		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_file_unreadable", "メッセージ本文ファイルを読み取れませんでした", false)
-	}
-	data, err := c.readBodyFile(ctx, input.BodyFile)
+	data, err := c.messageBodyBytes(ctx, input)
 	if err != nil {
-		if ctx != nil && ctx.Err() != nil {
-			return "", fault.Wrap(fault.KindCanceled, "operation_canceled", "メッセージ本文ファイルの読み取りをキャンセルしました", true, ctx.Err())
+		return "", err
+	}
+	defer clear(data)
+	return string(data), nil
+}
+
+func expandMessageBody(input chatwork.Request, body string) (string, error) {
+	bodyBytes := []byte(body)
+	defer clear(bodyBytes)
+	expanded, err := expandMessageBodyBytes(input, bodyBytes)
+	if err != nil {
+		return "", err
+	}
+	defer clear(expanded)
+	return string(expanded), nil
+}
+
+func expandMessageBodyBytes(input chatwork.Request, body []byte) ([]byte, error) {
+	tags := make([]string, 0, len(input.MessageRecipients)+1)
+	for _, recipient := range input.MessageRecipients {
+		tags = append(tags, "[To:"+recipient.Value+"]")
+	}
+	if input.MessageReplyTarget != nil {
+		target := input.MessageReplyTarget
+		if target.Sender.Kind != chatwork.ReferenceAccount || chatwork.ValidateReference(chatwork.ReferenceAccount, target.Sender.Value) != nil {
+			return nil, fault.New(fault.KindContract, "chatwork_request_contract_invalid", "返信記法を作成する投稿者参照がありません", false)
 		}
-		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_file_unreadable", "メッセージ本文ファイルを読み取れませんでした", false)
+		tags = append(tags, fmt.Sprintf("[rp aid=%s to=%s-%s]", target.Sender.Value, input.Room.Value, target.Message.Value))
 	}
-	if len(data) > chatwork.MaxMessageBodyBytes {
-		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_too_large", "メッセージ本文が 65535 バイトの上限を超えています", false)
+	var expanded []byte
+	if len(tags) > 0 {
+		prefix := strings.Join(tags, " ") + " "
+		expanded = make([]byte, 0, len(prefix)+len(body))
+		expanded = append(expanded, prefix...)
+		expanded = append(expanded, body...)
+	} else {
+		expanded = append([]byte(nil), body...)
 	}
-	body := string(data)
-	if err := chatwork.ValidateMessageBody(body); err != nil {
-		return "", fault.New(fault.KindInvalidInput, "chatwork_message_body_invalid", "メッセージ本文ファイルには空でない65535バイト以下の有効なUTF-8が必要です", false)
+	if err := chatwork.ValidateMessageBodyBytes(expanded); err != nil {
+		code := "chatwork_message_body_invalid"
+		message := "展開後のメッセージ本文が空か、有効なUTF-8ではありません"
+		if len(expanded) > chatwork.MaxMessageBodyBytes {
+			code = "chatwork_message_body_too_large"
+			message = "展開後のメッセージ本文が 65535 バイトの上限を超えています"
+		}
+		clear(expanded)
+		return nil, fault.New(fault.KindInvalidInput, code, message, false)
 	}
-	return body, nil
+	return expanded, nil
 }
 
 func validUploadFilename(value string) bool {
@@ -372,12 +571,23 @@ func providerFault(task chatwork.Task, response *http.Response, now time.Time) e
 	// used solely to recognize one exact documented rate-limit condition.
 	body, bodyBounded := readProviderErrorBody(response.Body)
 	switch response.StatusCode {
-	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+	case http.StatusBadRequest:
+		return fault.New(fault.KindInvalidInput, "chatwork_invalid_request", "Chatwork がタスク入力を拒否しました", false)
+	case http.StatusUnprocessableEntity:
+		if mutating(task) {
+			// Chatwork's reviewed endpoint contracts document 400, not 422. A
+			// status outside that contract cannot prove a mutation was rejected.
+			return mutationOutcomeUnknown()
+		}
 		return fault.New(fault.KindInvalidInput, "chatwork_invalid_request", "Chatwork がタスク入力を拒否しました", false)
 	case http.StatusUnauthorized:
 		return fault.New(fault.KindAuthentication, "chatwork_authentication_failed", "Chatwork が設定済みの API トークンを拒否しました", false)
 	case http.StatusForbidden:
-		return fault.New(fault.KindPermission, "chatwork_permission_denied", "Chatwork がこのタスクの権限を拒否しました", false)
+		message := "Chatwork がこのタスクの権限を拒否しました"
+		if hasRoomTarget(task) {
+			message = "Chatwork が対象ルームの権限を拒否しました。ルームに参加していない可能性があります"
+		}
+		return fault.New(fault.KindPermission, "chatwork_permission_denied", message, false)
 	case http.StatusNotFound:
 		return fault.New(fault.KindNotFound, "chatwork_not_found", "要求した Chatwork リソースが見つかりませんでした", false)
 	case http.StatusTooManyRequests:
@@ -397,8 +607,11 @@ func providerFault(task chatwork.Task, response *http.Response, now time.Time) e
 		}
 		return err
 	default:
-		if mutating(task) && response.StatusCode >= 500 {
-			return fault.New(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork が変更結果を確認できませんでした。再試行前に状態を照合してください", false)
+		if mutating(task) {
+			// Only documented provider rejection statuses above prove that the
+			// mutation was not applied. An unfamiliar status leaves its outcome
+			// unknown regardless of whether it is an error or redirect response.
+			return mutationOutcomeUnknown()
 		}
 		if response.StatusCode >= 500 {
 			return fault.New(fault.KindUnavailable, "chatwork_unavailable", "Chatwork は一時的に利用できません", true)
@@ -409,12 +622,48 @@ func providerFault(task chatwork.Task, response *http.Response, now time.Time) e
 
 func transportFault(task chatwork.Task, ctx context.Context, err error) error {
 	if mutating(task) {
-		return fault.Wrap(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork が変更結果を確認できませんでした。再試行前に状態を照合してください", false, err)
+		return mutationOutcomeUnknown()
 	}
-	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true, ctx.Err())
+	var contextErr error
+	if ctx != nil {
+		contextErr = ctx.Err()
+	}
+	if errors.Is(contextErr, context.Canceled) {
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true, contextErr)
+	}
+	if errors.Is(contextErr, context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) {
+		return fault.New(fault.KindCanceled, "operation_canceled", "Chatwork の読み取りが時間内に完了しませんでした", true)
+	}
+	if errors.Is(err, context.Canceled) {
+		return fault.Wrap(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true, err)
 	}
 	return fault.Wrap(fault.KindUnavailable, "chatwork_unavailable", "Chatwork は一時的に利用できません", true, err)
+}
+
+func hasRoomTarget(task chatwork.Task) bool {
+	switch task {
+	case chatwork.TaskRoomsShow, chatwork.TaskRoomsUpdate, chatwork.TaskRoomsLeave, chatwork.TaskRoomsDelete,
+		chatwork.TaskMembersList, chatwork.TaskMembersReplace,
+		chatwork.TaskMessagesList, chatwork.TaskMessagesSend, chatwork.TaskMessagesReconcileSend, chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread,
+		chatwork.TaskMessagesShow, chatwork.TaskMessagesUpdate, chatwork.TaskMessagesDelete,
+		chatwork.TaskRoomTasksList, chatwork.TaskRoomTasksCreate, chatwork.TaskRoomTasksShow, chatwork.TaskRoomTasksSetStatus,
+		chatwork.TaskFilesList, chatwork.TaskFilesUpload, chatwork.TaskFilesShow,
+		chatwork.TaskInviteLinkShow, chatwork.TaskInviteLinkCreate, chatwork.TaskInviteLinkUpdate, chatwork.TaskInviteLinkDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func mutationResponseFailure(task chatwork.Task, responseFault error) error {
+	if !mutating(task) {
+		return responseFault
+	}
+	return mutationOutcomeUnknown()
+}
+
+func mutationOutcomeUnknown() error {
+	return fault.New(fault.KindContract, "chatwork_mutation_outcome_unknown", "Chatwork が変更結果を確認できませんでした。再試行前に状態を照合してください", false)
 }
 
 func readProviderErrorBody(reader io.Reader) ([]byte, bool) {

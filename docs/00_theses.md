@@ -47,7 +47,7 @@ When `cwk` claims to support a user outcome, it owns the deterministic selection
 - Agent transcripts count external processing and fail a supported scenario when the count is nonzero.
 - Work packets record repeated pipelines as thesis evidence.
 
-## Axiom 2: An agent reaches an executable task without guessing
+## Axiom 2: The selected command set bounds cwk dispatch
 
 An agent that knows the user's desired outcome should reach an executable
 invocation through bounded text help. Complete catalog metadata remains an
@@ -65,30 +65,66 @@ runtime error at the point where it is needed.
   groups, so an agent can begin
   composing the command after one namespace lookup rather than opening every
   leaf in turn.
+- Each nonempty root namespace derives up to three distinct Japanese outcome
+  lines from active leaves' catalog `Summary` values. Each line points to that
+  leaf's exact `--help` selector; duplicate summaries collapse, and the number
+  of remaining distinct outcomes points to exact namespace help. Saved disabled
+  leaves contribute names only, a disabled-only namespace has no outcomes, and
+  an unconfigured view remains the four-command control plane. The message-link
+  discovery guide appears only when the active catalog contains the exact
+  `messages resolve-link` path and points to its exact `--help` selector. A
+  separate exact `messages show --help` route appears only when that leaf is active.
+  In a saved resolver-only view, the root guide asks a person to enable show via
+  config rather than presenting it as executable. A marked static fallback
+  projects the complete catalog and explicitly does not assert active selection.
+- Root and static-fallback help byte counts are measured as UTF-8 encoded bytes.
+  Root has no separate hard byte ceiling; concise catalog summaries and the
+  per-namespace outcome limit keep the navigation projection bounded in
+  practice. The exact-command 2,048-byte ceiling remains independently enforced.
 - Exact-command help is at most 2,048 encoded bytes and contains only one usage
-  line, each flag's name/type/required, required-one-of, or optional state/one-line description,
-  combination constraints, and at most two examples. It does not preload
+  line, each flag's name/type/required, required-one-of, or optional state and
+  its complete one-line description, combination constraints, and at most two
+  examples. If the complete projection exceeds the byte limit, remove optional
+  examples from the end until it fits; never shorten descriptions or
+  constraints. A command whose complete projection still exceeds the limit
+  without examples is invalid. It does not preload
   output schemas, authentication, failure catalogs, mutation facts, or
   reference workflows.
 - `AgentContract` and other catalog metadata remain complete, structured, and
   machine-validated behind that projection. Runtime structured errors own
   `kind`, `code`, actionable `next_action`, and the applicable usage instead of
   requiring a speculative full-contract help read.
-- The complete catalog remains the product and release contract, while a user
-  may derive a smaller active attention view by enabling exact command paths.
-  Routing and every help projection consume that same view so an irrelevant
-  task is neither advertised nor invocable through the configured CLI.
+- The complete catalog remains the product and release contract. A saved exact-
+  path selection defines the operation scope that this `cwk` process will
+  dispatch: a configurable task outside that set is not invocable through this
+  process. The smaller active view also reduces agent token use and selection
+  mistakes. Routing, active usage/examples/workflows, and typo suggestions use
+  the active view; disabled task names may be exposed separately without their
+  invocation details.
 - `help`, `doctor`, `version`, and the sole interactive `config` selector remain
-  visible in every attention view so local operation and recovery are never
-  curated away. This curation is not an authorization, sandbox, or security
-  boundary: a local actor able to edit or remove the preference can restore
-  commands.
+  available in every configured operation scope so local diagnosis and scope
+  recovery remain possible. This is a boundary on dispatch by this `cwk`
+  process, not protection from the same OS user: that user can edit or remove
+  the preference, automate a terminal, change the configuration base, install
+  another executable, or use a PAT outside `cwk`. It establishes no human
+  identity and does not replace PAT validation, provider permissions, exact
+  references, operation intent, or mutation confirmations.
+- With a saved valid selection, an exact known disabled canonical command,
+  catalog-declared alias, or exact scoped/trailing help request returns the
+  non-retryable `command_disabled` fault and asks the user to enable that
+  command through `config`. One exact catalog root namespace by itself is a
+  help selector, equivalent to `help <namespace>` and `<namespace> --help`;
+  it renders the active namespace view and may list disabled canonical paths
+  in a separate name-only section. It never exposes disabled usage, examples,
+  or workflows. Other unknown or incomplete paths remain `unknown_command`.
 - Until a command-selection profile has been saved, the active view contains
-  only those four local control commands. Human root help explicitly says that
-  `config` is unset, why the reduced view lowers agent token use and selection
-  mistakes, and how to run `config`. A known configurable task or its scoped
-  help fails as `command_selection_required` before PAT resolution or provider
-  I/O; an actually unknown path remains `unknown_command`.
+  only those four local control commands, so this `cwk` process dispatches no
+  Chatwork task. Human root help explicitly says that `config` is unset, why
+  selecting only relevant tasks lowers agent token use and selection mistakes,
+  and how to run `config`. A known configurable task, exact namespace, or its
+  scoped help fails as `command_selection_required` before PAT resolution or
+  provider I/O; an actually unknown or incomplete path remains
+  `unknown_command`.
 - `config` accepts one terminal-native interaction: Up/Down navigates, Space
   toggles, Enter validates and saves, and `q` leaves the prior selection
   unchanged. Each choice retains a literal read/create/write badge; optional
@@ -98,8 +134,8 @@ runtime error at the point where it is needed.
   exit restores terminal state and performs zero saves; Enter validates the
   active graph, restores the terminal, and only then crosses one mutation
   boundary.
-- Invalid persisted state never masquerades as a deliberately empty attention
-  view. Static root, namespace, and exact-command help remains available from
+- Invalid persisted state never masquerades as a deliberately empty
+  dispatch scope. Static root, namespace, and exact-command help remains available from
   the immutable complete catalog, including through trailing `--help`; this is
   read-only invocation documentation, not a claim that those tasks are enabled.
   Root and namespace fallback help say that the selection could not be read and
@@ -149,6 +185,17 @@ runtime error at the point where it is needed.
 - Full-catalog validation and capability coverage remain independent of the
   catalog-derived active view. View validation rejects a visible recovery edge
   or required-reference consumer whose prerequisite command is hidden.
+- Saved-profile disabled-command tests prove canonical paths and catalog
+  aliases fail as `command_disabled` before dispatch, with exact `config`
+  recovery and zero handler, PAT, or provider calls. Exact disabled help follows
+  the same failure; bare catalog namespaces render active help with disabled
+  names only, while unknown/incomplete non-namespace paths remain unknown and
+  re-enabling a path restores its ordinary handler contracts.
+- Root and namespace help tests prove disabled canonical names are separated
+  from active usage details, including namespaces whose commands are all
+  disabled. Bare namespace selectors match explicit namespace help and do not
+  initialize a provider; workflows, examples, and typo suggestions remain
+  active-only.
 - Selector tests prove terminal restoration and zero saves before Enter,
   non-terminal rejection, deterministic effect badges and narrow rendering,
   blocked unseen mutations, declared uncertain-error grammar, doctor
@@ -183,6 +230,15 @@ Chatwork data is converted into a typed, provider-independent task result before
   `unknown`; it never turns an unproved relation into `absent` or retains a
   selectively stronger subset.
 - To does not become a reply; quoted prose, display names, and time proximity do not create relationships.
+- Quote author and timestamp may identify exact observed messages as bounded
+  source-window candidates only when room, canonical author reference, and the
+  whole Unix timestamp match. Such candidates always remain unresolved and
+  identity-unproven; they never become reply edges or fetch targets. Compute
+  them once from the original bounded source before local selection or byte
+  delivery, and retain coverage/access limits alongside the candidate state.
+- Unresolved replies and unresolved quotes are separate counts. A candidate
+  quote remains in the unresolved-quotes count; unknown relation sets remain a
+  separate count.
 - Missing or out-of-bound context remains observable rather than being hidden to make an output look complete.
 - A known same-room reply reference may be completed by a bounded exact read;
   fetched context remains separate from source-window membership, and a
@@ -252,6 +308,14 @@ sequence, including gaps, distinguishes sender matches from added context once
 per document, and does not claim that two selected speakers form an exclusive
 conversation.
 
+Repeated `messages list --contains <text>` terms are exact, case-sensitive
+literal substrings of typed message bodies. Terms use OR; sender and period
+predicates remain additional AND conditions. The product does not trim or
+normalize terms, interpret Chatwork notation, search through the provider, or
+extend the bounded source window. At most 100 nonempty, valid UTF-8 terms of
+1,024 bytes each are accepted before authentication; duplicate terms retain
+their supplied order and value.
+
 Message periods are likewise finite typed selection over that same bounded
 provider result. Inclusive `--since` and exclusive `--until` accept only
 whole-second RFC3339 values with an explicit offset. `--on` instead accepts one
@@ -267,16 +331,19 @@ pagination. `start-index` is the one-based first primary-message rank and
 defaults to 1; `count` is the requested maximum number of primary anchors, not
 an inclusive end rank. Thus `--start-index 11 --count 20` selects ranks 11
 through 30. The candidate set contains messages that satisfy the exact-sender
-OR predicate when present and the half-open period predicate when present.
+OR predicate, literal-body term OR predicate, and half-open period predicate
+when those filters are present; different predicate groups combine with AND.
 Typed send time establishes candidate rank;
 equal times prefer the later provider position. Selected records are still
 emitted in their original provider order with original source sequences.
 The default `replies` context runs afterward unless explicitly set to `none`,
 and may therefore make displayed
 count exceed `count` or add a direct neighbor outside the primary period.
-Selection metadata keeps effective period bounds, candidate count, start
+Typed selection metadata keeps effective period bounds, candidate count, start
 index, requested count, actual items per page, and optional next start index
-separate from the provider's 100-message `source-limit`. A source that exceeds its
+separate from the provider's 100-message `source-limit`. The text projection
+shows `candidate-count` for body-term, period, or index/count selection;
+sender-only output keeps its established shape. A source that exceeds its
 declared coverage fails before selection can hide the violation. Because this
 is a stateless rank over separate provider snapshots, intervening source changes
 may shift later ranks; the command does not claim snapshot stability.
@@ -292,6 +359,25 @@ rate, cancellation, malformed, and unclassified permission faults abort the
 whole command instead of returning partial success. This closure does not
 discover arbitrary history and does not follow cross-room references.
 
+Optional `messages list --max-body-bytes` is a presentation-only cap on each
+body record that is actually emitted, including selected anchors, in-window
+reply context, and emitted relation context. It takes the longest prefix that
+fits the raw UTF-8 byte limit without splitting a rune, then applies the normal
+terminal-safe visible projection. A truncated record states
+`body-truncated=true` and its `original-body-bytes`; this does not alter the
+typed body used for contains matching or relation resolution and does not
+change source, selection, or byte-delivery completeness. Zero is a valid cap
+that yields an empty visible prefix for each nonempty body. If `--max-bytes` is
+also present, this per-body projection happens before the escaped overall
+output budget is measured. Omitting the option preserves the established
+output bytes.
+
+Optional `messages list --jst` and `messages show --jst` append a fixed
+`+09:00` timestamp to each emitted message while retaining its Unix send time.
+Out-of-range four-digit local years render as `unavailable`. This optional
+projection adds no provider request or inferred relationship, and omitting it
+preserves the established output bytes.
+
 `messages show --context replies` owns the distinct exact-anchor workflow that
 agents otherwise reconstruct with a second command. It performs the exact
 message read first, then one declared `recent` message-list read in the same
@@ -304,6 +390,20 @@ children do not exist. This fixed read does not consume
 `--resolve-relations`; that separate 0..100 budget continues to resolve the
 anchor's outgoing reply-parent chain. Omitted context and explicit `none`
 retain the single exact read.
+
+An explicit `messages show --around N` (N is 0..100) adds positional neighbors
+from that same bounded recent source. When combined with reply context, the
+command shares exactly one list read after the exact anchor read. It selects
+only the up to N records immediately before and after the anchor in original
+provider sequence, deduplicating a record also emitted as a direct child while
+preserving its actual typed reply edge. Adjacency never creates a relationship.
+The result states whether the anchor is in the source, outside an unrestricted
+window, or unknown because access is restricted; a missing anchor has no
+inferred neighbors. It also publishes requested and actual side counts,
+positions, source count/limit/completeness, and access limitation. Explicit
+`--context none` is valid with `--around`; omitted context behavior is
+unchanged. Explicit `--around 0` still reads and reports the source/anchor
+state, while returning empty before/after slices.
 
 For a nonempty, unrestricted `recent` source with valid typed send times, the
 oldest reachable boundary is the minimum source send time with provider order
@@ -397,6 +497,10 @@ An agent must know what a command can affect and whether a previous mutation may
 
 - Every public operation declares `read`, `create`, or `write`; unknown effects fail closed.
 - Message creation binds its room parent and declares notification impact.
+- `messages send` accepts ordered exact recipient refs and an optional exact reply ref as typed preflight intent, separate from the room create scope; no caller-side notation parsing or exploratory read is required.
+- When a message send has an unknown outcome, `messages reconcile-send` reuses the same room, body source, ordered recipients, and optional reply reference to compare the complete expanded payload against one latest bounded window. It returns exact candidates authored by the currently authenticated account, with an always-present `account_ref` and each candidate's canonical reference, `sender_ref`, author, and time; each candidate sender equals `account_ref`; outcome always remains unknown because a match cannot identify the invocation, and no match cannot prove non-delivery. This intentionally changes the earlier all-author candidate set.
+- A consumed stdin stream cannot be replayed implicitly; the caller must supply the same bytes again. The current file contents and current reply author can also differ from the original send inputs.
+- Send reconciliation never writes or retries. It is bounded to one exact reply read when needed, one current-account read, and one latest message-list read; its body matcher remains infrastructure-owned and one-use.
 - Message update/deletion binds the existing message and declares destructive/notification impact.
 - Authentication, permission, validation, and policy rejection cause zero downstream calls.
 - Invite-link replacement names every provider-exposed setting: an explicit
@@ -444,6 +548,17 @@ lists at 100 items, and upload at 5 MiB. Exact typed invocation suffices for
 ordinary creates/updates; the reviewed access-changing and destructive sets
 add exact `--confirm=access-change` and `--confirm=destructive`, respectively.
 Uncertain mutation outcomes reconcile only through read-only tasks.
+
+For read transport failures, a deadline is described as a timeout only when
+`errors.Is(ctx.Err(), context.DeadlineExceeded)` or
+`errors.Is(err, context.DeadlineExceeded)` proves that condition. The stable
+`operation_canceled` kind, code, retryability, and exit status remain unchanged;
+caller cancellation keeps cancellation wording, and ordinary I/O failures stay
+`chatwork_unavailable`. A 403 may mention that the caller might not be a member
+only for a task with a selected room target or scope, using fixed Japanese text
+and never provider text. A known access-change or destructive confirmation
+refusal states the exact required `--confirm` value without echoing argv or a
+private cause.
 
 Authentication has no selection step. `CWK_API_TOKEN` is the sole Chatwork
 credential input and is read only from the command process. The CLI does not

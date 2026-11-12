@@ -52,6 +52,18 @@ func withReply(value chatwork.Message, target string, resolved bool) chatwork.Me
 	return value
 }
 
+func withQuote(value chatwork.Message, author chatwork.Reference, timestamp string, candidate chatwork.Reference, sequence int, candidateSendTime int64) chatwork.Message {
+	value.Quotes = []chatwork.Relation{{Kind: "quote", Target: author, ExternalID: timestamp}}
+	value.QuoteMatches = []chatwork.MessageQuoteMatch{{
+		State: chatwork.MessageQuoteCandidateUniqueWindow,
+		Candidates: []chatwork.MessageQuoteCandidate{{
+			MessageRef: candidate, Room: value.Room, Author: author, SendTime: candidateSendTime,
+			Sequence: sequence, Scope: chatwork.MessageQuoteCandidateSourceWindow,
+		}},
+	}}
+	return value
+}
+
 func account(id, name string) chatwork.Account {
 	return chatwork.Account{Ref: ref(chatwork.ReferenceAccount, id), Name: name}
 }

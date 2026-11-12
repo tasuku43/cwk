@@ -55,6 +55,8 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 		"cwk [--error-format text|json] <command> [arguments]",
 		"コマンド:\n  help",
 		"名前空間:\n  items  2 コマンド",
+		"Discover test items: cwk items list --help",
+		"Read test items: cwk items read --help",
 		"Chatwork タスクの成功結果は text",
 		"全体全文検索とリアクション集計はありません",
 		"cwk <namespace> --help",
@@ -63,7 +65,7 @@ func TestRootTextHelpIsACatalogDerivedNamespaceIndex(t *testing.T) {
 			t.Errorf("root help lacks %q:\n%s", want, output)
 		}
 	}
-	for _, forbidden := range []string{"items list", "items read", "--format agent", "機械可読契約"} {
+	for _, forbidden := range []string{"--format agent", "機械可読契約"} {
 		if strings.Contains(output, forbidden) {
 			t.Errorf("root help retained %q:\n%s", forbidden, output)
 		}
@@ -147,12 +149,12 @@ func TestProductionMessagesNamespaceHelpIsOneStepActionable(t *testing.T) {
 			}
 		}
 	}
-	for _, want := range []string{"cwk messages send", "cwk messages update"} {
+	for _, want := range []string{"cwk messages send", "cwk messages reconcile-send", "cwk messages update"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("messages namespace lacks conditional requirement %q:\n%s", want, output)
 		}
 	}
-	if got := strings.Count(output, "必須(いずれか1つ): --body | --body-file"); got != 2 {
+	if got := strings.Count(output, "必須(いずれか1つ): --body | --body-file"); got != 3 {
 		t.Errorf("messages namespace body-source requirement count=%d:\n%s", got, output)
 	}
 	if len(output) > 8192 {
@@ -160,7 +162,7 @@ func TestProductionMessagesNamespaceHelpIsOneStepActionable(t *testing.T) {
 	}
 }
 
-func TestProductionHelpRecipesCoverMeasuredInvestigationEntrypoints(t *testing.T) {
+func TestProductionHelpRecipeCoversMeasuredRoomNameEntrypoint(t *testing.T) {
 	catalog := DefaultCatalog()
 	rooms, found := catalog.Lookup("rooms list")
 	if !found {
@@ -172,26 +174,68 @@ func TestProductionHelpRecipesCoverMeasuredInvestigationEntrypoints(t *testing.T
 			t.Errorf("rooms list help lacks %q:\n%s", want, roomsHelp)
 		}
 	}
+}
 
-	messages, found := catalog.Lookup("messages list")
+func TestMultiStepHelpExamplesIdentifyTheirStepAndHideUnavailableSteps(t *testing.T) {
+	catalog := helpTestCatalog(t)
+	discover, found := catalog.Lookup("items list")
 	if !found {
-		t.Fatal("messages list is absent")
+		t.Fatal("catalog lacks items list")
 	}
-	messagesHelp := string(renderCommandHelp(messages, catalog.Commands()))
-	for _, want := range []string{
-		"今日または昨日の会話を確認する", "--on today",
-		"人物の発言を期間で追う", "--sender <account-ref>", "--since 2026-08-01T00:00:00+09:00", "--until 2026-08-08T00:00:00+09:00",
-	} {
-		if !strings.Contains(messagesHelp, want) {
-			t.Errorf("messages list help lacks %q:\n%s", want, messagesHelp)
+	read, found := catalog.Lookup("items read")
+	if !found {
+		t.Fatal("catalog lacks items read")
+	}
+
+	discoverHelp := string(renderCommandHelp(discover, catalog.Commands()))
+	if !strings.Contains(discoverHelp, "項目を見つけて確認する（手順 1/2）: cwk items list --format json") ||
+		strings.Contains(discoverHelp, "cwk items read") {
+		t.Fatalf("first-step example title or invocation is misleading:\n%s", discoverHelp)
+	}
+	readHelp := string(renderCommandHelp(read, catalog.Commands()))
+	if !strings.Contains(readHelp, "項目を見つけて確認する（手順 2/2）: cwk items read --id <item-id>") ||
+		strings.Contains(readHelp, "cwk items list") {
+		t.Fatalf("second-step example title or invocation is misleading:\n%s", readHelp)
+	}
+	for path, output := range map[string]string{"items list": discoverHelp, "items read": readHelp} {
+		if len(output) > maxExactHelpBytes {
+			t.Errorf("%s exact help exceeds %d bytes: %d", path, maxExactHelpBytes, len(output))
 		}
 	}
-	if len(messagesHelp) > maxExactHelpBytes {
-		t.Fatalf("messages list help bytes=%d", len(messagesHelp))
+
+	partial := string(renderCommandHelp(discover, []CommandSpec{discover}))
+	if strings.Contains(partial, "項目を見つけて確認する") || strings.Contains(partial, "cwk items read") {
+		t.Fatalf("partial active view exposed a recipe with an unavailable step:\n%s", partial)
 	}
 }
 
-func TestExactHelpUsesCompactCatalogInputFactsConstraintsAndExamples(t *testing.T) {
+func TestProductionMemberSearchHelpLabelsOnlyItsActiveRecipeStep(t *testing.T) {
+	catalog := DefaultCatalog()
+	find, found := catalog.Lookup("members find")
+	if !found {
+		t.Fatal("members find is absent")
+	}
+	findHelp := string(renderCommandHelp(find, catalog.Commands()))
+	if !strings.Contains(findHelp, "人物の発言を期間で追う（手順 1/2）: cwk members find --room <room-id> --query <name>") ||
+		strings.Contains(findHelp, "cwk messages list") {
+		t.Fatalf("members find help does not accurately identify its recipe step:\n%s", findHelp)
+	}
+	if len(findHelp) > maxExactHelpBytes {
+		t.Fatalf("members find exact help exceeds %d bytes: %d", maxExactHelpBytes, len(findHelp))
+	}
+	active := make([]CommandSpec, 0, len(catalog.Commands())-1)
+	for _, command := range catalog.Commands() {
+		if command.Path != "messages list" {
+			active = append(active, command)
+		}
+	}
+	partial := string(renderCommandHelp(find, active))
+	if strings.Contains(partial, "人物の発言を期間で追う") || strings.Contains(partial, "cwk messages list") {
+		t.Fatalf("members find help exposed a recipe with a disabled step:\n%s", partial)
+	}
+}
+
+func TestExactHelpUsesCompleteCatalogInputFactsAndConstraints(t *testing.T) {
 	command, found := DefaultCatalog().Lookup("messages list")
 	if !found {
 		t.Fatal("default catalog lacks messages list")
@@ -199,31 +243,33 @@ func TestExactHelpUsesCompactCatalogInputFactsConstraintsAndExamples(t *testing.
 	output := string(renderCommandHelp(command, DefaultCatalog().Commands()))
 	for _, want := range []string{
 		command.Usage(),
-		"--room (room-id, 必須)",
-		"--window (recent|changes, 任意)",
-		"--start-index (index, 任意)",
-		"--sender (account-ref, 任意・繰り返し可)",
-		"--context (none|replies, 任意)  選択時の既定値は replies",
-		"--resolve-relations (count, 任意)",
-		"既定値は5",
-		"併用制約:",
-		"--on は --since または --until と併用できません",
-		"例:",
-		"人物の発言を期間で追う: cwk messages list --room <room-id> --sender <account-ref> --since 2026-08-01T00:00:00+09:00 --until 2026-08-08T00:00:00+09:00",
-		"今日または昨日の会話を確認する: cwk messages list --room <room-id> --on today",
+		"--room room-id 必須",
+		"--room room-id 必須: rooms list の room-ref をそのまま（正の10進数、1〜32桁、先頭0なし）。",
+		"--window recent|changes 任意",
+		"--start-index index 任意",
+		"--sender account-ref 任意・繰り返し可: members find の account-ref をそのまま。完全一致、最大100回、反復OR。",
+		"--context none|replies 任意",
+		"--resolve-relations count 任意",
+		"--jst boolean 任意: +09:00日時を併記。",
+		"既定5",
+		"制約:",
+		"--onと--since/--untilは排他",
+		"--containsは取得済み範囲でローカル照合（API検索なし）。",
 	} {
 		if !strings.Contains(output, want) {
 			t.Errorf("exact help lacks %q:\n%s", want, output)
 		}
 	}
+	if len(output) > maxExactHelpBytes {
+		t.Fatalf("messages list help exceeds the exact-help budget: %d bytes:\n%s", len(output), output)
+	}
+	if !strings.Contains(output, "完全一致") || !strings.Contains(output, "最大100回") || !strings.Contains(output, "反復OR") {
+		t.Fatalf("messages list help weakened the exact sender predicate:\n%s", output)
+	}
 	for _, forbidden := range []string{"機能ID:", "生成する参照:", "使用する参照:", "機械可読契約", "--format agent"} {
 		if strings.Contains(output, forbidden) {
 			t.Errorf("exact help retained %q:\n%s", forbidden, output)
 		}
-	}
-	if got := strings.Count(output, "cwk messages list --room <room-id>"); got != 3 {
-		// One usage plus exactly two examples.
-		t.Fatalf("messages list invocation count=%d, want 3:\n%s", got, output)
 	}
 }
 
@@ -245,17 +291,67 @@ func TestEveryDefaultExactHelpFitsTwoKiBAndProjectsEveryFlag(t *testing.T) {
 			if !bytes.Contains(output, []byte(command.Usage())) {
 				t.Fatalf("exact help lacks usage %q:\n%s", command.Usage(), output)
 			}
+			for _, implementationTerm := range []string{
+				"完全一致するルーム", "完全一致のルーム", "完全一致ルーム", "正規参照", "正規の room_ref", "上限付き",
+			} {
+				if strings.Contains(command.Summary, implementationTerm) || strings.Contains(string(output), implementationTerm) {
+					t.Errorf("%s public help uses implementation-oriented wording %q:\nsummary: %s\n%s", command.Path, implementationTerm, command.Summary, output)
+				}
+			}
 			for _, input := range command.Agent.Inputs {
 				if input.Source != InputSourceFlag {
 					continue
 				}
-				needle := "  " + input.Name + " ("
+				needle := "\n" + input.Name + " "
 				if !bytes.Contains(output, []byte(needle)) {
 					t.Errorf("exact help lacks input %q:\n%s", input.Name, output)
+				}
+				if !helpHasCompleteInputDescription(string(output), input) {
+					t.Errorf("exact help does not preserve the complete description for %q: %q\n%s", input.Name, input.Description, output)
 				}
 			}
 		})
 	}
+}
+
+func TestExactHelpDropsOptionalExamplesBeforeDescriptions(t *testing.T) {
+	target := utilitySpec("items inspect")
+	target.Args = "[--detail <text>]"
+	target.Agent.Inputs = []CommandInput{{
+		Name: "--detail", Source: InputSourceFlag, Required: false,
+		Description: strings.Repeat("d", 1800), AllowedValues: []string{},
+	}}
+	first := utilitySpec("items first")
+	first.HumanRecipes = []HumanHelpRecipe{{
+		Title: "first example",
+		Steps: []HumanHelpRecipeStep{{Path: target.Path, Args: strings.Repeat("x", 100)}},
+	}, {
+		Title: "second example",
+		Steps: []HumanHelpRecipeStep{{Path: target.Path, Args: strings.Repeat("y", 100)}},
+	}}
+	output := string(renderCommandHelp(target, []CommandSpec{first, target}))
+	if len(output) > maxExactHelpBytes {
+		t.Fatalf("exact help is %d bytes, maximum is %d", len(output), maxExactHelpBytes)
+	}
+	if !helpHasCompleteInputDescription(output, target.Agent.Inputs[0]) {
+		t.Fatalf("exact help cut the input description:\n%s", output)
+	}
+	if !strings.Contains(output, "first example: cwk items inspect "+strings.Repeat("x", 100)) {
+		t.Fatalf("exact help dropped the first example before the second:\n%s", output)
+	}
+	if strings.Contains(output, "second example") {
+		t.Fatalf("exact help retained the second example after the byte budget was exceeded:\n%s", output)
+	}
+}
+
+func helpHasCompleteInputDescription(output string, input CommandInput) bool {
+	prefix := input.Name + " "
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return strings.HasSuffix(line, ": "+input.Description)
+		}
+	}
+	return false
 }
 
 func utf8Lines(output []byte) bool {
@@ -335,14 +431,184 @@ func TestHumanRootHelpGrowthDependsOnNamespacesNotLeafCommands(t *testing.T) {
 		base = append(base, utilitySpec("items command"+strings.Repeat("x", index+1)))
 	}
 	direct, namespaces := rootTextHelpEntries(base)
-	if len(direct) != 2 || len(namespaces) != 1 || namespaces[0].Name != "items" || namespaces[0].CommandCount != 100 {
+	if len(direct) != 2 || len(namespaces) != 1 || namespaces[0].Name != "items" || namespaces[0].CommandCount != 100 || namespaces[0].OutcomeCount != 1 {
 		t.Fatalf("root entries direct=%+v namespaces=%+v", direct, namespaces)
 	}
 	var command CLI
 	command.catalog = NewCatalog(base...)
 	output := string(command.renderRootHelp())
-	if strings.Contains(output, "items command") || strings.Count(output, "items") != 1 {
-		t.Fatalf("root help grew with leaves:\n%s", output)
+	if strings.Count(output, "cwk items command") != 1 || strings.Contains(output, "ほか") {
+		t.Fatalf("duplicate leaf outcomes were not collapsed:\n%s", output)
+	}
+}
+
+func TestRootHelpIndexesThreeUniqueOutcomesAndRoutesRemainingToNamespace(t *testing.T) {
+	help, found := DefaultCatalog().Lookup("help")
+	if !found {
+		t.Fatal("default catalog lacks help")
+	}
+	commands := []CommandSpec{help}
+	for _, item := range []struct{ path, summary string }{
+		{"items first", "重複する成果"},
+		{"items second", "重複する成果"},
+		{"items third", "三番目の成果"},
+		{"items fourth", "四番目の成果"},
+		{"items fifth", "五番目の成果"},
+		{"items sixth", "六番目の成果"},
+	} {
+		command := utilitySpec(item.path)
+		command.Summary = item.summary
+		commands = append(commands, command)
+	}
+	catalog := NewCatalog(commands...)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("synthetic outcome catalog should remain valid: %v", err)
+	}
+	output := string((&CLI{catalog: catalog}).renderRootHelp())
+	for _, want := range []string{
+		"items  6 コマンド",
+		"重複する成果: cwk items first --help",
+		"三番目の成果: cwk items third --help",
+		"四番目の成果: cwk items fourth --help",
+		"ほか2件: cwk items --help",
+	} {
+		if !strings.Contains(output, want) {
+			t.Errorf("root outcome index lacks %q:\n%s", want, output)
+		}
+	}
+	for _, forbidden := range []string{"items second --help", "items fifth --help", "items sixth --help", "五番目の成果", "六番目の成果"} {
+		if strings.Contains(output, forbidden) {
+			t.Errorf("root outcome index exceeded its bounded projection with %q:\n%s", forbidden, output)
+		}
+	}
+	if count := strings.Count(output, "重複する成果"); count != 1 {
+		t.Fatalf("duplicate outcome was rendered %d times:\n%s", count, output)
+	}
+}
+
+func TestRootHelpLinkReadingGuideUsesOnlyAnActiveExactCatalogPath(t *testing.T) {
+	help, found := DefaultCatalog().Lookup("help")
+	if !found {
+		t.Fatal("default catalog lacks help")
+	}
+	list := utilitySpec("messages list")
+	list.Configurable = true
+	show := utilitySpec("messages show")
+	show.Configurable = true
+	complete := NewCatalog(help, list, show)
+	active := NewCatalog(help, list)
+	configuredOutput := string((&CLI{
+		baseCatalog: complete, catalog: active, selectionLoaded: true, selectionSaved: true,
+	}).renderRootHelp())
+	if strings.Contains(configuredOutput, "参照から発言を読む") || strings.Contains(configuredOutput, "messages show") {
+		t.Fatalf("disabled messages show leaked into the active root index:\n%s", configuredOutput)
+	}
+
+	showOnly := NewCatalog(help, show)
+	activeOutput := string((&CLI{catalog: showOnly}).renderRootHelp())
+	if !strings.Contains(activeOutput, "参照から発言を読む: 'cwk messages show --help'") {
+		t.Fatalf("root help lacks the catalog-backed link-reading guide:\n%s", activeOutput)
+	}
+	if strings.Contains(activeOutput, "--context replies") || strings.Contains(activeOutput, "--around") {
+		t.Fatalf("link-reading guide appended undeclared invocation arguments:\n%s", activeOutput)
+	}
+}
+
+func TestRootHelpReportsFullAndStaticFallbackByteCounts(t *testing.T) {
+	catalog := DefaultCatalog()
+	output := (&CLI{catalog: catalog}).renderRootHelp()
+	withNotice := prependStaticHelpNotice(output)
+	if len(output) == 0 || len(withNotice) != len(staticHelpNotice)+len(output) {
+		t.Fatalf("unexpected root-help byte counts: normal=%d fallback=%d notice=%d", len(output), len(withNotice), len(staticHelpNotice))
+	}
+	for _, route := range []string{"cwk messages list --help", "cwk messages show --help"} {
+		if !strings.Contains(string(output), route) || !strings.Contains(string(withNotice), route) {
+			t.Errorf("complete catalog root/fallback help lacks exact route %q", route)
+		}
+	}
+	for _, fullHelp := range []string{string(output), string(withNotice)} {
+		if !strings.Contains(fullHelp, "全体全文検索とリアクション集計はありません。") ||
+			!strings.Contains(fullHelp, "代替は 'cwk messages list --help' を確認してください。") {
+			t.Errorf("active full-catalog help lacks the search limitation or its catalog-backed alternative:\n%s", fullHelp)
+		}
+	}
+	t.Logf("root help bytes: full=%d static-fallback=%d notice=%d", len(output), len(withNotice), len(staticHelpNotice))
+}
+
+func TestRootSearchAlternativeIsHiddenWhenMessagesListIsSavedDisabled(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	saveCommandSelection(t, h.store, []string{})
+	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
+		t.Fatalf("root help exit=%d stderr=%q", code, h.stderr.String())
+	}
+	output := h.stdout.String()
+	if !strings.Contains(output, "全体全文検索とリアクション集計はありません。") {
+		t.Fatalf("root help lost the full-search limitation:\n%s", output)
+	}
+	if strings.Contains(output, "代替は 'cwk messages list --help'") {
+		t.Fatalf("root help suggested disabled messages list:\n%s", output)
+	}
+	hasDisabledMessagesNamespace := false
+	for _, line := range strings.Split(output, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "messages") && strings.Contains(line, "無効なコマンドのみ") {
+			hasDisabledMessagesNamespace = true
+			break
+		}
+	}
+	if !hasDisabledMessagesNamespace || strings.Contains(output, "messages list") {
+		t.Fatalf("saved disabled namespace was not name-only:\n%s", output)
+	}
+}
+
+func TestRootSearchAlternativeUsesExactActiveMessagesListPath(t *testing.T) {
+	help, found := DefaultCatalog().Lookup("help")
+	if !found {
+		t.Fatal("default catalog lacks help")
+	}
+	list := utilitySpec("messages list")
+	list.Configurable = true
+	show := utilitySpec("messages show")
+	show.Configurable = true
+	complete := NewCatalog(help, list, show)
+	active := NewCatalog(help, show)
+	command := &CLI{baseCatalog: complete, catalog: active, selectionLoaded: true, selectionSaved: true}
+	output := string(command.renderRootHelp())
+	if !strings.Contains(output, "参照から発言を読む: 'cwk messages show --help'") {
+		t.Fatalf("active messages show guide is missing:\n%s", output)
+	}
+	if !strings.Contains(output, "全体全文検索とリアクション集計はありません。") ||
+		strings.Contains(output, "代替は 'cwk messages list --help'") {
+		t.Fatalf("root search alternative did not follow the exact active messages list path:\n%s", output)
+	}
+	if strings.Contains(output, "messages list") {
+		t.Fatalf("disabled messages list details leaked into root help:\n%s", output)
+	}
+}
+
+func TestRootHelpHidesInactiveAndDisabledOutcomeMetadata(t *testing.T) {
+	help, found := DefaultCatalog().Lookup("help")
+	if !found {
+		t.Fatal("default catalog lacks help")
+	}
+	active := utilitySpec("active list")
+	active.Summary = "有効な成果"
+	active.Configurable = true
+	disabled := utilitySpec("inactive show")
+	disabled.Summary = "無効な詳細"
+	disabled.Configurable = true
+	disabledOnly := utilitySpec("hidden-only list")
+	disabledOnly.Summary = "非表示の成果"
+	disabledOnly.Configurable = true
+	complete := []CommandSpec{help, active, disabled, disabledOnly}
+	visible := []CommandSpec{help, active}
+	hidden := []CommandSpec{disabled, disabledOnly}
+	_, namespaces := rootTextHelpEntriesForView(complete, visible, hidden)
+	output := string(renderNamespaceIndex("名前空間:", namespaces))
+	if !strings.Contains(output, "有効な成果: cwk active list --help") || strings.Contains(output, "無効な詳細") || strings.Contains(output, "非表示の成果") {
+		t.Fatalf("root namespace index exposed non-active outcome metadata:\n%s", output)
+	}
+	if !strings.Contains(output, "hidden-only  無効なコマンドのみ") || strings.Contains(output, "hidden-only list") {
+		t.Fatalf("disabled-only namespace did not remain name-only:\n%s", output)
 	}
 }
 

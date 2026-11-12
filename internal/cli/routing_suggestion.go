@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/tasuku43/cwk/internal/domain/operation"
 )
 
 var rootOptionCandidates = []string{"--error-format", "--help", "--version"}
@@ -25,8 +27,20 @@ func unknownHelpFlagError(name string) error {
 
 func unknownCommandMessage(args []string, catalog Catalog) string {
 	entered := strings.Join(args, " ")
+	if len(args) >= 2 && args[0] == "messages" && args[1] == "search" {
+		if _, active := catalog.Lookup("messages list"); active {
+			return `コマンド "messages search" はありません。--contains は取得済みの最大100件をローカル照合します（既定範囲は recent、API検索なし）。詳しくは 'cwk help messages list' を確認してください。`
+		}
+		return `コマンド "messages search" は不明です。利用できるコマンドは 'cwk --help' で確認してください。`
+	}
 	if suggestion := closestCommandPath(args, catalog.Commands()); suggestion != "" {
-		return fmt.Sprintf("コマンド %q は不明です。もしかして %q ですか？", entered, ProgramName+" "+suggestion)
+		// Keep the nearest candidate's identity. Promoting a farther read command
+		// after a create/write/unknown match could turn an unrelated typo into a
+		// misleading task suggestion.
+		candidate, found := catalog.Lookup(suggestion)
+		if found && candidate.Effect == operation.EffectRead {
+			return fmt.Sprintf("コマンド %q は不明です。もしかして %q ですか？", entered, ProgramName+" "+candidate.Path)
+		}
 	}
 	return fmt.Sprintf("コマンド %q は不明です。", entered)
 }

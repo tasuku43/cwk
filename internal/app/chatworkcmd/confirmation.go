@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tasuku43/cwk/internal/domain/fault"
 	"github.com/tasuku43/cwk/internal/domain/operation"
 )
 
@@ -32,7 +33,21 @@ func (p ConfirmationPolicy) Check(ctx context.Context, intent operation.Intent) 
 		return nil
 	}
 	if p.Provided != p.Required {
-		return fmt.Errorf("exact %s confirmation is required", p.Required)
+		if expected, ok := knownConfirmationFault(p.Required); ok {
+			return expected
+		}
+		return fmt.Errorf("the required mutation confirmation is not configured")
 	}
 	return nil
+}
+
+func knownConfirmationFault(required string) (*fault.Error, bool) {
+	switch required {
+	case "access-change":
+		return fault.New(fault.KindRejected, "mutation_rejected", "この操作には --confirm=access-change が必要です。", false), true
+	case "destructive":
+		return fault.New(fault.KindRejected, "mutation_rejected", "この操作には --confirm=destructive が必要です。", false), true
+	default:
+		return nil, false
+	}
 }

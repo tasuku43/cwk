@@ -3,7 +3,10 @@
 package chatwork
 
 import (
+	"bytes"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -80,7 +83,9 @@ const (
 	TaskMembersList           Task = "members.list"
 	TaskMembersReplace        Task = "members.replace"
 	TaskMessagesList          Task = "messages.list"
+	TaskMessagesResources     Task = "messages.resources"
 	TaskMessagesSend          Task = "messages.send"
+	TaskMessagesReconcileSend Task = "messages.reconcile-send"
 	TaskMessagesMarkRead      Task = "messages.mark-read"
 	TaskMessagesMarkUnread    Task = "messages.mark-unread"
 	TaskMessagesShow          Task = "messages.show"
@@ -122,11 +127,54 @@ const (
 	// DefaultMessageRelationFetches closes ordinary reply chains without an
 	// extra option while retaining a small deterministic provider-call bound.
 	DefaultMessageRelationFetches = 5
+	// MaxMessageContainsTerms keeps local substring selection finite and bounds
+	// the amount of caller text retained in one request.
+	MaxMessageContainsTerms = 100
+	// MaxMessageContainsTermBytes bounds each exact UTF-8 substring term.
+	MaxMessageContainsTermBytes = 1024
+	// MaxMessageRecipients bounds the ordered set of explicit To recipients
+	// accepted on one message-send task.
+	MaxMessageRecipients = 100
 	// MaxMessageBodyBytes is the fixed UTF-8 byte ceiling for one created or
 	// updated Chatwork message regardless of whether it came from argv, stdin,
 	// or an infrastructure-owned file read.
 	MaxMessageBodyBytes = 65535
 )
+
+// MessageAroundRequest asks messages.show to add up to Count records on each
+// side of its exact anchor from the one bounded recent source. A pointer on
+// Request distinguishes an explicit zero from an omitted option.
+type MessageAroundRequest struct {
+	Count int
+}
+
+type MessageAroundAnchorState string
+
+const (
+	MessageAroundAnchorInWindow MessageAroundAnchorState = "in-window"
+	MessageAroundAnchorOutside  MessageAroundAnchorState = "outside-window"
+	MessageAroundAnchorUnknown  MessageAroundAnchorState = "unknown"
+	MaxMessageAroundCount                                = MaxMessageSelectionCount
+)
+
+// MessageShowAround records positional neighbors from one latest bounded
+// source. Before and After retain provider order and original one-based source
+// sequences. The exact anchor itself is always supplied by the exact read.
+type MessageShowAround struct {
+	Anchor               Reference
+	AnchorState          MessageAroundAnchorState
+	AnchorSourceSequence int
+	Requested            int
+	Before               []Message
+	BeforeSequences      []int
+	After                []Message
+	AfterSequences       []int
+	ActualBefore         int
+	ActualAfter          int
+	SourceCount          int
+	Coverage             Coverage
+	Access               MessageAccessLimitation
+}
 
 var messageDayLocation = time.FixedZone(MessageDayTimeZone, 9*60*60)
 
@@ -168,12 +216,14 @@ func (p MessagePeriod) Contains(sendTime int64) bool {
 	return true
 }
 
-// MessageFilter selects primary messages authored by any exact canonical
-// account and inside the concrete period, with either predicate omitted when
-// zero. StartIndex is the 1-based newest-first primary rank, Count keeps at most
-// that many primary messages, and Context then adds direct reply neighbors.
+// MessageFilter selects primary messages whose typed body contains any exact
+// literal term, authored by any exact canonical account, and inside the
+// concrete period, with each predicate omitted when zero. StartIndex is the
+// 1-based newest-first primary rank, Count keeps at most that many primary
+// messages, and Context then adds direct reply neighbors.
 type MessageFilter struct {
 	Senders    []Reference
+	Contains   []string
 	Period     MessagePeriod
 	Context    MessageContext
 	StartIndex int
@@ -256,6 +306,8 @@ type Request struct {
 
 	Account                   Reference
 	AssignedBy                Reference
+	MessageRecipients         []Reference
+	MessageReplyTarget        *MessageReplyTarget
 	Admins                    []Reference
 	Members                   []Reference
 	ReadonlyMembers           []Reference
@@ -283,7 +335,25 @@ type Request struct {
 	MemberQuery               string
 	RoomQuery                 string
 	MessageFilter             MessageFilter
+	MessageResourcesKind      MessageResourceKind
 	MessageRelationFetchLimit int
+	MessageAround             *MessageAroundRequest
+}
+
+// MessageReplyTarget records one exact same-room message selected as a reply
+// target. Sender is populated only after the application has read and
+// validated that exact target; infrastructure uses it to serialize Chatwork's
+// reply notation.
+type MessageReplyTarget struct {
+	Message Reference
+	Sender  Reference
+}
+
+// PreparedMessageBody is an opaque, single-invocation body handle owned by an
+// infrastructure adapter. Application code can pass it back to that adapter
+// without receiving filesystem access or the prepared bytes.
+type PreparedMessageBody interface {
+	IsPreparedMessageBody()
 }
 
 func (r Request) Validate() error {
@@ -308,6 +378,19 @@ func (r Request) Validate() error {
 		if err := ValidateReference(pair.ref.Kind, pair.ref.Value); err != nil {
 			return err
 		}
+	}
+	if r.Task == TaskMessagesResources {
+		if r.Room.Value == "" || r.Message.Value == "" {
+			return fmt.Errorf("messages.resources requires exact room and message references")
+		}
+		if !validMessageResourceKind(r.MessageResourcesKind) {
+			return fmt.Errorf("messages.resources requires files, tasks, or all")
+		}
+		if err := validateMessageResourcesRequestExtras(r); err != nil {
+			return err
+		}
+	} else if r.MessageResourcesKind != "" {
+		return fmt.Errorf("message resources kind is only valid for messages.resources")
 	}
 	for _, refs := range [][]Reference{r.Admins, r.Members, r.ReadonlyMembers, r.Assignees} {
 		seen := make(map[string]struct{}, len(refs))
@@ -387,9 +470,9 @@ func (r Request) Validate() error {
 			return fmt.Errorf("invite-link update requires an explicit nonempty description")
 		}
 	}
-	if r.Task == TaskMessagesSend || r.Task == TaskMessagesUpdate {
+	if r.Task == TaskMessagesSend || r.Task == TaskMessagesReconcileSend || r.Task == TaskMessagesUpdate {
 		if (r.Body == "") == (r.BodyFile == "") {
-			return fmt.Errorf("message mutation requires exactly one literal or file body source")
+			return fmt.Errorf("message body task requires exactly one literal or file body source")
 		}
 		if r.Body != "" {
 			if err := ValidateMessageBody(r.Body); err != nil {
@@ -397,10 +480,52 @@ func (r Request) Validate() error {
 			}
 		}
 	} else if r.BodyFile != "" {
-		return fmt.Errorf("message body file is only valid for messages.send or messages.update")
+		return fmt.Errorf("message body file is only valid for messages.send, messages.reconcile-send, or messages.update")
+	}
+	if r.Task == TaskMessagesSend || r.Task == TaskMessagesReconcileSend {
+		if len(r.MessageRecipients) > MaxMessageRecipients {
+			return fmt.Errorf("message send supports at most %d recipient references", MaxMessageRecipients)
+		}
+		seenRecipients := make(map[Reference]struct{}, len(r.MessageRecipients))
+		for _, recipient := range r.MessageRecipients {
+			if recipient.Kind != ReferenceAccount {
+				return fmt.Errorf("message recipients must be account references")
+			}
+			if err := ValidateReference(recipient.Kind, recipient.Value); err != nil {
+				return fmt.Errorf("message recipient reference is invalid: %w", err)
+			}
+			if _, exists := seenRecipients[recipient]; exists {
+				return fmt.Errorf("message recipient references must be unique")
+			}
+			seenRecipients[recipient] = struct{}{}
+		}
+		if r.MessageReplyTarget != nil {
+			if r.MessageReplyTarget.Message.Kind != ReferenceMessage {
+				return fmt.Errorf("message reply target must be a message reference")
+			}
+			if err := ValidateReference(r.MessageReplyTarget.Message.Kind, r.MessageReplyTarget.Message.Value); err != nil {
+				return fmt.Errorf("message reply target reference is invalid: %w", err)
+			}
+			if r.MessageReplyTarget.Sender != (Reference{}) {
+				if r.MessageReplyTarget.Sender.Kind != ReferenceAccount {
+					return fmt.Errorf("resolved message reply target sender must be an account reference")
+				}
+				if err := ValidateReference(r.MessageReplyTarget.Sender.Kind, r.MessageReplyTarget.Sender.Value); err != nil {
+					return fmt.Errorf("resolved message reply target sender is invalid: %w", err)
+				}
+			}
+		}
+	} else if len(r.MessageRecipients) > 0 || r.MessageReplyTarget != nil {
+		return fmt.Errorf("message recipient and reply inputs are only valid for message send tasks")
+	}
+	if r.Task == TaskMessagesReconcileSend && r.SelfUnread {
+		return fmt.Errorf("self-unread is only valid for messages.send")
 	}
 	if r.MessageRelationFetchLimit < 0 || r.MessageRelationFetchLimit > MaxMessageRelationFetches {
 		return fmt.Errorf("message relation fetch limit must be between 0 and %d", MaxMessageRelationFetches)
+	}
+	if r.MessageAround != nil && (r.Task != TaskMessagesShow || r.MessageAround.Count < 0 || r.MessageAround.Count > MaxMessageAroundCount) {
+		return fmt.Errorf("message around count is only valid for messages.show and must be between 0 and %d", MaxMessageAroundCount)
 	}
 	switch r.Task {
 	case TaskMessagesList:
@@ -428,16 +553,22 @@ func (r Request) Validate() error {
 // ValidateMessageBody applies the provider-independent message payload bound
 // without exposing any of the caller-supplied text in an error.
 func ValidateMessageBody(value string) error {
-	if value == "" {
+	return ValidateMessageBodyBytes([]byte(value))
+}
+
+// ValidateMessageBodyBytes applies the same caller-body limits without
+// converting an infrastructure-owned byte snapshot into an immutable string.
+func ValidateMessageBodyBytes(value []byte) error {
+	if len(value) == 0 {
 		return fmt.Errorf("message body must not be empty")
 	}
-	if !utf8.ValidString(value) {
+	if !utf8.Valid(value) {
 		return fmt.Errorf("message body must be valid UTF-8")
 	}
 	if len(value) > MaxMessageBodyBytes {
 		return fmt.Errorf("message body exceeds the %d-byte limit", MaxMessageBodyBytes)
 	}
-	if strings.IndexByte(value, 0) >= 0 {
+	if bytes.IndexByte(value, 0) >= 0 {
 		return fmt.Errorf("message body must not contain NUL")
 	}
 	return nil
@@ -533,14 +664,28 @@ func validateMessageFilter(filter MessageFilter) error {
 	if filter.Count > 0 && filter.StartIndex == 0 {
 		return fmt.Errorf("message selection count requires an explicit or defaulted start index")
 	}
-	if len(filter.Senders) == 0 && filter.Period == (MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
+	if len(filter.Senders) == 0 && len(filter.Contains) == 0 && filter.Period == (MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
 		if filter.Context != "" {
-			return fmt.Errorf("message context requires a sender, period, or message index selection")
+			return fmt.Errorf("message context requires a sender, body-term, period, or message index selection")
 		}
 		return nil
 	}
 	if len(filter.Senders) > 100 {
 		return fmt.Errorf("message filter supports at most 100 sender references")
+	}
+	if len(filter.Contains) > MaxMessageContainsTerms {
+		return fmt.Errorf("message filter supports at most %d body terms", MaxMessageContainsTerms)
+	}
+	for _, term := range filter.Contains {
+		if term == "" {
+			return fmt.Errorf("message filter body terms must not be empty")
+		}
+		if !utf8.ValidString(term) {
+			return fmt.Errorf("message filter body terms must be valid UTF-8")
+		}
+		if len(term) > MaxMessageContainsTermBytes {
+			return fmt.Errorf("message filter body terms must not exceed %d UTF-8 bytes", MaxMessageContainsTermBytes)
+		}
 	}
 	if filter.Context != MessageContextNone && filter.Context != MessageContextReplies {
 		return fmt.Errorf("message filter context is missing or invalid")
@@ -562,8 +707,8 @@ func validateMessageFilter(filter MessageFilter) error {
 }
 
 func validateMessageShowFilter(filter MessageFilter) error {
-	if len(filter.Senders) != 0 || filter.Period != (MessagePeriod{}) || filter.StartIndex != 0 || filter.Count != 0 {
-		return fmt.Errorf("messages.show context does not accept sender, period, or index selection")
+	if len(filter.Senders) != 0 || len(filter.Contains) != 0 || filter.Period != (MessagePeriod{}) || filter.StartIndex != 0 || filter.Count != 0 {
+		return fmt.Errorf("messages.show context does not accept sender, body-term, period, or index selection")
 	}
 	switch filter.Context {
 	case "", MessageContextNone, MessageContextReplies:
@@ -574,15 +719,15 @@ func validateMessageShowFilter(filter MessageFilter) error {
 }
 
 func messageFilterActive(filter MessageFilter) bool {
-	return len(filter.Senders) > 0 || filter.Period != (MessagePeriod{}) || filter.Context != "" || filter.StartIndex > 0 || filter.Count > 0
+	return len(filter.Senders) > 0 || len(filter.Contains) > 0 || filter.Period != (MessagePeriod{}) || filter.Context != "" || filter.StartIndex > 0 || filter.Count > 0
 }
 
 func (t Task) Valid() bool {
 	switch t {
 	case TaskAccountShow, TaskAccountStatus, TaskPersonalTasksList, TaskContactsList,
 		TaskRoomsList, TaskRoomsCreate, TaskRoomsShow, TaskRoomsUpdate, TaskRoomsLeave,
-		TaskRoomsDelete, TaskMembersFind, TaskMembersList, TaskMembersReplace, TaskMessagesList,
-		TaskMessagesSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
+		TaskRoomsDelete, TaskMembersFind, TaskMembersList, TaskMembersReplace, TaskMessagesList, TaskMessagesResources,
+		TaskMessagesSend, TaskMessagesReconcileSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
 		TaskMessagesUpdate, TaskMessagesDelete, TaskRoomTasksList, TaskRoomTasksCreate,
 		TaskRoomTasksShow, TaskRoomTasksSetStatus, TaskFilesList, TaskFilesUpload,
 		TaskFilesShow, TaskInviteLinkShow, TaskInviteLinkCreate, TaskInviteLinkUpdate,
@@ -658,12 +803,50 @@ type Message struct {
 	Room          Reference
 	Sender        Account
 	Body          string
+	BodySegments  *MessageBodySegments
 	SendTime      int64
 	UpdateTime    int64
 	RelationState MessageRelationState
 	Recipients    []Reference
 	Replies       []Relation
 	Quotes        []Relation
+	QuoteMatches  []MessageQuoteMatch
+}
+
+// MessageBodySegments retains the order and kind of semantic body content.
+// A nil pointer means the provider notation was not understood completely.
+type MessageBodySegments struct {
+	Segments []MessageBodySegment
+	Removed  []MessageBodyRemovedSpan
+}
+
+// MessageBodyRemovedSpan records recognized notation omitted from the semantic text.
+// Classification is the adapter's responsibility; offsets alone cannot prove grammar.
+type MessageBodyRemovedSpan struct {
+	SourceStart int
+	SourceEnd   int
+}
+
+type MessageBodySegmentKind string
+
+const (
+	MessageBodyText  MessageBodySegmentKind = "text"
+	MessageBodyQuote MessageBodySegmentKind = "quote"
+	MessageBodyCode  MessageBodySegmentKind = "code"
+)
+
+// SourceStart and SourceEnd are half-open byte offsets into the exact source body.
+type MessageBodySegment struct {
+	Kind        MessageBodySegmentKind
+	Text        string
+	SourceStart int
+	SourceEnd   int
+	Quote       *MessageBodyQuoteMetadata
+}
+
+type MessageBodyQuoteMetadata struct {
+	Author    Reference
+	Timestamp string
 }
 
 // MessageRelationState records whether the complete reviewed relation set was
@@ -834,6 +1017,9 @@ type Result struct {
 	MessageReachability       *MessageReachability
 	MessageRelationResolution *MessageRelationResolution
 	MessageShowContext        *MessageShowContext
+	MessageShowAround         *MessageShowAround
+	MessageSendReconciliation *MessageSendReconciliation
+	MessageResources          *MessageResources
 }
 
 // Validate proves that the semantic union uses the one result variant owned by
@@ -844,11 +1030,11 @@ func (r Result) Validate() error {
 	if !r.Task.Valid() {
 		return fmt.Errorf("Chatwork result task is missing or invalid")
 	}
-	if r.Task != TaskMessagesList && r.MessageRoom != (Reference{}) {
-		return fmt.Errorf("Chatwork result message room is only valid for messages.list")
+	if r.Task != TaskMessagesList && r.Task != TaskMessagesReconcileSend && r.MessageRoom != (Reference{}) {
+		return fmt.Errorf("Chatwork result message room is only valid for messages.list or messages.reconcile-send")
 	}
-	if r.Task != TaskMessagesList && r.MessageAccess != MessageAccessNone {
-		return fmt.Errorf("Chatwork result message access limitation is only valid for messages.list")
+	if r.Task != TaskMessagesList && r.Task != TaskMessagesReconcileSend && r.MessageAccess != MessageAccessNone {
+		return fmt.Errorf("Chatwork result message access limitation is only valid for messages.list or messages.reconcile-send")
 	}
 	if r.Task != TaskMessagesList && r.MessageSelection != nil {
 		return fmt.Errorf("Chatwork result message selection is only valid for messages.list")
@@ -862,11 +1048,20 @@ func (r Result) Validate() error {
 	if r.Task != TaskMessagesShow && r.MessageShowContext != nil {
 		return fmt.Errorf("Chatwork result exact-message context is only valid for messages.show")
 	}
+	if r.Task != TaskMessagesShow && r.MessageShowAround != nil {
+		return fmt.Errorf("Chatwork result exact-message around context is only valid for messages.show")
+	}
 	if r.Task != TaskMembersFind && r.MemberSelection != nil {
 		return fmt.Errorf("Chatwork result member selection is only valid for members.find")
 	}
 	if r.Task != TaskRoomsList && r.RoomSelection != nil {
 		return fmt.Errorf("Chatwork result room selection is only valid for rooms.list")
+	}
+	if r.Task != TaskMessagesReconcileSend && r.MessageSendReconciliation != nil {
+		return fmt.Errorf("Chatwork send reconciliation result is only valid for messages.reconcile-send")
+	}
+	if r.Task != TaskMessagesResources && r.MessageResources != nil {
+		return fmt.Errorf("Chatwork message resources result is only valid for messages.resources")
 	}
 	if r.Coverage.Limit < 0 {
 		return fmt.Errorf("Chatwork result coverage limit must not be negative")
@@ -895,6 +1090,10 @@ func (r Result) Validate() error {
 		want = "membership-counts"
 	case TaskMessagesList, TaskMessagesShow:
 		want = "messages"
+	case TaskMessagesReconcileSend:
+		want = "message-send-reconciliation"
+	case TaskMessagesResources:
+		want = "message-resources"
 	case TaskMessagesSend, TaskRoomTasksCreate, TaskFilesUpload:
 		want = "room-scoped-creation"
 	case TaskMessagesMarkRead, TaskMessagesMarkUnread:
@@ -950,6 +1149,14 @@ func (r Result) Validate() error {
 		if len(r.Messages) != 1 {
 			return fmt.Errorf("messages.show result must contain exactly one message")
 		}
+	case TaskMessagesReconcileSend:
+		if r.MessageSendReconciliation == nil {
+			return fmt.Errorf("messages.reconcile-send result is missing reconciliation metadata")
+		}
+	case TaskMessagesResources:
+		if r.Coverage != (Coverage{}) {
+			return fmt.Errorf("messages.resources must declare bounds on its selected source records")
+		}
 	case TaskRoomTasksShow:
 		if len(r.Tasks) != 1 {
 			return fmt.Errorf("room-tasks.show result must contain exactly one task")
@@ -960,7 +1167,10 @@ func (r Result) Validate() error {
 		}
 	}
 
-	return r.validateVariantFacts()
+	if err := r.validateVariantFacts(); err != nil {
+		return err
+	}
+	return r.validateMessageQuoteCandidateBindings()
 }
 
 // ValidateFor additionally binds result identities to the exact validated
@@ -978,6 +1188,11 @@ func (r Result) ValidateFor(request Request) error {
 	}
 
 	switch r.Task {
+	case TaskMessagesResources:
+		if r.MessageResources == nil || r.MessageResources.Room != request.Room || r.MessageResources.Message != request.Message || r.MessageResources.Kind != request.MessageResourcesKind {
+			return fmt.Errorf("Chatwork message resources result does not match the exact room, message, and selected kind")
+		}
+		return nil
 	case TaskRoomsList:
 		if request.RoomQuery != "" {
 			if r.RoomSelection == nil || r.RoomSelection.Query != request.RoomQuery {
@@ -1028,6 +1243,10 @@ func (r Result) ValidateFor(request Request) error {
 		} else if r.MessageRelationResolution != nil {
 			return fmt.Errorf("Chatwork message result without a relation budget must not declare relation resolution")
 		}
+	case TaskMessagesReconcileSend:
+		if r.MessageRoom != request.Room || r.MessageSendReconciliation == nil || r.MessageSendReconciliation.Room != request.Room {
+			return fmt.Errorf("Chatwork send reconciliation room does not match the request")
+		}
 	case TaskMessagesShow:
 		if len(r.Messages) != 1 || r.Messages[0].Room != request.Room || r.Messages[0].Ref != request.Message {
 			return fmt.Errorf("Chatwork exact message result does not match the requested room and message")
@@ -1038,6 +1257,13 @@ func (r Result) ValidateFor(request Request) error {
 			}
 		} else if r.MessageShowContext != nil {
 			return fmt.Errorf("Chatwork exact message result without replies context must not contain reply children")
+		}
+		if request.MessageAround != nil {
+			if r.MessageShowAround == nil || r.MessageShowAround.Anchor != request.Message || r.MessageShowAround.Requested != request.MessageAround.Count {
+				return fmt.Errorf("Chatwork exact message around context does not match the request")
+			}
+		} else if r.MessageShowAround != nil {
+			return fmt.Errorf("Chatwork exact message result without around input must not contain around context")
 		}
 		if request.MessageRelationFetchLimit > 0 {
 			if r.MessageRelationResolution == nil || r.MessageRelationResolution.FetchLimit != request.MessageRelationFetchLimit {
@@ -1090,6 +1316,8 @@ func (r Result) resultVariant() string {
 	add("rooms", r.Rooms != nil)
 	add("accounts", r.Accounts != nil)
 	add("messages", r.Messages != nil)
+	add("message-send-reconciliation", r.MessageSendReconciliation != nil)
+	add("message-resources", r.MessageResources != nil)
 	add("tasks", r.Tasks != nil)
 	add("files", r.Files != nil)
 	add("invite-link", r.InviteLink != nil)
@@ -1142,6 +1370,8 @@ func (r Result) validateVariantFacts() error {
 				return err
 			}
 		}
+	case TaskMessagesResources:
+		return validateMessageResources(*r.MessageResources)
 	case TaskMessagesList, TaskMessagesShow:
 		if r.Task == TaskMessagesList {
 			if r.MessageAccess != MessageAccessNone && r.MessageAccess != MessageAccessPartial && r.MessageAccess != MessageAccessAll {
@@ -1195,9 +1425,27 @@ func (r Result) validateVariantFacts() error {
 			}
 		}
 		if r.Task == TaskMessagesShow && r.MessageShowContext != nil {
-			if err := validateMessageShowContext(*r.MessageShowContext, r.Messages[0], r.MessageRelationResolution); err != nil {
+			if err := validateMessageShowContext(*r.MessageShowContext, r.Messages[0], r.MessageRelationResolution, r.MessageShowAround); err != nil {
 				return err
 			}
+		}
+		if r.Task == TaskMessagesShow && r.MessageShowAround != nil {
+			if err := validateMessageShowAround(*r.MessageShowAround, r.Messages[0], r.MessageShowContext); err != nil {
+				return err
+			}
+		}
+	case TaskMessagesReconcileSend:
+		if err := validateResultReference("send reconciliation room", r.MessageRoom, ReferenceRoom, false); err != nil {
+			return err
+		}
+		if r.MessageAccess != MessageAccessNone && r.MessageAccess != MessageAccessPartial && r.MessageAccess != MessageAccessAll {
+			return fmt.Errorf("messages.reconcile-send result access limitation is invalid")
+		}
+		if r.Coverage.Kind != "latest_window" || r.Coverage.Limit != MaxMessageSelectionCount || r.Coverage.Complete {
+			return fmt.Errorf("messages.reconcile-send requires the bounded latest message window")
+		}
+		if err := validateMessageSendReconciliation(*r.MessageSendReconciliation, r.MessageRoom, r.Coverage, r.MessageAccess); err != nil {
+			return err
 		}
 	case TaskPersonalTasksList, TaskRoomTasksList, TaskRoomTasksShow:
 		accountOptional := r.Task == TaskPersonalTasksList
@@ -1281,7 +1529,7 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 	if selection.CandidateCount < 0 || selection.CandidateCount > selection.SourceCount {
 		return fmt.Errorf("Chatwork message selection candidate count is outside its source window")
 	}
-	if len(selection.Filter.Senders) == 0 && selection.Filter.Period == (MessagePeriod{}) && selection.CandidateCount != selection.SourceCount {
+	if len(selection.Filter.Senders) == 0 && len(selection.Filter.Contains) == 0 && selection.Filter.Period == (MessagePeriod{}) && selection.CandidateCount != selection.SourceCount {
 		return fmt.Errorf("Chatwork message selection without primary predicates must consider every source message")
 	}
 	if selection.SourceSequences == nil || selection.AnchorSequences == nil {
@@ -1357,6 +1605,18 @@ func validateMessageSelection(selection MessageSelection, messages []Message, co
 		}
 		if markedAnchor && !selection.Filter.Period.Contains(message.SendTime) {
 			return fmt.Errorf("Chatwork message selection anchor does not match its period filter")
+		}
+		if markedAnchor && len(selection.Filter.Contains) > 0 {
+			matched := false
+			for _, term := range selection.Filter.Contains {
+				if strings.Contains(message.Body, term) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return fmt.Errorf("Chatwork message selection anchor does not match its body-term filter")
+			}
 		}
 		if markedAnchor {
 			anchorRefs[message.Ref] = struct{}{}
@@ -1592,7 +1852,7 @@ func validateMessageRelationResolution(resolution MessageRelationResolution, mes
 	return nil
 }
 
-func validateMessageShowContext(context MessageShowContext, anchor Message, resolution *MessageRelationResolution) error {
+func validateMessageShowContext(context MessageShowContext, anchor Message, resolution *MessageRelationResolution, around *MessageShowAround) error {
 	if context.Anchor != anchor.Ref {
 		return fmt.Errorf("Chatwork exact-message context anchor does not match the displayed message")
 	}
@@ -1626,6 +1886,11 @@ func validateMessageShowContext(context MessageShowContext, anchor Message, reso
 	available[anchor.Ref] = struct{}{}
 	for _, child := range context.Children {
 		available[child.Ref] = struct{}{}
+	}
+	if around != nil {
+		for _, message := range append(append([]Message(nil), around.Before...), around.After...) {
+			available[message.Ref] = struct{}{}
+		}
 	}
 	checkVisibleResolution := func(message Message) error {
 		for _, reply := range message.Replies {
@@ -1676,6 +1941,110 @@ func validateMessageShowContext(context MessageShowContext, anchor Message, reso
 	return nil
 }
 
+func validateMessageShowAround(around MessageShowAround, anchor Message, replyContext *MessageShowContext) error {
+	if around.Anchor != anchor.Ref {
+		return fmt.Errorf("Chatwork exact-message around anchor does not match the displayed message")
+	}
+	if around.Requested < 0 || around.Requested > MaxMessageAroundCount {
+		return fmt.Errorf("Chatwork exact-message around request is outside its declared bound")
+	}
+	if around.Before == nil || around.BeforeSequences == nil || around.After == nil || around.AfterSequences == nil {
+		return fmt.Errorf("Chatwork exact-message around messages and positions must be explicit")
+	}
+	if around.Coverage.Kind != "latest_window" && around.Coverage.Kind != "recent-window" {
+		return fmt.Errorf("Chatwork exact-message around source must be a latest message window")
+	}
+	if around.Coverage.Limit < 1 || around.Coverage.Limit > MaxMessageSelectionCount {
+		return fmt.Errorf("Chatwork exact-message around source limit is outside its declared bound")
+	}
+	if around.SourceCount < 0 || around.SourceCount > around.Coverage.Limit || len(around.Before) > around.SourceCount || len(around.After) > around.SourceCount {
+		return fmt.Errorf("Chatwork exact-message around source count is outside its bounded window")
+	}
+	if around.Access != MessageAccessNone && around.Access != MessageAccessPartial && around.Access != MessageAccessAll {
+		return fmt.Errorf("Chatwork exact-message around access limitation is invalid")
+	}
+	if around.Access == MessageAccessAll && around.SourceCount != 0 {
+		return fmt.Errorf("Chatwork fully restricted exact-message around source must not claim visible records")
+	}
+	if around.Access == MessageAccessPartial && around.SourceCount == 0 {
+		return fmt.Errorf("Chatwork partially restricted exact-message around source must retain a visible record")
+	}
+	if around.ActualBefore != len(around.Before) || around.ActualAfter != len(around.After) ||
+		around.ActualBefore > around.Requested || around.ActualAfter > around.Requested {
+		return fmt.Errorf("Chatwork exact-message around counts do not match its bounded positions")
+	}
+	if len(around.BeforeSequences) != len(around.Before) || len(around.AfterSequences) != len(around.After) {
+		return fmt.Errorf("Chatwork exact-message around positions do not match their messages")
+	}
+
+	switch around.AnchorState {
+	case MessageAroundAnchorInWindow:
+		if around.AnchorSourceSequence < 1 || around.AnchorSourceSequence > around.SourceCount {
+			return fmt.Errorf("Chatwork in-window anchor position is outside the source")
+		}
+	case MessageAroundAnchorOutside:
+		if around.Access != MessageAccessNone || around.AnchorSourceSequence != 0 || len(around.Before) != 0 || len(around.After) != 0 {
+			return fmt.Errorf("Chatwork outside-window anchor requires an unrestricted source and no neighbors")
+		}
+	case MessageAroundAnchorUnknown:
+		if around.Access == MessageAccessNone || around.AnchorSourceSequence != 0 || len(around.Before) != 0 || len(around.After) != 0 {
+			return fmt.Errorf("Chatwork unknown anchor position requires restricted access and no neighbors")
+		}
+	default:
+		return fmt.Errorf("Chatwork exact-message around anchor state is invalid")
+	}
+
+	available := map[Reference]struct{}{anchor.Ref: {}}
+	if replyContext != nil {
+		for _, child := range replyContext.Children {
+			available[child.Ref] = struct{}{}
+		}
+	}
+	seen := map[Reference]struct{}{anchor.Ref: {}}
+	validateSide := func(side string, messages []Message, sequences []int, before bool) error {
+		previous := 0
+		for index, message := range messages {
+			sequence := sequences[index]
+			if sequence <= previous || sequence < 1 || sequence > around.SourceCount {
+				return fmt.Errorf("Chatwork exact-message around %s positions must preserve provider order", side)
+			}
+			if around.AnchorState != MessageAroundAnchorInWindow || (before && sequence >= around.AnchorSourceSequence) || (!before && sequence <= around.AnchorSourceSequence) {
+				return fmt.Errorf("Chatwork exact-message around %s position is on the wrong side of its anchor", side)
+			}
+			previous = sequence
+			if message.Ref == anchor.Ref || message.Room != anchor.Room {
+				return fmt.Errorf("Chatwork exact-message around record does not belong beside the anchor")
+			}
+			if _, duplicate := seen[message.Ref]; duplicate {
+				return fmt.Errorf("Chatwork exact-message around contains a duplicate record")
+			}
+			seen[message.Ref] = struct{}{}
+			available[message.Ref] = struct{}{}
+			if err := validateResultMessage(fmt.Sprintf("message around %s[%d]", side, index), message); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := validateSide("before", around.Before, around.BeforeSequences, true); err != nil {
+		return err
+	}
+	if err := validateSide("after", around.After, around.AfterSequences, false); err != nil {
+		return err
+	}
+	for _, message := range append(append([]Message(nil), around.Before...), around.After...) {
+		for _, reply := range message.Replies {
+			if reply.Kind != "reply" || reply.ExternalID != anchor.Room.Value || !reply.Resolved {
+				continue
+			}
+			if _, visible := available[reply.Target]; !visible {
+				return fmt.Errorf("Chatwork exact-message around marks a hidden reply target as resolved")
+			}
+		}
+	}
+	return nil
+}
+
 func equalSequences(left, right []int) bool {
 	if len(left) != len(right) {
 		return false
@@ -1689,11 +2058,16 @@ func equalSequences(left, right []int) bool {
 }
 
 func equalMessageFilters(left, right MessageFilter) bool {
-	if left.Period != right.Period || left.Context != right.Context || left.StartIndex != right.StartIndex || left.Count != right.Count || len(left.Senders) != len(right.Senders) {
+	if left.Period != right.Period || left.Context != right.Context || left.StartIndex != right.StartIndex || left.Count != right.Count || len(left.Senders) != len(right.Senders) || len(left.Contains) != len(right.Contains) {
 		return false
 	}
 	for index := range left.Senders {
 		if left.Senders[index] != right.Senders[index] {
+			return false
+		}
+	}
+	for index := range left.Contains {
+		if left.Contains[index] != right.Contains[index] {
 			return false
 		}
 	}
@@ -1738,7 +2112,7 @@ func validateResultMessage(field string, message Message) error {
 		return fmt.Errorf("Chatwork result %s relation state is invalid", field)
 	}
 	if message.RelationState == MessageRelationsUnknown &&
-		(len(message.Recipients) != 0 || len(message.Replies) != 0 || len(message.Quotes) != 0) {
+		(len(message.Recipients) != 0 || len(message.Replies) != 0 || len(message.Quotes) != 0 || message.QuoteMatches != nil || message.BodySegments != nil) {
 		return fmt.Errorf("Chatwork result %s has partial facts for an unknown relation set", field)
 	}
 	for index, recipient := range message.Recipients {
@@ -1758,9 +2132,134 @@ func validateResultMessage(field string, message Message) error {
 		if quote.Kind != "quote" {
 			return fmt.Errorf("Chatwork result %s quote[%d] relation kind is %q, want %q", field, index, quote.Kind, "quote")
 		}
-		if err := validateResultReference(fmt.Sprintf("%s quote[%d] target", field, index), quote.Target, ReferenceAccount, !quote.Resolved); err != nil {
+		if quote.Resolved {
+			return fmt.Errorf("Chatwork result %s quote[%d] cannot be resolved from quote metadata", field, index)
+		}
+		if err := validateResultReference(fmt.Sprintf("%s quote[%d] target", field, index), quote.Target, ReferenceAccount, true); err != nil {
 			return err
 		}
+	}
+	if message.BodySegments != nil {
+		lastEnd, quoteIndex := 0, 0
+		for _, segment := range message.BodySegments.Segments {
+			if segment.SourceStart < lastEnd || segment.SourceEnd < segment.SourceStart || segment.SourceEnd > len(message.Body) || message.Body[segment.SourceStart:segment.SourceEnd] != segment.Text {
+				return fmt.Errorf("Chatwork result %s body segment source span is invalid", field)
+			}
+			lastEnd = segment.SourceEnd
+			switch segment.Kind {
+			case MessageBodyText, MessageBodyCode:
+				if segment.Quote != nil || segment.Text == "" {
+					return fmt.Errorf("Chatwork result %s body segment metadata is invalid", field)
+				}
+			case MessageBodyQuote:
+				if segment.Quote == nil || quoteIndex >= len(message.Quotes) || segment.Quote.Author != message.Quotes[quoteIndex].Target || segment.Quote.Timestamp != message.Quotes[quoteIndex].ExternalID {
+					return fmt.Errorf("Chatwork result %s body quote does not match relation", field)
+				}
+				quoteIndex++
+			default:
+				return fmt.Errorf("Chatwork result %s body segment kind is invalid", field)
+			}
+		}
+		spans := make([]MessageBodyRemovedSpan, 0, len(message.BodySegments.Segments)+len(message.BodySegments.Removed))
+		for _, segment := range message.BodySegments.Segments {
+			if segment.SourceStart != segment.SourceEnd {
+				spans = append(spans, MessageBodyRemovedSpan{SourceStart: segment.SourceStart, SourceEnd: segment.SourceEnd})
+			}
+		}
+		for _, removed := range message.BodySegments.Removed {
+			if removed.SourceStart < 0 || removed.SourceEnd <= removed.SourceStart || removed.SourceEnd > len(message.Body) {
+				return fmt.Errorf("Chatwork result %s removed body span is invalid", field)
+			}
+			spans = append(spans, removed)
+		}
+		sort.Slice(spans, func(i, j int) bool { return spans[i].SourceStart < spans[j].SourceStart })
+		end := 0
+		for _, span := range spans {
+			if span.SourceStart != end {
+				return fmt.Errorf("Chatwork result %s body spans do not cover the source", field)
+			}
+			end = span.SourceEnd
+		}
+		if end != len(message.Body) {
+			return fmt.Errorf("Chatwork result %s body spans do not cover the source", field)
+		}
+		if quoteIndex != len(message.Quotes) {
+			return fmt.Errorf("Chatwork result %s body quote count does not match relations", field)
+		}
+	}
+	if message.QuoteMatches != nil {
+		if len(message.QuoteMatches) != len(message.Quotes) {
+			return fmt.Errorf("Chatwork result %s quote candidate count does not match its quote relations", field)
+		}
+		for index, match := range message.QuoteMatches {
+			if err := validateMessageQuoteMatch(fmt.Sprintf("%s quote[%d]", field, index), message.Room, message.Quotes[index], match); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func validateMessageQuoteMatch(field string, room Reference, quote Relation, match MessageQuoteMatch) error {
+	if quote.Kind != "quote" || quote.Resolved {
+		return fmt.Errorf("Chatwork result %s is bound to a non-quote or resolved relation", field)
+	}
+	validCandidates := func(minimum int) error {
+		if len(match.Candidates) < minimum {
+			return fmt.Errorf("Chatwork result %s has too few source-window candidates", field)
+		}
+		for index, candidate := range match.Candidates {
+			if err := validateResultReference(fmt.Sprintf("%s candidate[%d] message", field, index), candidate.MessageRef, ReferenceMessage, false); err != nil {
+				return err
+			}
+			if err := validateResultReference(fmt.Sprintf("%s candidate[%d] room", field, index), candidate.Room, ReferenceRoom, false); err != nil {
+				return err
+			}
+			if err := validateResultReference(fmt.Sprintf("%s candidate[%d] author", field, index), candidate.Author, ReferenceAccount, false); err != nil {
+				return err
+			}
+			if candidate.Sequence < 0 || candidate.Sequence > MaxMessageSelectionCount || candidate.Scope != MessageQuoteCandidateSourceWindow || candidate.IdentityProven {
+				return fmt.Errorf("Chatwork result %s candidate[%d] has invalid scope, sequence, or identity claim", field, index)
+			}
+			if quote.Target != candidate.Author || room != candidate.Room || candidate.SendTime < 0 ||
+				quote.ExternalID == "" || quote.ExternalID != strconv.FormatInt(candidate.SendTime, 10) {
+				return fmt.Errorf("Chatwork result %s candidate[%d] does not match exact same-room author and send-time evidence", field, index)
+			}
+			for earlier := 0; earlier < index; earlier++ {
+				if match.Candidates[earlier].MessageRef == candidate.MessageRef {
+					return fmt.Errorf("Chatwork result %s repeats a source-window candidate", field)
+				}
+			}
+		}
+		return nil
+	}
+	switch match.State {
+	case MessageQuoteCandidateUniqueWindow:
+		if err := validCandidates(1); err != nil {
+			return err
+		}
+		if len(match.Candidates) != 1 {
+			return fmt.Errorf("Chatwork result %s unique-window state must carry exactly one candidate", field)
+		}
+	case MessageQuoteCandidateAmbiguous:
+		if err := validCandidates(2); err != nil {
+			return err
+		}
+	case MessageQuoteCandidateNoMatch, MessageQuoteCandidateMissingTime, MessageQuoteCandidateUnknown:
+		if len(match.Candidates) != 0 {
+			return fmt.Errorf("Chatwork result %s unresolved state must not carry quote candidates", field)
+		}
+	default:
+		return fmt.Errorf("Chatwork result %s quote candidate state is missing or invalid", field)
+	}
+	if quote.ExternalID == "" && match.State != MessageQuoteCandidateMissingTime {
+		return fmt.Errorf("Chatwork result %s must mark a quote without timestamp as missing time", field)
+	}
+	if quote.ExternalID != "" && match.State == MessageQuoteCandidateMissingTime {
+		return fmt.Errorf("Chatwork result %s marks a timestamped quote as missing time", field)
+	}
+	if match.State == MessageQuoteCandidateNoMatch && quote.ExternalID == "" {
+		return fmt.Errorf("Chatwork result %s marks a quote without timestamp as no-match", field)
 	}
 	return nil
 }

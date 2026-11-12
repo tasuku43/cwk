@@ -39,6 +39,17 @@ process-local adapter construction and makes zero provider task requests.
 Infrastructure retains the token behind the exact ephemeral binding admitted
 by the application gate, resolves that binding immediately before I/O, and
 attaches the token only as `x-chatworktoken` to the fixed Chatwork API origin.
+Every request also carries `User-Agent: cwk/<version>`. The lazy CLI adapter
+factory passes its injected `Version` scalar to infrastructure, which accepts
+only `dev` or a release-compatible SemVer value without leading `v` or build
+metadata, bounded to 128 ASCII bytes, with numeric components and numeric
+prerelease identifiers following SemVer's no-leading-zero rule. Invalid values
+silently use `cwk/dev`; the untrusted input is not echoed. The shared
+authenticated task execution path sets the same header for `/me` identity
+checks, reads, mutations, and uploads. This metadata does not alter the API
+origin, request mapping, redirect behavior, token binding, or timeout and
+attempt policy.
+
 The CLI accepts no token argv, persistent configuration, credential-store,
 login, status, logout, callback, browser, profile, or client-registration
 surface. `CWK_AUTH_METHOD` is not a public input, and its ambient value cannot
@@ -96,13 +107,42 @@ The application mutation invoker calls its action once. Any proven-safe transpor
 
 Read-only application services recheck cancellation immediately after a port returns and suppress the result when a port ignored cancellation. Because exhaustive pagination returns no partial result, every `operation_canceled` path in its drain is retryable and matches the catalog's common read cancellation contract.
 
+For Chatwork read transport failures, use timeout-specific Japanese wording
+only when `errors.Is(ctx.Err(), context.DeadlineExceeded)` or
+`errors.Is(err, context.DeadlineExceeded)` is true. Keep the existing
+`operation_canceled` kind, code, retryability, and exit mapping. Actual caller
+cancellation keeps cancellation wording, and any other transport/I/O failure
+remains `chatwork_unavailable`. Mutations keep the existing phase-dependent
+pre-dispatch and unknown-outcome taxonomy regardless of deadlines.
+
 Mutation semantics are phase-sensitive. Before the action call, `execution.Invoker` guarantees zero mutation attempts, so its common `operation_canceled` fault is retryable. Once the action is called, cancellation does not prove that the provider rejected or rolled back the effect. A valid structured adapter fault is authoritative even when its private cause is `context.Canceled` or `context.DeadlineExceeded`; the invoker returns a detached `fault.PublicCopy` and preserves its kind, code, and retryability. Any other action error, including a raw cancellation, becomes non-retryable `contract/unclassified_mutation_outcome` because the invoker cannot infer whether the effect occurred. That common fault must point only to an exact read-only reconciliation command. A nil action error is a confirmed success and is not overwritten by cancellation observed after confirmation.
 
 The adapter contract must distinguish a request that was not sent, a confirmed result, and an unknown outcome when the provider makes that distinction possible. An unknown mutation outcome is non-retryable by default and points to an exact read/discover command that reconciles the target before another write. Do not translate cancellation into permission to repeat an unsafe action.
 
+Chatwork uses `chatwork_mutation_not_dispatched` only when infrastructure has
+observed cancellation at a provable pre-dispatch boundary: adapter entry,
+request/body-file construction, or the final context check immediately before
+`http.Do`. The fault is retryable and points to the same exact command because
+the adapter has not called `Do`; it is never inferred from a timeout, a
+post-`Do` cancellation, an HTTP trace, or a generic application cancellation.
+After `Do` begins, transport or response uncertainty remains non-retryable
+`chatwork_mutation_outcome_unknown`. A validated nil-error mutation result is
+confirmed success and survives cancellation observed afterward. Read tasks
+continue to suppress results when cancellation is observed after their port
+returns.
+
 The template does not select a backoff formula or universal numeric ceiling because vendor limits and latency budgets differ. A derived security/product contract records the maximum accepted timeout and attempt count, formula, jitter source, caps, and tests; user configuration above those bounds must fail rather than create an effectively unbounded call.
 
 Chatwork's first implementation chooses no automatic transport retry: every read and mutation has `MaxAttempts: 1`. Metadata, reads, and non-upload mutations have a 20-second request timeout; upload has 60 seconds. A successful provider body is limited to 8 MiB and an error body to 64 KiB. The application/CLI boundary limits a complete output to 16 MiB and an aggregate list to 10,000 items; upload file input is limited to 5 MiB. A message create/update body is independently limited to nonempty valid UTF-8 of at most 65,535 bytes. `GET /my/tasks`, `GET /rooms/{room_id}/messages`, `GET /rooms/{room_id}/tasks`, `GET /rooms/{room_id}/files`, and `GET /incoming_requests` retain the provider's documented maximum of 100 items instead of using the larger aggregate ceiling. Crossing any bound yields no partial successful result; in particular, a message response above its declared coverage fails before local selection can hide it.
+
+`messages resources` composes those existing `GET /rooms/{room_id}/files` and
+`GET /rooms/{room_id}/tasks` reads without adding a route or query filter. It
+issues only the selected source reads, sequentially in files-then-tasks order
+for `--kind all`, with the same validated binding and caller context. Each
+response retains its 100-item provider window; application joins only exact
+same-room typed `message_id` values. Any selected source fault or cancellation
+fails the whole task without partial output, and its false completeness does
+not prove absence.
 
 `messages send` and `messages update` require exactly one of literal `--body`
 or `--body-file`; the literal `-` selects injected stdin. The CLI consumes
@@ -116,6 +156,32 @@ Chatwork notation, and shell metacharacters are opaque body bytes, not command
 syntax. Empty, oversized, NUL-containing, invalid UTF-8, or unreadable input
 returns a declared non-retryable `invalid_input` fault before provider HTTP,
 without copying the body, path, or private read failure into the public error.
+
+The reviewed official [Chatwork message-notation guide](https://developer.chatwork.com/docs/message-notation)
+(checked 2026-11-07) defines `[To:{account_id}]` and allows multiple To tags. It defines reply as
+`[rp aid={account_id} to={room_id}-{message_id}]`. `messages send --to` accepts
+up to 100 unique canonical account refs in caller order and emits one To tag
+for each. `--reply-to` accepts one exact message ref; the application reads
+`GET /rooms/{room_id}/messages/{message_id}` in the selected room to obtain the
+sender account, then infrastructure appends that exact reply tag after all To
+tags. Both calls use one validated auth binding and caller context. Without
+`--reply-to`, send makes no message GET. The original body is appended without
+notation parsing or rewriting, so caller-written tags remain and may repeat a
+typed tag. The final form `body`—including generated tags—must be 1..65,535
+UTF-8 bytes before POST dispatch. This remains within the official
+[message-post body contract](https://developer.chatwork.com/reference/post-rooms-room_id-messages)
+(checked 2026-11-07); it requires a 1..65,535 body string. The endpoint and
+one-attempt policy are unchanged.
+
+When both `--reply-to` and `--body-file` are present, the application asks the
+same authenticated infrastructure adapter to read and validate the file once
+before the reply GET. The returned value is an opaque one-use handle bound to
+that client, authentication binding, and exact send source. The application
+cannot inspect its bytes or read the path; after the exact GET it passes the
+handle back to the same adapter, which consumes it without a second file read.
+Missing, unreadable, empty, invalid-UTF-8, or raw oversized file input fails
+before any provider call. An oversized final prefix may be found after the
+reply GET but is still rejected before POST.
 
 For Chatwork `429`, the authoritative general timing signal is
 `x-ratelimit-reset`, whose official value is Unix seconds. The adapter accepts
@@ -171,6 +237,21 @@ subset for that message, and marks its relation set unknown. It continues the
 rest of the list. Invalid JSON, identity, UTF-8, and fixed response bounds
 remain strict whole-response failures.
 
+After the infrastructure parser returns typed quote metadata, application may
+compare its exact author reference and complete Unix timestamp with messages
+from the same original bounded source window. It records every same-room match
+in provider order as a `source-window` candidate with `identity=unproven`, a
+canonical message reference, and an optional source sequence only while the
+candidate remains visible. A unique match remains unresolved; it is not an
+exact message identity, reply edge, or reason for another API request. No
+match in an available returned source window without an access limitation is
+`no-window-candidate`; missing timestamp is
+`missing-timestamp`; unavailable source and zero matches under partial access
+are `unknown`. Matching is computed once before local selection/delivery, and
+the existing source coverage/access evidence remains authoritative. Exact-only
+message show does not add a list request; show replies/around reuse their
+already-declared recent read.
+
 Primary sources: Chatwork's
 [message-list reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages),
 [exact-message reference](https://developer.chatwork.com/reference/get-rooms-room_id-messages-message_id),
@@ -200,27 +281,34 @@ leading-zero-free positive decimal of 1 through 32 digits emitted as
 `room_ref`. Names, `rid...`, `chatwork-room:...`, and browser URLs fail before
 adapter access; neither CLI nor infrastructure resolves or normalizes them.
 
-`messages list --sender`, `--since`, `--until`, `--on`, `--start-index`,
-`--count`, and `--context` are application-owned selection inputs over the
-single bounded message-list response. `--resolve-relations` is a separate
+`messages list --sender`, `--contains`, `--since`, `--until`, `--on`,
+`--start-index`, `--count`, and `--context` are application-owned selection
+inputs over the single bounded message-list response. `--contains` accepts at
+most 100 nonempty, valid UTF-8 terms of at most 1,024 bytes; terms are exact,
+case-sensitive literal substrings of typed message bodies and use OR. Sender
+and period predicates are additional AND conditions. No term is trimmed,
+normalized, parsed as Chatwork notation, or forwarded as provider search.
+`--resolve-relations` is a separate
 application-owned exact-read budget over every unique canonical reply target.
 Start index and count accept 1 through 100; count alone defaults start index to
 1. Since is inclusive and until exclusive; both are whole-second RFC3339 with
 explicit offsets. `--on` is their mutually exclusive fixed-`Asia/Tokyo`
 calendar shorthand for an exact day, `today`, or `yesterday`; relative words
 resolve once to concrete bounds through an injected command clock. Exact-sender
-OR and period membership form the candidate predicate; typed `send_time` then establishes
+OR, body-term OR, and period membership form the candidate predicate using AND
+between predicate groups; typed `send_time` then establishes
 newest-first candidate rank, with later provider position breaking equal-time
 ties; the one-based start index and requested maximum count select primary
 anchors; direct typed reply context runs last and may increase displayed count
-beyond the requested count. For an active sender, period, or index selection,
+beyond the requested count. For an active sender, contains, period, or index selection,
 omitted context means `replies`; exact `none` opts out, and context without a
 primary selection is rejected before authentication with named alternatives.
 Membership selection does not reorder the
 provider records or their original sequences. Selection inputs never become
 Chatwork query parameters, reduce provider response bytes, or retrieve older
 history. Adapter request construction rejects them if they cross the
-application port boundary, and the one list request continues to use only the
+application port boundary; application clears them before the provider call,
+and the one list request continues to use only the
 documented `force` query. There is no provider cursor,
 offset, count, or pagination. The provider's 100-message ceiling is exposed
 separately as `source-limit`; candidate count, applied start index, requested
@@ -229,7 +317,11 @@ selection provenance. The one-based/count vocabulary derives from SCIM index
 pagination, but separate calls remain stateless over separate Chatwork results
 and source mutations can shift ranks. Invalid ranks, ambiguous dates,
 offset-free/fractional timestamps, conflicting selectors, and empty or reversed
-periods fail before authentication or provider I/O.
+periods, empty/invalid/overlong terms, or excess terms fail before authentication
+or provider I/O. The output selection record preserves exact `contains` terms
+and states `context=none|replies`; a non-anchor shown under `replies` is added
+context rather than a term match. This metadata change intentionally updates
+previous filtered `context=none` outputs to preserve the caller's explicit opt-out.
 
 `messages show --context replies` composes two documented reads rather than
 adding an upstream query: one exact `GET /rooms/{room_id}/messages/{message_id}`
@@ -246,6 +338,17 @@ resolution emits the corresponding context.
 zero still permits the fixed child-source read. Omitted context and `none` make
 only the exact request. Neither call performs body search, child pagination, or
 arbitrary history traversal.
+
+`messages show --around N` uses the same two documented endpoints and the same
+force-recent response when present. The exact anchor is matched by its exact
+canonical reference in the returned at-most-100 sequence. Only then are up to
+N original provider positions on each side included. The result preserves the
+source limit, completeness, and access limitation; absence from an unrestricted
+source is `outside-window`, while restricted access makes position `unknown`.
+No API query is synthesized from time or message ID, and adjacency is not a
+reply relation. If `--context replies` is also requested, the direct children
+are selected from this same response. Around state is application-local and is
+cleared before each adapter call.
 
 The catalog-declared deprecated `messages list --limit` spelling binds to the
 same typed input as `--count` for at least two minor releases. It never crosses
@@ -317,6 +420,19 @@ Primary sources: Chatwork's
 
 All Chatwork mutations are unsafe for automatic retry under this first contract because the provider snapshot supplies no CLI-owned idempotency guarantee. An unknown post-send outcome is non-retryable and its catalog fault names a read-only reconciliation command. That command may inspect the target or parent scope but cannot call a create/write task.
 
+The catalog recovery for an unknown message send is `messages reconcile-send`.
+It validates the body before provider I/O, performs an optional exact reply GET,
+then one `GET /me` and one `GET /rooms/{room_id}/messages?force=1`, in that
+order under the same context and binding. Missing, invalid or failed account
+identity stops the task before the window GET. No POST is possible. The matcher
+compares the complete expanded send bytes and returns booleans; the application
+returns only candidates whose exact typed sender equals the current account,
+while source count still covers the complete fetched window. A body file is
+read once before provider I/O and held in a one-use zeroed matcher. The current
+account lookup is not evidence of the original send account; past identical
+posts, changed account, propagation delay, history bounds, access restriction,
+edits/deletions, changed file or reply author prevent a known outcome.
+
 ## Failure and recovery contract
 
 `domain/fault.Error` provides stable recovery metadata:
@@ -331,6 +447,13 @@ All Chatwork mutations are unsafe for automatic retry under this first contract 
 - a human message that is useful but not required for machine classification.
 
 The common kinds cover invalid input, authentication, permission, not found, ambiguity, policy rejection, rate limiting, temporary unavailability, cancellation, unsupported capability, contract failure, and internal failure. An upstream error is mapped once at the infrastructure/application boundary. `fault.PublicCopy` extracts and validates a structured fault while discarding outer wrappers and its private cause; public boundaries use that helper before testing generic cancellation, so a deadline cause cannot erase a more precise valid classification. A malformed typed fault remains a contract failure. Raw upstream bodies and credential-bearing errors are never public output.
+
+Chatwork 403 errors may add the fixed Japanese possibility that the caller is
+not a member only for a task with an explicit room target or scope. Other
+targets keep the general permission message; provider response text is never
+used. A catalog-known mutation confirmation refusal may state only the exact
+expected `--confirm=access-change` or `--confirm=destructive` value, without
+echoing supplied argv or a private cause.
 
 ## Wire schemas and drift
 

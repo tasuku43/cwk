@@ -28,18 +28,19 @@ type CLI struct {
 	Version string
 	Commit  string
 
-	baseCatalog      Catalog
-	catalog          Catalog
-	commandSelection *configcmd.Service
-	selectionLoaded  bool
-	selectionSaved   bool
-	terminal         terminalui.Opener
-	doctor           *doctorcmd.Service
-	chatwork         *chatworkcmd.Service
-	chatworkAuth     *appauthn.Gate
-	chatworkInitErr  error
-	chatworkFactory  func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error)
-	now              func() time.Time
+	baseCatalog           Catalog
+	catalog               Catalog
+	commandSelection      *configcmd.Service
+	selectionLoaded       bool
+	selectionSaved        bool
+	terminal              terminalui.Opener
+	doctor                *doctorcmd.Service
+	chatwork              *chatworkcmd.Service
+	chatworkAuth          *appauthn.Gate
+	chatworkInitErr       error
+	chatworkClientFactory func(string) (*chatworkapi.Client, error)
+	chatworkFactory       func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error)
+	now                   func() time.Time
 }
 
 // New builds the production CLI with a lazy PAT adapter. Help and local
@@ -48,8 +49,9 @@ type CLI struct {
 func New(in io.Reader, out, errOut io.Writer) *CLI {
 	cli := newCLI(in, out, errOut, DefaultCatalog(), systemdoctor.New())
 	cli.commandSelection = configcmd.New(commandconfig.NewFileStore())
+	cli.chatworkClientFactory = chatworkapi.NewFromEnvironment
 	cli.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
-		client, clientErr := chatworkapi.NewFromEnvironment()
+		client, clientErr := cli.chatworkClientFactory(cli.Version)
 		if clientErr != nil {
 			return nil, nil, clientErr
 		}
@@ -171,6 +173,12 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	}
 	if helpFallback {
 		ctx = withStaticHelpFallback(ctx)
+	} else if isCatalogNamespaceInvocation(baseCatalog, baseCanonicalArgs) {
+		// A bare exact root namespace is the shorthand for its existing
+		// catalog-derived help task. Keep the rewrite restricted to one
+		// validated namespace token so partial and unknown paths still fail
+		// through ordinary command matching.
+		commandArgs = staticHelpArgs
 	}
 	c.catalog = activeCatalog
 	selectionCheckArgs := baseCanonicalArgs
@@ -180,8 +188,17 @@ func (c *CLI) RunContext(ctx context.Context, args []string) int {
 	if c.selectionLoaded && !c.selectionSaved && commandViewConfigurableInvocation(baseCatalog, selectionCheckArgs) {
 		return c.fail(ctx, commandSelectionRequiredFault())
 	}
+	if c.selectionLoaded && c.selectionSaved && !helpFallback {
+		if command, disabled := disabledCommandInvocation(baseCatalog, c.catalog, selectionCheckArgs); disabled {
+			return c.fail(ctx, commandDisabledFault(command.Path))
+		}
+	}
 	commandArgs = normalizeCommandAlias(c.catalog, commandArgs)
-	commandArgs = normalizeTrailingHelpAlias(c.catalog, commandArgs)
+	helpNormalizationCatalog := c.catalog
+	if c.selectionLoaded && c.selectionSaved {
+		helpNormalizationCatalog = baseCatalog
+	}
+	commandArgs = normalizeTrailingHelpAlias(helpNormalizationCatalog, commandArgs)
 	command, rest, found := c.catalog.Match(commandArgs)
 	if !found {
 		return c.failUsage(
@@ -266,6 +283,9 @@ func selectorContainsConfigurableCommand(base Catalog, selector string) bool {
 	if selector == "" {
 		return false
 	}
+	if selector == "tasks" && hasConfigurableTaskHelpNamespace(base) {
+		return true
+	}
 	selector = canonicalHelpSelector(base, selector)
 	commands, _ := base.Select(selector)
 	for _, command := range commands {
@@ -284,6 +304,50 @@ func commandSelectionRequiredFault() error {
 		false,
 		fault.NextAction{Command: "config", Reason: "使用するChatworkコマンドを選択してください。"},
 	)
+}
+
+func commandDisabledFault(path string) error {
+	return fault.New(
+		fault.KindRejected,
+		"command_disabled",
+		fmt.Sprintf("コマンド %q は現在無効です。ユーザーに有効化を依頼してください。", path),
+		false,
+		fault.NextAction{
+			Command: "config",
+			Reason:  fmt.Sprintf("ユーザーに `cwk config` でコマンド %q を有効にするよう依頼してください。", path),
+		},
+	)
+}
+
+// disabledCommandInvocation recognizes only one exact configurable command
+// from the complete catalog. Partial paths and namespaces are not disabled
+// commands, so the active router retains their ordinary unknown-path behavior.
+func disabledCommandInvocation(complete, active Catalog, args []string) (CommandSpec, bool) {
+	if len(args) == 0 {
+		return CommandSpec{}, false
+	}
+	var (
+		command CommandSpec
+		found   bool
+	)
+	if args[0] == "help" {
+		_, selector, err := parseHelpArgs(args[1:])
+		if err != nil || selector == "" {
+			return CommandSpec{}, false
+		}
+		selector = canonicalHelpSelector(complete, selector)
+		command, found = complete.Lookup(selector)
+	} else {
+		canonicalArgs := normalizeCommandAlias(complete, args)
+		command, _, found = complete.Match(canonicalArgs)
+	}
+	if !found || !command.Configurable {
+		return CommandSpec{}, false
+	}
+	if _, enabled := active.Lookup(command.Path); enabled {
+		return CommandSpec{}, false
+	}
+	return command, true
 }
 
 func commandViewAlwaysInvocation(base Catalog, args []string) bool {
@@ -312,8 +376,10 @@ func commandSelectionDispatchFault(err error) error {
 		switch public.Code {
 		case "command_selection_invalid":
 			next = fault.NextAction{Command: "config", Reason: "無効なコマンド選択を明示的に置き換えてください。"}
-		case "command_selection_unsafe", "command_selection_unavailable":
-			next = fault.NextAction{Command: "doctor", Reason: "ローカル設定パスを復旧してから、コマンド選択の診断を確認してください。"}
+		case "command_selection_unsafe":
+			next = fault.NextAction{Command: "doctor", Reason: commandSelectionUnsafeRecoveryReason}
+		case "command_selection_unavailable":
+			next = fault.NextAction{Command: "doctor", Reason: "ユーザー設定ディレクトリへのアクセスを復旧してから、ローカル診断結果を確認してください。"}
 		}
 		return fault.New(
 			public.Kind,
@@ -397,7 +463,29 @@ func normalizeStaticHelpInvocation(catalog Catalog, args []string) ([]string, bo
 	if len(normalized) > 0 && normalized[0] == "help" {
 		return normalized, true
 	}
+	if isCatalogNamespaceInvocation(catalog, args) {
+		return []string{"help", args[0]}, true
+	}
 	return args, false
+}
+
+// isCatalogNamespaceInvocation recognizes only a single exact root namespace
+// with at least one catalog leaf below it. Namespace names are derived from
+// leaf paths; they are help selectors, not executable command registrations.
+func isCatalogNamespaceInvocation(catalog Catalog, args []string) bool {
+	if len(args) != 1 {
+		return false
+	}
+	namespace := args[0]
+	if _, exactCommand := catalog.Lookup(namespace); exactCommand {
+		return false
+	}
+	for _, command := range catalog.Commands() {
+		if strings.Contains(command.Path, " ") && commandNamespace(command.Path) == namespace {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeTrailingHelpAlias maps a help flag anywhere after a known exact

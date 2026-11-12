@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -21,10 +23,26 @@ func TestTransportPolicyIsPinnedAndSingleAttempt(t *testing.T) {
 		MaxSuccessResponseBytes != 8*1024*1024 || MaxErrorResponseBytes != 64*1024 || MaxUploadBytes != 5*1024*1024 {
 		t.Fatal("Chatwork transport limits drifted from the accepted contract")
 	}
+	for _, test := range []struct {
+		task    chatwork.Task
+		timeout time.Duration
+	}{
+		{task: chatwork.TaskMessagesSend, timeout: RequestTimeout},
+		{task: chatwork.TaskRoomTasksCreate, timeout: RequestTimeout},
+		{task: chatwork.TaskFilesUpload, timeout: UploadTimeout},
+	} {
+		policy, err := CallPolicy(test.task)
+		if err != nil || policy.Timeout != test.timeout || policy.MaxAttempts != 1 {
+			t.Errorf("CallPolicy(%s) = %+v, err=%v; want timeout %s and one attempt", test.task, policy, err, test.timeout)
+		}
+	}
 	client := productionHTTPClient()
 	transport, ok := client.Transport.(*http.Transport)
 	if !ok || !transport.DisableKeepAlives || client.CheckRedirect == nil {
 		t.Fatal("production transport must disable implicit replay through connection reuse and redirects")
+	}
+	if transport.ResponseHeaderTimeout != RequestTimeout || client.Timeout != UploadTimeout {
+		t.Fatalf("production timeouts = response-header %s, client %s; want %s and %s", transport.ResponseHeaderTimeout, client.Timeout, RequestTimeout, UploadTimeout)
 	}
 }
 
@@ -336,7 +354,7 @@ func TestNewFromEnvironmentFailsClosedWithoutSafeToken(t *testing.T) {
 	for name, token := range map[string]string{"missing": "", "control": "synthetic\ntoken"} {
 		t.Run(name, func(t *testing.T) {
 			t.Setenv(TokenEnvironment, token)
-			client, err := NewFromEnvironment()
+			client, err := NewFromEnvironment("dev")
 			if err == nil || client != nil {
 				t.Fatalf("client = %#v, err = %v", client, err)
 			}
@@ -349,7 +367,7 @@ func TestNewFromEnvironmentFailsClosedWithoutSafeToken(t *testing.T) {
 
 func TestNewFromEnvironmentPinsPATAndProductionDestination(t *testing.T) {
 	t.Setenv(TokenEnvironment, syntheticToken)
-	client, err := NewFromEnvironment()
+	client, err := NewFromEnvironment("dev")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,6 +499,24 @@ func TestMessageRetrievalDistinguishesAccessLimitationFromEmptyAndNotFound(t *te
 				t.Fatalf("access = %v, want %v", result.MessageAccess, test.wantAccess)
 			}
 		})
+	}
+}
+
+func TestMessageSendReconciliation403UsesItsExactRoomScope(t *testing.T) {
+	privateCanary := "private-provider-403-canary"
+	response := &http.Response{
+		StatusCode: http.StatusForbidden,
+		Header:     make(http.Header),
+		Body:       io.NopCloser(strings.NewReader(`{"errors":["` + privateCanary + `"]}`)),
+	}
+	err := providerFault(chatwork.TaskMessagesReconcileSend, response, time.Time{})
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "chatwork_permission_denied" ||
+		!strings.Contains(structured.Message, "対象ルーム") {
+		t.Fatalf("reconciliation permission fault = %#v", err)
+	}
+	if strings.Contains(err.Error(), privateCanary) {
+		t.Fatal("reconciliation permission fault exposed provider error text")
 	}
 }
 
@@ -650,9 +686,436 @@ func TestMutationTransportFailureIsNotRetryable(t *testing.T) {
 	}
 }
 
+func TestMutationResponseFailuresAreUnknownAndNotReplayed(t *testing.T) {
+	const privateCanary = "private-provider-response-canary"
+	tests := []struct {
+		name          string
+		task          chatwork.Task
+		method        string
+		path          string
+		status        int
+		body          string
+		truncatedBody bool
+	}{
+		{name: "malformed 200", status: http.StatusOK, body: `{"message_id":`},
+		{name: "oversized 200", status: http.StatusOK, body: privateCanary + strings.Repeat("x", MaxSuccessResponseBytes+1-len(privateCanary))},
+		{name: "undocumented 202", status: http.StatusAccepted, body: `{"message_id":"8"}`},
+		{name: "disallowed empty 204", status: http.StatusNoContent},
+		{name: "valid body bound to another target", task: chatwork.TaskMessagesUpdate, method: http.MethodPut, path: "/rooms/2/messages/3", status: http.StatusOK, body: `{"message_id":"99"}`},
+		{name: "unrecognized 418", status: http.StatusTeapot, body: privateCanary},
+		{name: "undocumented 422", status: http.StatusUnprocessableEntity, body: privateCanary},
+		{name: "server 500", status: http.StatusInternalServerError, body: privateCanary},
+		{name: "truncated 200 body", status: http.StatusOK, body: `{`, truncatedBody: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var taskCalls atomic.Int32
+			task := test.task
+			if task == "" {
+				task = chatwork.TaskMessagesSend
+			}
+			method, path := test.method, test.path
+			if method == "" {
+				method = http.MethodPost
+			}
+			if path == "" {
+				path = "/rooms/2/messages"
+			}
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				if request.URL.Path != path || request.Method != method {
+					t.Errorf("mutation request = %s %s, want %s %s", request.Method, request.URL.Path, method, path)
+				}
+				if request.Header.Get("x-chatworktoken") != syntheticToken {
+					t.Error("mutation request did not resolve the authenticated binding")
+				}
+				taskCalls.Add(1)
+				if test.truncatedBody {
+					w.Header().Set("Content-Length", "128")
+					_, _ = w.Write([]byte(test.body))
+					return
+				}
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(test.body))
+			}))
+			defer server.Close()
+
+			client, binding := authenticatedClient(t, server)
+			_, err := client.Execute(context.Background(), binding, completeRequest(task))
+			var structured *fault.Error
+			if !errors.As(err, &structured) || structured.Kind != fault.KindContract ||
+				structured.Code != "chatwork_mutation_outcome_unknown" || structured.Retryable {
+				t.Fatalf("error = %#v, want non-retryable unknown mutation outcome", err)
+			}
+			if calls := taskCalls.Load(); calls != 1 {
+				t.Fatalf("provider mutation calls = %d, want exactly one", calls)
+			}
+			if strings.Contains(err.Error(), privateCanary) {
+				t.Fatal("private provider response leaked through the mutation outcome fault")
+			}
+		})
+	}
+}
+
+func TestMutationInvalidHTTPResponseIsUnknownAndNotReplayed(t *testing.T) {
+	tests := map[string]*http.Response{
+		"nil response": nil,
+		"nil body":     {StatusCode: http.StatusOK, Header: make(http.Header)},
+	}
+	for name, response := range tests {
+		t.Run(name, func(t *testing.T) {
+			doer := &responseDoer{response: response}
+			client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "response-binding", nil }, boundedReadFile)
+			session, err := client.Authenticate(context.Background(), testRequirement())
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = client.Execute(context.Background(), session.BindingID, completeRequest(chatwork.TaskMessagesSend))
+			var structured *fault.Error
+			if !errors.As(err, &structured) || structured.Code != "chatwork_mutation_outcome_unknown" || structured.Retryable {
+				t.Fatalf("error = %#v, want non-retryable unknown outcome", err)
+			}
+			if doer.calls != 1 {
+				t.Fatalf("transport calls = %d, want one", doer.calls)
+			}
+		})
+	}
+}
+
+func TestMutationDispatchCancellationIsUnknownWithoutTransportEvidenceGuess(t *testing.T) {
+	const privateCanary = "private-cancel-transport-canary"
+	ctx, cancel := context.WithCancel(context.Background())
+	doer := &cancelingErrorDoer{cancel: cancel, err: errors.Join(errors.New(privateCanary), context.Canceled)}
+	client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "cancel-binding", nil }, boundedReadFile)
+	session, err := client.Authenticate(context.Background(), testRequirement())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = client.Execute(ctx, session.BindingID, completeRequest(chatwork.TaskMessagesSend))
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "chatwork_mutation_outcome_unknown" || structured.Retryable {
+		t.Fatalf("error = %#v, want non-retryable unknown outcome after dispatched call", err)
+	}
+	if doer.calls != 1 {
+		t.Fatalf("transport calls = %d, want one dispatched mutation", doer.calls)
+	}
+	if strings.Contains(err.Error(), privateCanary) || errors.Is(err, context.Canceled) {
+		t.Fatalf("private transport cause escaped adapter classification: %#v", err)
+	}
+}
+
+func TestMutationCallerDeadlineAfterDispatchIsUnknownWithoutReplay(t *testing.T) {
+	callerContext := newControlledDeadlineContext()
+	defer callerContext.expire()
+	doer := &requestContextDeadlineDoer{entered: make(chan struct{})}
+	client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "caller-deadline-binding", nil }, boundedReadFile)
+	session, err := client.Authenticate(context.Background(), testRequirement())
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, executeErr := client.Execute(callerContext, session.BindingID, completeRequest(chatwork.TaskMessagesSend))
+		result <- executeErr
+	}()
+	select {
+	case <-doer.entered:
+		// Expire only after the adapter has entered Do. This handshake avoids
+		// wall-clock scheduling races with request validation and construction.
+		callerContext.expire()
+	case <-time.After(10 * time.Second):
+		callerContext.expire()
+		t.Fatal("synthetic mutation did not enter the transport")
+	}
+	select {
+	case err = <-result:
+	case <-time.After(10 * time.Second):
+		t.Fatal("synthetic mutation did not return after the caller deadline")
+	}
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "chatwork_mutation_outcome_unknown" || structured.Retryable {
+		t.Fatalf("error = %#v, want non-retryable unknown outcome after dispatched caller deadline", err)
+	}
+	if doer.calls.Load() != 1 {
+		t.Fatalf("transport calls = %d, want exactly one dispatched mutation", doer.calls.Load())
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("caller deadline cause escaped the mutation classifier: %#v", err)
+	}
+}
+
+func TestMutationCancellationAtAdapterEntryIsKnownNotDispatched(t *testing.T) {
+	doer := &recordingErrorDoer{err: errors.New("transport must not be called")}
+	client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "entry-cancel-binding", nil }, boundedReadFile)
+	session, err := client.Authenticate(context.Background(), testRequirement())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = client.Execute(ctx, session.BindingID, completeRequest(chatwork.TaskMessagesSend))
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != fault.KindCanceled ||
+		structured.Code != "chatwork_mutation_not_dispatched" || !structured.Retryable {
+		t.Fatalf("error = %#v, want retryable known pre-dispatch cancellation", err)
+	}
+	if len(doer.requests) != 0 {
+		t.Fatalf("transport requests = %v, want zero", doer.requests)
+	}
+}
+
+func TestMutationBodyFileCancellationIsKnownNotDispatched(t *testing.T) {
+	doer := &recordingErrorDoer{err: errors.New("transport must not be called")}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "body-cancel-binding", nil }, func(string) ([]byte, error) {
+		cancel()
+		return []byte("synthetic body"), nil
+	})
+	session, err := client.Authenticate(context.Background(), testRequirement())
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := completeRequest(chatwork.TaskMessagesSend)
+	request.Body = ""
+	request.BodyFile = "synthetic-message.txt"
+	_, err = client.Execute(ctx, session.BindingID, request)
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != fault.KindCanceled ||
+		structured.Code != "chatwork_mutation_not_dispatched" || !structured.Retryable {
+		t.Fatalf("error = %#v, want retryable known pre-dispatch cancellation", err)
+	}
+	if len(doer.requests) != 0 {
+		t.Fatalf("transport requests = %v, want zero", doer.requests)
+	}
+}
+
+func TestReadCancellationAtAdapterEntryRemainsOperationCanceled(t *testing.T) {
+	doer := &recordingErrorDoer{err: errors.New("transport must not be called")}
+	client := newClient("http://example.test", syntheticToken, doer, func() (string, error) { return "read-cancel-binding", nil }, boundedReadFile)
+	session, err := client.Authenticate(context.Background(), testRequirement())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = client.Execute(ctx, session.BindingID, completeRequest(chatwork.TaskRoomsList))
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != fault.KindCanceled ||
+		structured.Code != "operation_canceled" || !structured.Retryable {
+		t.Fatalf("error = %#v, want existing read cancellation", err)
+	}
+	if len(doer.requests) != 0 {
+		t.Fatalf("transport requests = %v, want zero", doer.requests)
+	}
+}
+
+func TestReadTransportFaultDistinguishesDeadlineCancellationAndIOFailure(t *testing.T) {
+	deadlineCtx, cancelDeadline := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelDeadline()
+	canceledCtx, cancel := context.WithCancel(context.Background())
+	cancel()
+	privateCanary := "private-transport-canary"
+	tests := []struct {
+		name          string
+		ctx           context.Context
+		err           error
+		wantKind      fault.Kind
+		wantCode      string
+		wantMessage   string
+		wantRetryable bool
+		private       string
+	}{
+		{name: "context deadline", ctx: deadlineCtx, wantKind: fault.KindCanceled, wantCode: "operation_canceled", wantMessage: "時間内", wantRetryable: true},
+		{name: "wrapped transport deadline", ctx: context.Background(), err: errors.Join(errors.New(privateCanary), context.DeadlineExceeded), wantKind: fault.KindCanceled, wantCode: "operation_canceled", wantMessage: "時間内", wantRetryable: true, private: privateCanary},
+		{name: "caller context cancellation", ctx: canceledCtx, err: context.Canceled, wantKind: fault.KindCanceled, wantCode: "operation_canceled", wantMessage: "キャンセル", wantRetryable: true},
+		{name: "caller cancellation wins over wrapped deadline", ctx: canceledCtx, err: context.DeadlineExceeded, wantKind: fault.KindCanceled, wantCode: "operation_canceled", wantMessage: "キャンセル", wantRetryable: true},
+		{name: "transport cancellation", ctx: context.Background(), err: context.Canceled, wantKind: fault.KindCanceled, wantCode: "operation_canceled", wantMessage: "キャンセル", wantRetryable: true},
+		{name: "ordinary IO failure", ctx: context.Background(), err: errors.Join(errors.New(privateCanary), io.ErrClosedPipe), wantKind: fault.KindUnavailable, wantCode: "chatwork_unavailable", wantMessage: "利用できません", wantRetryable: true, private: privateCanary},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := transportFault(chatwork.TaskRoomsShow, test.ctx, test.err)
+			var structured *fault.Error
+			if !errors.As(err, &structured) || structured.Kind != test.wantKind || structured.Code != test.wantCode || structured.Retryable != test.wantRetryable ||
+				!strings.Contains(structured.Message, test.wantMessage) || (test.private != "" && strings.Contains(structured.Message, test.private)) {
+				t.Fatalf("transportFault() = %#v, want kind=%s code=%s retryable=%t message~%q", err, test.wantKind, test.wantCode, test.wantRetryable, test.wantMessage)
+			}
+			if test.wantCode == "operation_canceled" && errors.Is(err, context.DeadlineExceeded) {
+				t.Fatalf("public timeout fault retained private deadline cause: %#v", err)
+			}
+			public, ok := fault.PublicCopy(err)
+			if !ok || (test.private != "" && strings.Contains(public.Message, test.private)) {
+				t.Fatalf("public copy = %#v, ok=%t; private cause leaked", public, ok)
+			}
+		})
+	}
+
+	mutation := transportFault(chatwork.TaskMessagesSend, deadlineCtx, context.DeadlineExceeded)
+	var structured *fault.Error
+	if !errors.As(mutation, &structured) || structured.Kind != fault.KindContract ||
+		structured.Code != "chatwork_mutation_outcome_unknown" || structured.Retryable {
+		t.Fatalf("mutation deadline = %#v, want unchanged non-retryable unknown outcome", mutation)
+	}
+}
+
+func TestProviderForbiddenMembershipHintIsFixedAndRoomScoped(t *testing.T) {
+	const privateCanary = "private-provider-403-canary"
+	for _, test := range []struct {
+		name           string
+		task           chatwork.Task
+		wantMembership bool
+	}{
+		{name: "room target", task: chatwork.TaskRoomsShow, wantMembership: true},
+		{name: "message room scope", task: chatwork.TaskMessagesList, wantMembership: true},
+		{name: "room discovery has no selected target", task: chatwork.TaskRoomsList},
+		{name: "account target", task: chatwork.TaskAccountShow},
+		{name: "incoming request target", task: chatwork.TaskContactRequestsList},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			response := &http.Response{StatusCode: http.StatusForbidden, Body: io.NopCloser(strings.NewReader(`{"errors":["` + privateCanary + `"]}`))}
+			err := providerFault(test.task, response, time.Now())
+			var structured *fault.Error
+			if !errors.As(err, &structured) || structured.Kind != fault.KindPermission || structured.Code != "chatwork_permission_denied" {
+				t.Fatalf("provider fault = %#v, want stable permission denial", err)
+			}
+			hasMembership := strings.Contains(structured.Message, "ルームに参加していない可能性があります")
+			if hasMembership != test.wantMembership || strings.Contains(structured.Message, privateCanary) {
+				t.Fatalf("message = %q, membership=%t; want membership=%t without provider text", structured.Message, hasMembership, test.wantMembership)
+			}
+		})
+	}
+}
+
+func TestMutationProviderRejectionsRemainAuthoritative(t *testing.T) {
+	const privateCanary = "private-provider-rejection-canary"
+	tests := []struct {
+		status int
+		code   string
+	}{
+		{http.StatusBadRequest, "chatwork_invalid_request"},
+		{http.StatusUnauthorized, "chatwork_authentication_failed"},
+		{http.StatusForbidden, "chatwork_permission_denied"},
+		{http.StatusNotFound, "chatwork_not_found"},
+		{http.StatusTooManyRequests, "chatwork_mutation_rate_limited"},
+	}
+	for _, test := range tests {
+		t.Run(http.StatusText(test.status), func(t *testing.T) {
+			var taskCalls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+				if request.Header.Get("x-chatworktoken") != syntheticToken {
+					t.Error("provider rejection request did not resolve the authenticated binding")
+				}
+				taskCalls.Add(1)
+				w.WriteHeader(test.status)
+				_, _ = w.Write([]byte(`{"errors":["` + privateCanary + `"]}`))
+			}))
+			defer server.Close()
+
+			client, binding := authenticatedClient(t, server)
+			_, err := client.Execute(context.Background(), binding, completeRequest(chatwork.TaskMessagesSend))
+			var structured *fault.Error
+			if !errors.As(err, &structured) || structured.Code != test.code || structured.Retryable {
+				t.Fatalf("error = %#v, want authoritative non-retryable rejection %q", err, test.code)
+			}
+			if calls := taskCalls.Load(); calls != 1 {
+				t.Fatalf("provider mutation calls = %d, want exactly one", calls)
+			}
+			if strings.Contains(err.Error(), privateCanary) {
+				t.Fatal("provider rejection body leaked through its public fault")
+			}
+		})
+	}
+}
+
+func TestMutationBindingMismatchMakesZeroProviderRequests(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		_, _ = w.Write([]byte(`{"message_id":"8"}`))
+	}))
+	defer server.Close()
+
+	_, binding := authenticatedClient(t, server)
+	second := newClient(server.URL, "other-synthetic-token", server.Client(), func() (string, error) { return "other-binding", nil }, boundedReadFile)
+	_, err := second.Execute(context.Background(), binding, completeRequest(chatwork.TaskMessagesSend))
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "invalid_authentication_binding" {
+		t.Fatalf("error = %#v, want binding rejection", err)
+	}
+	if calls.Load() != 0 {
+		t.Fatalf("provider calls = %d, want zero after binding mismatch", calls.Load())
+	}
+}
+
 type roundTripError struct{ err error }
 
 func (r roundTripError) Do(*http.Request) (*http.Response, error) { return nil, r.err }
+
+type cancelingErrorDoer struct {
+	cancel context.CancelFunc
+	err    error
+	calls  int
+}
+
+type requestContextDeadlineDoer struct {
+	calls   atomic.Int32
+	entered chan struct{}
+}
+
+func (d *requestContextDeadlineDoer) Do(request *http.Request) (*http.Response, error) {
+	d.calls.Add(1)
+	close(d.entered)
+	<-request.Context().Done()
+	return nil, request.Context().Err()
+}
+
+// controlledDeadlineContext delivers a deadline signal only when the test
+// explicitly expires it, after the doer-entry handshake. It avoids a short
+// wall-clock deadline racing earlier validation and request construction.
+type controlledDeadlineContext struct {
+	done chan struct{}
+	once sync.Once
+}
+
+func newControlledDeadlineContext() *controlledDeadlineContext {
+	return &controlledDeadlineContext{done: make(chan struct{})}
+}
+
+func (c *controlledDeadlineContext) Deadline() (time.Time, bool) { return time.Time{}, false }
+
+func (c *controlledDeadlineContext) Done() <-chan struct{} { return c.done }
+
+func (c *controlledDeadlineContext) Err() error {
+	select {
+	case <-c.done:
+		return context.DeadlineExceeded
+	default:
+		return nil
+	}
+}
+
+func (*controlledDeadlineContext) Value(any) any { return nil }
+
+func (c *controlledDeadlineContext) expire() {
+	c.once.Do(func() { close(c.done) })
+}
+
+func (d *cancelingErrorDoer) Do(*http.Request) (*http.Response, error) {
+	d.calls++
+	d.cancel()
+	return nil, d.err
+}
+
+type responseDoer struct {
+	response *http.Response
+	calls    int
+}
+
+func (d *responseDoer) Do(*http.Request) (*http.Response, error) {
+	d.calls++
+	return d.response, nil
+}
 
 type recordingErrorDoer struct {
 	requests []string

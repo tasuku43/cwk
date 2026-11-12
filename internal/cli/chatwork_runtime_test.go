@@ -50,6 +50,7 @@ type chatworkRuntimePort struct {
 	calls    int
 	request  chatwork.Request
 	requests []chatwork.Request
+	cancel   context.CancelFunc
 	result   func(chatwork.Request) (chatwork.Result, error)
 }
 
@@ -63,10 +64,80 @@ func (p *chatworkRuntimePort) Execute(_ context.Context, _ domainauthn.BindingID
 	p.calls++
 	p.request = request
 	p.requests = append(p.requests, request)
+	if p.cancel != nil {
+		p.cancel()
+	}
 	if p.result != nil {
 		return p.result(request)
 	}
 	return chatwork.Result{Task: request.Task, Coverage: chatwork.Coverage{Kind: "bounded", Complete: true}}, nil
+}
+
+func TestRunChatworkPreservesConfirmedMutationWhenCancellationRacesAfterPortSuccess(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages send")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	message := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "8")
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		return chatwork.Result{
+			Task:     request.Task,
+			Coverage: chatwork.Coverage{Kind: "confirmed", Complete: true},
+			CreatedInRoom: &chatwork.RoomScopedCreation{
+				Refs: []chatwork.Reference{message}, ParentRoom: room,
+			},
+		}, nil
+	}}
+	cli, _, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+	ctx, cancel := context.WithCancel(chatworkRuntimeContext(spec))
+	defer cancel()
+	port.cancel = cancel
+
+	code := runChatwork(ctx, cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--body", "hello"})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if port.calls != 1 {
+		t.Fatalf("mutation port calls = %d, want one", port.calls)
+	}
+	if !strings.Contains(stdout.String(), "8") || strings.Contains(stderr.String(), "outcome_unknown") {
+		t.Fatalf("confirmed mutation result was lost: stdout=%q stderr=%q", stdout.String(), stderr.String())
+	}
+}
+
+func TestRunChatworkMapsPreDispatchFaultForBodyFileAndAdapterEntry(t *testing.T) {
+	for _, test := range []struct {
+		name string
+		args []string
+	}{
+		{name: "body file construction", args: []string{"--room", "7", "--body-file", "synthetic-message.txt"}},
+		{name: "adapter entry", args: []string{"--room", "7", "--body", "hello"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := chatworkRuntimeSpec(t, "messages send")
+			port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+				if test.name == "body file construction" && request.BodyFile != "synthetic-message.txt" {
+					t.Fatalf("body file = %q", request.BodyFile)
+				}
+				return chatwork.Result{}, fault.Wrap(fault.KindCanceled,
+					"chatwork_mutation_not_dispatched",
+					"キャンセルされたため、変更要求は Chatwork への送信前に停止しました",
+					true,
+					errors.New("private pre-dispatch detail"),
+				)
+			}}
+			cli, _, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+			code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), test.args)
+			if code != ExitCanceled || !strings.Contains(stderr.String(), "code: chatwork_mutation_not_dispatched") ||
+				!strings.Contains(stderr.String(), "retryable: true") || !strings.Contains(stderr.String(), "next_action: cwk messages send") {
+				t.Fatalf("code = %d, stderr = %s", code, stderr.String())
+			}
+			if port.calls != 1 || stdout.Len() != 0 {
+				t.Fatalf("port calls = %d, stdout = %q", port.calls, stdout.String())
+			}
+			if strings.Contains(stderr.String(), "private pre-dispatch detail") || strings.Contains(stderr.String(), "messages list") {
+				t.Fatalf("private cause or read-only recovery leaked: %s", stderr.String())
+			}
+		})
+	}
 }
 
 func TestRunChatworkFindsMemberCandidatesBeforeExactSenderUse(t *testing.T) {
@@ -306,6 +377,58 @@ func TestRunChatworkDefaultsRepeatedSenderSelectionToBoundedReplyContext(t *test
 	}
 }
 
+func TestRunChatworkMatchesRepeatedContainsLocallyAndPreservesQueryTerms(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	parent := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10")
+	account := func(value string) chatwork.Account {
+		return chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, value)}
+	}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		if len(request.MessageFilter.Contains) != 0 || len(request.MessageFilter.Senders) != 0 ||
+			request.MessageFilter.Period != (chatwork.MessagePeriod{}) || request.MessageFilter.Context != "" ||
+			request.MessageFilter.StartIndex != 0 || request.MessageFilter.Count != 0 {
+			t.Fatalf("provider request contains local message selection: %+v", request.MessageFilter)
+		}
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: request.Room,
+			Coverage: chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{
+				{Ref: parent, Room: room, Sender: account("1"), Body: "context only"},
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "11"), Room: room, Sender: account("2"), Body: "prefix Needle suffix", Replies: []chatwork.Relation{{Kind: "reply", Target: parent, ExternalID: room.Value}}},
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "12"), Room: room, Sender: account("3"), Body: "café"},
+				{Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "13"), Room: room, Sender: account("4"), Body: "unmatched"},
+			},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", "7", "--contains", "Needle", "--contains=café",
+	})
+	if code != ExitOK {
+		t.Fatalf("runChatwork() code = %d, stderr = %s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 1 {
+		t.Fatalf("calls = auth %d, port %d; want one bounded read", authenticator.calls, port.calls)
+	}
+	for _, want := range []string{
+		`selection source-count=4 candidate-count=2 contains=["Needle","café"] context=replies anchors=[#2,#3]`,
+		"#1 10 ", // a nonmatching direct reply parent remains context
+		"#2 11 ",
+		"#3 12 ",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("filtered output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	for _, omitted := range []string{"#4 13 ", `Body="unmatched"`} {
+		if strings.Contains(stdout.String(), omitted) {
+			t.Errorf("filtered output contains omitted candidate %q:\n%s", omitted, stdout.String())
+		}
+	}
+}
+
 func TestRunChatworkCountsNewestCandidatesAndKeepsProviderOrder(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
@@ -492,7 +615,7 @@ func TestRunChatworkDefaultsFiveRelationFetchesAndSupportsExplicitZero(t *testin
 						t.Errorf("default relation output lacks %q:\n%s", want, stdout.String())
 					}
 				}
-			} else if !strings.Contains(stdout.String(), "unresolved-relations=1") || strings.Contains(stdout.String(), "relation-resolution ") {
+			} else if !strings.Contains(stdout.String(), "unresolved-replies=1 unresolved-quotes=0") || strings.Contains(stdout.String(), "relation-resolution ") {
 				t.Fatalf("explicit zero did not preserve unresolved no-fetch output:\n%s", stdout.String())
 			}
 		})
@@ -706,10 +829,11 @@ func TestRunMembersListQueryNamesMembersFindBeforeAuthentication(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "members list")
 	port := &chatworkRuntimePort{}
 	cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
+	cli.catalog = DefaultCatalog()
 	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
 		"--room", "7", "--query", "村上",
 	})
-	if code != ExitUsage || !strings.Contains(stderr.String(), "cwk members find --room <room-id> --query <text> を使ってください") {
+	if code != ExitUsage || !strings.Contains(stderr.String(), "cwk help members find") {
 		t.Fatalf("code=%d stderr=%s", code, stderr.String())
 	}
 	if authenticator.calls != 0 || port.calls != 0 {
@@ -820,6 +944,26 @@ func TestBuildChatworkMessageFilterDefaultsContextAndPreservesSenderOrder(t *tes
 	}
 }
 
+func TestBuildChatworkMessageFilterPreservesContainsOrderDuplicatesAndWhitespace(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages list")
+	terms := []string{" exact ", "café", " exact "}
+	args := []string{"--room", "7"}
+	for _, term := range terms {
+		args = append(args, "--contains", term)
+	}
+	parsed, err := parseChatworkArguments(spec, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := buildChatworkRequest(spec, parsed, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(request.MessageFilter.Contains, terms) || request.MessageFilter.Context != chatwork.MessageContextReplies {
+		t.Fatalf("message filter = %+v, want exact terms %q and default replies context", request.MessageFilter, terms)
+	}
+}
+
 func TestBuildChatworkMessageFilterKeepsExplicitNoneAsLightweightOptOut(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "messages list")
 	parsed, err := parseChatworkArguments(spec, []string{"--room", "7", "--count", "5", "--context", "none"})
@@ -846,13 +990,29 @@ func TestRunChatworkContextWithoutSelectionNamesTheInvalidInputAndAlternatives(t
 	if code != ExitUsage {
 		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
-	for _, want := range []string{"--context は単独", "--sender", "--on/--since/--until", "--start-index", "--count"} {
+	for _, want := range []string{"--context は単独", "--sender", "--contains", "--on/--since/--until", "--start-index", "--count"} {
 		if !strings.Contains(stderr.String(), want) {
 			t.Errorf("stderr lacks %q: %s", want, stderr.String())
 		}
 	}
 	if strings.Contains(stderr.String(), "1件以上の Chatwork 入力") {
 		t.Fatalf("stderr retained the input-free generic error: %s", stderr.String())
+	}
+	if authenticator.calls != 0 || port.calls != 0 {
+		t.Fatalf("calls = auth %d port %d; want zero", authenticator.calls, port.calls)
+	}
+}
+
+func TestRunChatworkRejectsListOnlyContainsForMessagesShowBeforeAuthentication(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages show")
+	port := &chatworkRuntimePort{}
+	cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", "7", "--message", "8", "--contains", "literal",
+	})
+	if code != ExitUsage || !strings.Contains(stderr.String(), "code: invalid_arguments") ||
+		!strings.Contains(stderr.String(), "--contains") {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
 	if authenticator.calls != 0 || port.calls != 0 {
 		t.Fatalf("calls = auth %d port %d; want zero", authenticator.calls, port.calls)
@@ -981,12 +1141,20 @@ func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T
 		{"--room", "7", "--since", "2026-07-17T00:00:00.5+09:00"},
 		{"--room", "7", "--since", "2026-07-18T00:00:00+09:00", "--until", "2026-07-17T00:00:00+09:00"},
 		{"--room", "7", "--since", "2026-07-17T00:00:00+09:00", "--until", "2026-07-17T00:00:00+09:00"},
+		{"--room", "7", "--contains", ""},
+		{"--room", "7", "--contains", strings.Repeat("a", chatwork.MaxMessageContainsTermBytes+1)},
+		{"--room", "7", "--contains", string([]byte{0xff})},
 	}
 	excessive := []string{"--room", "7"}
 	for sender := 1; sender <= 101; sender++ {
 		excessive = append(excessive, "--sender", strconv.Itoa(sender))
 	}
 	cases = append(cases, excessive)
+	excessiveTerms := []string{"--room", "7"}
+	for term := 0; term <= chatwork.MaxMessageContainsTerms; term++ {
+		excessiveTerms = append(excessiveTerms, "--contains", "term")
+	}
+	cases = append(cases, excessiveTerms)
 	for _, args := range cases {
 		port := &chatworkRuntimePort{}
 		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
@@ -1002,8 +1170,8 @@ func TestRunChatworkRejectsInvalidMessageFilterBeforeAuthentication(t *testing.T
 
 func TestBuildChatworkRequestCoversEveryCatalogTask(t *testing.T) {
 	specs := chatworkCommandSpecs()
-	if len(specs) != 34 {
-		t.Fatalf("Chatwork specs = %d, want fixed 34-task contract", len(specs))
+	if len(specs) != 36 {
+		t.Fatalf("Chatwork specs = %d, want fixed 36-task contract", len(specs))
 	}
 	seen := make(map[chatwork.Task]struct{}, len(specs))
 	for _, spec := range specs {
@@ -1018,7 +1186,7 @@ func TestBuildChatworkRequestCoversEveryCatalogTask(t *testing.T) {
 		if spec.chatwork.Task == chatwork.TaskInviteLinkUpdate {
 			args = append(args, "--regenerate-code")
 		}
-		if spec.chatwork.Task == chatwork.TaskMessagesSend || spec.chatwork.Task == chatwork.TaskMessagesUpdate {
+		if spec.chatwork.Task == chatwork.TaskMessagesSend || spec.chatwork.Task == chatwork.TaskMessagesReconcileSend || spec.chatwork.Task == chatwork.TaskMessagesUpdate {
 			args = append(args, "--body", "synthetic message")
 		}
 		parsed, err := parseChatworkArguments(spec, args)
@@ -1158,14 +1326,67 @@ func TestBuildChatworkRequestMapsMessageBodyFileWithoutReadingIt(t *testing.T) {
 	}
 }
 
+func TestRunChatworkPreservesTimeoutCancellationAndUnavailableRecovery(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		fault         *fault.Error
+		wantExit      int
+		wantCode      string
+		wantMessage   string
+		forbidMessage string
+	}{
+		{
+			name:     "read deadline",
+			fault:    fault.New(fault.KindCanceled, "operation_canceled", "Chatwork の読み取りが時間内に完了しませんでした", true),
+			wantExit: ExitCanceled, wantCode: "operation_canceled", wantMessage: "時間内", forbidMessage: "呼び出し元がキャンセル",
+		},
+		{
+			name:     "caller cancellation",
+			fault:    fault.New(fault.KindCanceled, "operation_canceled", "実行中に Chatwork タスクがキャンセルされました", true),
+			wantExit: ExitCanceled, wantCode: "operation_canceled", wantMessage: "キャンセル", forbidMessage: "時間内",
+		},
+		{
+			name:     "ordinary IO failure",
+			fault:    fault.New(fault.KindUnavailable, "chatwork_unavailable", "Chatwork は一時的に利用できません", true),
+			wantExit: ExitUnavailable, wantCode: "chatwork_unavailable", wantMessage: "利用できません", forbidMessage: "時間内",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			spec := chatworkRuntimeSpec(t, "rooms show")
+			port := &chatworkRuntimePort{result: func(chatwork.Request) (chatwork.Result, error) {
+				return chatwork.Result{}, test.fault
+			}}
+			cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+			code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7"})
+			if code != test.wantExit || stdout.Len() != 0 || authenticator.calls != 1 || port.calls != 1 {
+				t.Fatalf("runChatwork() = code %d stdout=%q auth=%d port=%d, want exit %d and one read", code, stdout.String(), authenticator.calls, port.calls, test.wantExit)
+			}
+			if !strings.Contains(stderr.String(), "code: "+test.wantCode) || !strings.Contains(stderr.String(), test.wantMessage) ||
+				strings.Contains(stderr.String(), test.forbidMessage) {
+				t.Fatalf("stderr = %s, want code %s and message containing %q without %q", stderr.String(), test.wantCode, test.wantMessage, test.forbidMessage)
+			}
+		})
+	}
+}
+
 func TestRunChatworkConfirmationFailsBeforeAuthentication(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "rooms delete")
-	for _, args := range [][]string{{"--room", "7"}, {"--room", "7", "--confirm=access-change"}} {
+	const privateCanary = "private-confirmation-canary"
+	for _, args := range [][]string{
+		{"--room", "7"},
+		{"--room", "7", "--confirm=access-change"},
+		{"--room", "7", "--confirm=" + privateCanary},
+	} {
 		port := &chatworkRuntimePort{}
 		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
 		code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), args)
-		if code != ExitRejected || !strings.Contains(stderr.String(), "code: mutation_rejected") {
+		if code != ExitRejected || !strings.Contains(stderr.String(), "kind: rejected") ||
+			!strings.Contains(stderr.String(), "code: mutation_rejected") || !strings.Contains(stderr.String(), "retryable: false") ||
+			!strings.Contains(stderr.String(), "--confirm=destructive") || !strings.Contains(stderr.String(), "next_action: cwk help rooms delete") {
 			t.Errorf("args %v: code = %d, stderr = %s", args, code, stderr.String())
+		}
+		if strings.Contains(stderr.String(), privateCanary) {
+			t.Errorf("args %v: stderr reflected user confirmation value: %s", args, stderr.String())
 		}
 		if authenticator.calls != 0 || port.calls != 0 {
 			t.Errorf("args %v: calls = auth %d, port %d; want zero", args, authenticator.calls, port.calls)
@@ -1178,12 +1399,18 @@ func TestContactRequestAcceptanceRequiresAccessChangeConfirmationBeforeAuthentic
 	for _, args := range [][]string{
 		{"--request", "7"},
 		{"--request", "7", "--confirm=destructive"},
+		{"--request", "7", "--confirm=private-access-confirmation-canary"},
 	} {
 		port := &chatworkRuntimePort{}
 		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
 		code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), args)
-		if code != ExitRejected || !strings.Contains(stderr.String(), "code: mutation_rejected") {
+		if code != ExitRejected || !strings.Contains(stderr.String(), "kind: rejected") ||
+			!strings.Contains(stderr.String(), "code: mutation_rejected") || !strings.Contains(stderr.String(), "retryable: false") ||
+			!strings.Contains(stderr.String(), "--confirm=access-change") || !strings.Contains(stderr.String(), "next_action: cwk help contact-requests accept") {
 			t.Errorf("args %v: code = %d, stderr = %s", args, code, stderr.String())
+		}
+		if strings.Contains(stderr.String(), "private-access-confirmation-canary") {
+			t.Errorf("args %v: stderr reflected user confirmation value: %s", args, stderr.String())
 		}
 		if authenticator.calls != 0 || port.calls != 0 {
 			t.Errorf("args %v: calls = auth %d, port %d; want zero", args, authenticator.calls, port.calls)
@@ -1332,6 +1559,33 @@ func TestRunChatworkMutationPreservesUnclassifiedOutcome(t *testing.T) {
 	}
 }
 
+func TestRunChatworkUnknownTransportOutcomeUsesExactReadOnlyRecovery(t *testing.T) {
+	const privateCanary = "private transport cause canary"
+	spec := chatworkRuntimeSpec(t, "messages send")
+	port := &chatworkRuntimePort{result: func(chatwork.Request) (chatwork.Result, error) {
+		return chatwork.Result{}, fault.Wrap(
+			fault.KindContract,
+			"chatwork_mutation_outcome_unknown",
+			"Chatwork が変更結果を確認できませんでした。",
+			false,
+			errors.New(privateCanary),
+		)
+	}}
+	cli, _, _, stderr := chatworkRuntimeCLI(t, spec, port)
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--body", "hello"})
+	if code != ExitContract || !strings.Contains(stderr.String(), "code: chatwork_mutation_outcome_unknown") ||
+		!strings.Contains(stderr.String(), "retryable: false") ||
+		!strings.Contains(stderr.String(), "next_action: cwk messages reconcile-send") {
+		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
+	}
+	if port.calls != 1 {
+		t.Fatalf("port calls = %d, want exactly one dispatch", port.calls)
+	}
+	if strings.Contains(stderr.String(), privateCanary) || strings.Contains(stderr.String(), "messages send") {
+		t.Fatalf("raw cause or mutation replay guidance leaked: %s", stderr.String())
+	}
+}
+
 func TestRunChatworkPreservesCancellationBeforeMutationPortStarts(t *testing.T) {
 	spec := chatworkRuntimeSpec(t, "rooms create")
 	port := &chatworkRuntimePort{}
@@ -1385,7 +1639,9 @@ func TestRunChatworkRejectsWrongResultVariantAfterConfirmedMutation(t *testing.T
 	}}
 	cli, _, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
 	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{"--room", "7", "--body", "hello"})
-	if code != ExitContract || !strings.Contains(stderr.String(), "code: chatwork_result_invalid") {
+	if code != ExitContract || !strings.Contains(stderr.String(), "code: unclassified_mutation_outcome") ||
+		!strings.Contains(stderr.String(), "retryable: false") ||
+		!strings.Contains(stderr.String(), "next_action: cwk messages reconcile-send") {
 		t.Fatalf("code = %d, stderr = %s", code, stderr.String())
 	}
 	if port.calls != 1 {
@@ -1549,5 +1805,123 @@ func chatworkRuntimeInputValue(input CommandInput) string {
 		return "fixture.bin"
 	default:
 		return "synthetic"
+	}
+}
+
+func TestRunMessagesShowAroundSharesRecentReadAndDeduplicatesReplyChild(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages show")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	account := chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1"), Name: "Aki"}
+	anchorRef := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10")
+	parentRef := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "9")
+	anchor := chatwork.Message{
+		Ref: anchorRef, Room: room, Sender: account, Body: "exact anchor", SendTime: 200,
+		Replies: []chatwork.Relation{{Kind: "reply", Target: parentRef, ExternalID: room.Value}},
+	}
+	parent := chatwork.Message{Ref: parentRef, Room: room, Sender: account, Body: "parent before", SendTime: 100}
+	child := chatwork.Message{
+		Ref: chatworkRuntimeRef(t, chatwork.ReferenceMessage, "11"), Room: room, Sender: account,
+		Body: "[rp rid=7 mid=10] untrusted body", SendTime: 300,
+		Replies: []chatwork.Relation{{Kind: "reply", Target: anchorRef, ExternalID: room.Value}},
+	}
+	anchorCopy := anchor
+	anchorCopy.Body = "stale recent copy"
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.MessageAround != nil || !reflect.DeepEqual(request.MessageFilter, chatwork.MessageFilter{}) || request.MessageRelationFetchLimit != 0 {
+			t.Fatalf("application context leaked to provider: %+v", request)
+		}
+		if request.Task == chatwork.TaskMessagesShow {
+			if request.Message != anchorRef {
+				t.Fatalf("exact request = %+v", request)
+			}
+			return chatwork.Result{Task: request.Task, Coverage: chatwork.Coverage{Kind: "single_operation", Complete: true}, Messages: []chatwork.Message{anchor}}, nil
+		}
+		if request.Task != chatwork.TaskMessagesList || !request.ForceRecent || request.Room != room {
+			t.Fatalf("recent request = %+v", request)
+		}
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: room,
+			Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{parent, anchorCopy, child},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", room.Value, "--message", anchorRef.Value, "--context", "replies", "--around", "1", "--resolve-relations", "0",
+	})
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 2 || port.requests[0].Task != chatwork.TaskMessagesShow || port.requests[1].Task != chatwork.TaskMessagesList {
+		t.Fatalf("auth/provider calls=%d/%d requests=%+v", authenticator.calls, port.calls, port.requests)
+	}
+	if !strings.Contains(stdout.String(), "message message-ref=10") || !strings.Contains(stdout.String(), "body=untrusted:\"exact anchor\"") ||
+		strings.Contains(stdout.String(), "stale recent copy") {
+		t.Fatalf("exact read did not own the anchor:\n%s", stdout.String())
+	}
+	for _, want := range []string{
+		"around-context anchor-ref=10 anchor-state=in-window anchor-source-sequence=#2 requested=1 actual-before=1 actual-after=1 before-sequences=#1 after-sequences=#3 source-count=3 source-limit=100 complete=false access-limitation=none",
+		"around-before source-sequence=#1 message-ref=9",
+		"reply-child around-position=after source-sequence=#3 message-ref=11",
+		"reply{state=resolved,target-ref=9}",
+		"reply{state=resolved,target-ref=10}",
+	} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("around output lacks %q:\n%s", want, stdout.String())
+		}
+	}
+	if count := strings.Count(stdout.String(), "message-ref=11"); count != 1 {
+		t.Fatalf("overlapping child/around message rendered %d times:\n%s", count, stdout.String())
+	}
+	if strings.Contains(stdout.String(), "relations=[reply{state=unresolved,target-ref=10}]") {
+		t.Fatalf("raw body created a relation:\n%s", stdout.String())
+	}
+}
+
+func TestRunMessagesShowAroundZeroStillReadsAndReportsTheRecentWindow(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages show")
+	room := chatworkRuntimeRef(t, chatwork.ReferenceRoom, "7")
+	anchorRef := chatworkRuntimeRef(t, chatwork.ReferenceMessage, "10")
+	anchor := chatwork.Message{Ref: anchorRef, Room: room, Sender: chatwork.Account{Ref: chatworkRuntimeRef(t, chatwork.ReferenceAccount, "1")}, Body: "anchor"}
+	port := &chatworkRuntimePort{result: func(request chatwork.Request) (chatwork.Result, error) {
+		if request.Task == chatwork.TaskMessagesShow {
+			return chatwork.Result{Task: request.Task, Coverage: chatwork.Coverage{Kind: "single_operation", Complete: true}, Messages: []chatwork.Message{anchor}}, nil
+		}
+		return chatwork.Result{
+			Task: request.Task, MessageRoom: room, Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false},
+			Messages: []chatwork.Message{anchor},
+		}, nil
+	}}
+	cli, authenticator, stdout, stderr := chatworkRuntimeCLI(t, spec, port)
+	code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), []string{
+		"--room", room.Value, "--message", anchorRef.Value, "--around", "0",
+	})
+	if code != ExitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr.String())
+	}
+	if authenticator.calls != 1 || port.calls != 2 || strings.Contains(stdout.String(), "reply-context") ||
+		!strings.Contains(stdout.String(), "around-context anchor-ref=10 anchor-state=in-window anchor-source-sequence=#1 requested=0 actual-before=0 actual-after=0 before-sequences=[] after-sequences=[] source-count=1 source-limit=100 complete=false access-limitation=none") {
+		t.Fatalf("zero around behavior calls/output=%d/%d:\n%s", authenticator.calls, port.calls, stdout.String())
+	}
+}
+
+func TestRunMessagesShowAroundRejectsInvalidValuesBeforeAuthentication(t *testing.T) {
+	spec := chatworkRuntimeSpec(t, "messages show")
+	for _, args := range [][]string{
+		{"--room", "7", "--message", "10", "--around"},
+		{"--room", "7", "--message", "10", "--around", "many"},
+		{"--room", "7", "--message", "10", "--around", "-1"},
+		{"--room", "7", "--message", "10", "--around", "101"},
+		{"--room", "7", "--message", "10", "--around", "0", "--around", "1"},
+	} {
+		port := &chatworkRuntimePort{}
+		cli, authenticator, _, stderr := chatworkRuntimeCLI(t, spec, port)
+		code := runChatwork(chatworkRuntimeContext(spec), cli, spec, chatworkRuntimeIntent(spec), args)
+		if code != ExitUsage || !strings.Contains(stderr.String(), "code: invalid_arguments") {
+			t.Errorf("args %v: code=%d stderr=%s", args, code, stderr.String())
+		}
+		if authenticator.calls != 0 || port.calls != 0 {
+			t.Errorf("args %v crossed auth/provider: %d/%d", args, authenticator.calls, port.calls)
+		}
 	}
 }

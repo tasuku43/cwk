@@ -74,6 +74,45 @@ func TestStaticCommandAliasesRouteToCanonicalHelpWithoutAuthentication(t *testin
 	}
 }
 
+func TestBareCatalogNamespacesRouteToNamespaceHelpWithoutAuthentication(t *testing.T) {
+	namespaces := rootHelpNamespaces(DefaultCatalog())
+	for _, namespace := range namespaces {
+		t.Run(namespace, func(t *testing.T) {
+			var directOut, directErr bytes.Buffer
+			direct := newCLI(strings.NewReader(""), &directOut, &directErr, DefaultCatalog(), passingInspector("unused"))
+			factoryCalls := 0
+			direct.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+				factoryCalls++
+				return nil, nil, errors.New("namespace help must not initialize Chatwork")
+			}
+			if code := runCLI(direct, []string{namespace}); code != ExitOK {
+				t.Fatalf("bare namespace exit=%d stdout=%q stderr=%q", code, directOut.String(), directErr.String())
+			}
+
+			var helpOut, helpErr bytes.Buffer
+			explicit := newCLI(strings.NewReader(""), &helpOut, &helpErr, DefaultCatalog(), passingInspector("unused"))
+			if code := runCLI(explicit, []string{"help", namespace}); code != ExitOK {
+				t.Fatalf("explicit namespace help exit=%d stderr=%q", code, helpErr.String())
+			}
+			if directOut.String() != helpOut.String() || directErr.String() != helpErr.String() {
+				t.Fatalf("bare=%q/%q explicit=%q/%q", directOut.String(), directErr.String(), helpOut.String(), helpErr.String())
+			}
+			if factoryCalls != 0 {
+				t.Fatalf("bare namespace help initialized Chatwork %d times", factoryCalls)
+			}
+		})
+	}
+}
+
+func rootHelpNamespaces(catalog Catalog) []string {
+	_, namespaces := rootTextHelpEntries(catalog.Commands())
+	result := make([]string, len(namespaces))
+	for index, namespace := range namespaces {
+		result[index] = namespace.Name
+	}
+	return result
+}
+
 func TestHelpSelectorsNormalizeDeclaredCommandAliasesAndIgnoreRedundantHelpFlags(t *testing.T) {
 	canonicalOut, canonicalErr := &bytes.Buffer{}, &bytes.Buffer{}
 	canonical := newCLI(strings.NewReader(""), canonicalOut, canonicalErr, DefaultCatalog(), passingInspector("unused"))
@@ -257,6 +296,7 @@ func TestStaticHelpUsesFullCatalogWhenCommandSelectionCannotBeLoaded(t *testing.
 			}{
 				{args: []string{"--help"}, want: "Chatwork CLI\n", wantNotice: true},
 				{args: []string{"help", "messages"}, want: "名前空間: messages", wantNotice: true},
+				{args: []string{"messages"}, want: "名前空間: messages", wantNotice: true},
 				{args: []string{"help", "messages.list"}, want: "cwk messages list"},
 				{args: []string{"files", "list", "--room", "123", "--help"}, want: "cwk files list"},
 			}
@@ -272,6 +312,10 @@ func TestStaticHelpUsesFullCatalogWhenCommandSelectionCannotBeLoaded(t *testing.
 				hasNotice := strings.Contains(stdout.String(), "静的カタログ") && strings.Contains(stdout.String(), "cwk doctor")
 				if hasNotice != helpCase.wantNotice {
 					t.Errorf("help %v static notice=%t want=%t output=%q", helpCase.args, hasNotice, helpCase.wantNotice, stdout.String())
+				}
+				if len(helpCase.args) == 1 && helpCase.args[0] == "--help" &&
+					!strings.Contains(stdout.String(), "代替は 'cwk messages list --help' を確認してください。") {
+					t.Errorf("unsafe static root help should retain the full-catalog alternative: %q", stdout.String())
 				}
 			}
 

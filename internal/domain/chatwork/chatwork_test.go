@@ -34,15 +34,16 @@ func TestEveryTaskIsValid(t *testing.T) {
 		TaskAccountShow, TaskAccountStatus, TaskPersonalTasksList, TaskContactsList,
 		TaskRoomsList, TaskRoomsCreate, TaskRoomsShow, TaskRoomsUpdate, TaskRoomsLeave,
 		TaskRoomsDelete, TaskMembersFind, TaskMembersList, TaskMembersReplace, TaskMessagesList,
-		TaskMessagesSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
+		TaskMessagesResources,
+		TaskMessagesSend, TaskMessagesReconcileSend, TaskMessagesMarkRead, TaskMessagesMarkUnread, TaskMessagesShow,
 		TaskMessagesUpdate, TaskMessagesDelete, TaskRoomTasksList, TaskRoomTasksCreate,
 		TaskRoomTasksShow, TaskRoomTasksSetStatus, TaskFilesList, TaskFilesUpload,
 		TaskFilesShow, TaskInviteLinkShow, TaskInviteLinkCreate, TaskInviteLinkUpdate,
 		TaskInviteLinkDelete, TaskContactRequestsList, TaskContactRequestsAccept,
 		TaskContactRequestsReject,
 	}
-	if len(tasks) != 34 {
-		t.Fatalf("task count = %d, want 34", len(tasks))
+	if len(tasks) != 36 {
+		t.Fatalf("task count = %d, want 36", len(tasks))
 	}
 	seen := make(map[Task]struct{}, len(tasks))
 	for _, task := range tasks {
@@ -524,6 +525,22 @@ func TestRequestValidatesMessageFilter(t *testing.T) {
 	if err := valid.Validate(); err != nil {
 		t.Fatalf("valid reply-context filter failed: %v", err)
 	}
+	contains := Request{Task: TaskMessagesList, MessageFilter: MessageFilter{
+		Contains: []string{"Exact", "語", "Exact"}, Context: MessageContextNone,
+	}}
+	if err := contains.Validate(); err != nil {
+		t.Fatalf("valid duplicate and Unicode body terms failed: %v", err)
+	}
+	maxTerm := strings.Repeat("a", MaxMessageContainsTermBytes)
+	if err := (Request{Task: TaskMessagesList, MessageFilter: MessageFilter{
+		Contains: []string{maxTerm}, Context: MessageContextNone,
+	}}).Validate(); err != nil {
+		t.Fatalf("exact 1,024-byte term failed: %v", err)
+	}
+	tooManyTerms := make([]string, MaxMessageContainsTerms+1)
+	for index := range tooManyTerms {
+		tooManyTerms[index] = "x"
+	}
 
 	hundred := make([]Reference, 100)
 	for index := range hundred {
@@ -536,8 +553,13 @@ func TestRequestValidatesMessageFilter(t *testing.T) {
 	}
 
 	tests := map[string]MessageFilter{
-		"context without sender": {Context: MessageContextNone},
-		"sender without context": {Senders: []Reference{sender}},
+		"context without sender":     {Context: MessageContextNone},
+		"body term without context":  {Contains: []string{"literal"}},
+		"empty body term":            {Contains: []string{""}, Context: MessageContextNone},
+		"invalid UTF-8 body term":    {Contains: []string{string([]byte{0xff})}, Context: MessageContextNone},
+		"body term above byte limit": {Contains: []string{strings.Repeat("語", MaxMessageContainsTermBytes/len("語")+1)}, Context: MessageContextNone},
+		"too many body terms":        {Contains: tooManyTerms, Context: MessageContextNone},
+		"sender without context":     {Senders: []Reference{sender}},
 		"unknown context": {
 			Senders: []Reference{sender}, Context: MessageContext("thread"),
 		},
@@ -569,6 +591,74 @@ func TestRequestValidatesMessageFilter(t *testing.T) {
 	}
 	if err := (Request{Task: TaskRoomsList, MessageFilter: MessageFilter{Senders: []Reference{}}}).Validate(); err != nil {
 		t.Fatalf("semantic zero filter on another task failed: %v", err)
+	}
+	if err := (Request{Task: TaskMessagesShow, MessageFilter: MessageFilter{
+		Contains: []string{"literal"}, Context: MessageContextNone,
+	}}).Validate(); err == nil {
+		t.Fatal("messages.show accepted a list-only body-term filter")
+	}
+}
+
+func TestMessageSendValidatesTypedRecipientsAndReplyReference(t *testing.T) {
+	room := Reference{Kind: ReferenceRoom, Value: "42"}
+	message := Reference{Kind: ReferenceMessage, Value: "101"}
+	account := Reference{Kind: ReferenceAccount, Value: "7"}
+	valid := Request{Task: TaskMessagesSend, Room: room, Body: "body"}
+
+	recipients := make([]Reference, MaxMessageRecipients)
+	for index := range recipients {
+		recipients[index] = Reference{Kind: ReferenceAccount, Value: fmt.Sprint(index + 1)}
+	}
+	valid.MessageRecipients = recipients
+	valid.MessageReplyTarget = &MessageReplyTarget{Message: message}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("100 ordered recipients and one exact reply target failed: %v", err)
+	}
+
+	tests := map[string]func(*Request){
+		"too many recipients": func(request *Request) {
+			request.MessageRecipients = append(append([]Reference(nil), recipients...), Reference{Kind: ReferenceAccount, Value: "101"})
+		},
+		"duplicate recipients": func(request *Request) {
+			request.MessageRecipients = []Reference{account, account}
+		},
+		"wrong recipient kind": func(request *Request) {
+			request.MessageRecipients = []Reference{{Kind: ReferenceRoom, Value: "7"}}
+		},
+		"noncanonical recipient": func(request *Request) {
+			request.MessageRecipients = []Reference{{Kind: ReferenceAccount, Value: "07"}}
+		},
+		"wrong reply kind": func(request *Request) {
+			request.MessageReplyTarget = &MessageReplyTarget{Message: account}
+		},
+		"noncanonical reply": func(request *Request) {
+			request.MessageReplyTarget = &MessageReplyTarget{Message: Reference{Kind: ReferenceMessage, Value: "0101"}}
+		},
+		"partial resolved sender": func(request *Request) {
+			request.MessageReplyTarget = &MessageReplyTarget{Message: message, Sender: Reference{Kind: ReferenceAccount}}
+		},
+		"wrong resolved sender kind": func(request *Request) {
+			request.MessageReplyTarget = &MessageReplyTarget{Message: message, Sender: room}
+		},
+		"noncanonical resolved sender": func(request *Request) {
+			request.MessageReplyTarget = &MessageReplyTarget{Message: message, Sender: Reference{Kind: ReferenceAccount, Value: "07"}}
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			request := Request{Task: TaskMessagesSend, Room: room, Body: "body"}
+			mutate(&request)
+			if err := request.Validate(); err == nil {
+				t.Fatal("invalid typed message-send input passed validation")
+			}
+		})
+	}
+
+	if err := (Request{Task: TaskMessagesList, Room: room, MessageRecipients: []Reference{account}}).Validate(); err == nil {
+		t.Fatal("typed send recipient on a read task passed validation")
+	}
+	if err := (Request{Task: TaskMessagesUpdate, Room: room, Message: message, Body: "body", MessageReplyTarget: &MessageReplyTarget{Message: message}}).Validate(); err == nil {
+		t.Fatal("typed send reply target on an update task passed validation")
 	}
 }
 
@@ -671,6 +761,41 @@ func TestResultValidatesFilteredMessageSelection(t *testing.T) {
 	if err := otherTask.Validate(); err == nil {
 		t.Fatal("message selection on another result task passed")
 	}
+}
+
+func TestResultValidatesBodyTermsOnAnchorsButNotReplyContext(t *testing.T) {
+	valid := validFilteredMessageResult()
+	valid.Messages[0].Body = "prefix Needle suffix"
+	valid.Messages[1].Body = "related message without the term"
+	valid.MessageSelection.Filter.Contains = []string{"Needle", "Other"}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("matching anchor with nonmatching reply context failed: %v", err)
+	}
+
+	nonmatchingAnchor := valid
+	nonmatchingAnchor.Messages = append([]Message(nil), valid.Messages...)
+	nonmatchingAnchor.MessageSelection = cloneTestMessageSelection(*valid.MessageSelection)
+	nonmatchingAnchor.Messages[0].Body = "needle"
+	if err := nonmatchingAnchor.Validate(); err == nil {
+		t.Fatal("case-mismatching selected anchor passed the body-term result invariant")
+	}
+
+	request := Request{Task: TaskMessagesList, Room: valid.MessageRoom, MessageFilter: valid.MessageSelection.Filter}
+	if err := valid.ValidateFor(request); err != nil {
+		t.Fatalf("exact body-term request binding failed: %v", err)
+	}
+	request.MessageFilter.Contains = []string{"Other", "Needle"}
+	if err := valid.ValidateFor(request); err == nil {
+		t.Fatal("selection binding ignored exact body-term order")
+	}
+}
+
+func cloneTestMessageSelection(selection MessageSelection) *MessageSelection {
+	selection.Filter.Senders = append([]Reference(nil), selection.Filter.Senders...)
+	selection.Filter.Contains = append([]string(nil), selection.Filter.Contains...)
+	selection.SourceSequences = append([]int(nil), selection.SourceSequences...)
+	selection.AnchorSequences = append([]int(nil), selection.AnchorSequences...)
+	return &selection
 }
 
 func TestFilteredMessageSelectionBindsExactlyToRequest(t *testing.T) {

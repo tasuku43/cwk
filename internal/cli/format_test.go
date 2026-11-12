@@ -31,3 +31,14 @@ func TestExternalTextProjectionEscapesStructuralRunesAndPreservesVisibleData(t *
 		t.Fatal("actual newline and literal \\n collapsed to the same visible projection")
 	}
 }
+
+func TestExternalTextProjectionMakesPrivateUseAndUnassignedRunesVisible(t *testing.T) {
+	const input = "private:\uE000 unassigned:\u0378"
+	const want = `private:\uE000 unassigned:\u0378`
+	if got := safeExternalText(input); got != want {
+		t.Fatalf("safeExternalText() = %q, want %q", got, want)
+	}
+	if got := escapeTSVCell(input); got != want {
+		t.Fatalf("escapeTSVCell() = %q, want %q", got, want)
+	}
+}

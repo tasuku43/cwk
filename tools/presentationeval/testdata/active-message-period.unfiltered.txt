@@ -1,6 +1,6 @@
-messages room-ref=3701 count=100 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0 oldest-reachable-message-ref=1301 oldest-reachable-send-time=1784205000
+messages room-ref=3701 count=100 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0 oldest-reachable-message-ref=1301 oldest-reachable-send-time=1784205000
 external-text=untrusted escaped
-schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"
+schema: #sequence message-ref actor sent [reply] [to] [quote] [quote-candidate] [relation-state] "body"
 actors
   a1 account-ref=2701 name="Aki"
   a2 account-ref=2702 name="Beni"

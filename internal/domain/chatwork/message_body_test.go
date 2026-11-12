@@ -37,7 +37,7 @@ func TestValidateMessageBodyRejectsInvalidContentWithoutEchoingIt(t *testing.T) 
 }
 
 func TestMessageMutationRequestRequiresExactlyOneBodySource(t *testing.T) {
-	for _, task := range []Task{TaskMessagesSend, TaskMessagesUpdate} {
+	for _, task := range []Task{TaskMessagesSend, TaskMessagesReconcileSend, TaskMessagesUpdate} {
 		for name, request := range map[string]Request{
 			"literal": {Task: task, Body: "message"},
 			"file":    {Task: task, BodyFile: "message.txt"},

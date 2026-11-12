@@ -67,21 +67,48 @@ func TestCatalogClonesCommandAliases(t *testing.T) {
 
 func TestCatalogRejectsExactHelpThatCannotFitThePublicByteBudget(t *testing.T) {
 	command := utilitySpec("oversized")
-	for index := 0; index < 80; index++ {
-		command.HelpConstraints = append(command.HelpConstraints, "この合成併用制約は公開ヘルプの固定部分を意図的に増やします。")
-	}
+	command.Args = "[--detail <text>]"
+	command.Agent.Inputs = []CommandInput{{
+		Name: "--detail", Source: InputSourceFlag, Required: false,
+		Description: strings.Repeat("x", maxExactHelpBytes), AllowedValues: []string{},
+	}}
 	if err := NewCatalog(command).Validate(); err == nil || !strings.Contains(err.Error(), "exact help exceeds") {
-		t.Fatalf("oversized exact help validation error = %v", err)
+		t.Fatalf("oversized complete-description validation error = %v", err)
+	}
+	if err := NewCatalog(command).validateActiveView(NewCatalog(command)); err == nil || !strings.Contains(err.Error(), "active command") || !strings.Contains(err.Error(), "exact help exceeds") {
+		t.Fatalf("active oversized complete-description validation error = %v", err)
 	}
 }
 
-func TestActiveViewRejectsARecipeProjectionThatExceedsTheHelpBudget(t *testing.T) {
+func TestOutputReferenceArraysDeclareProducedKinds(t *testing.T) {
+	spec := discoverSpec("items find", "item")
+	spec.Agent.Output.Fields[0].Type = OutputFieldTypeArray
+	consumer := actSpec("items inspect", "item", "--item")
+	if err := NewCatalog(spec, consumer).Validate(); err != nil {
+		t.Fatalf("typed reference array was rejected: %v", err)
+	}
+	if got := spec.ProducedRefs(); !reflect.DeepEqual(got, []ProducedRef{{Kind: "item", Field: "id"}}) {
+		t.Fatalf("produced reference arrays = %+v", got)
+	}
+
+	spec.Agent.Output.Fields[0].Type = OutputFieldTypeObject
+	if err := NewCatalog(spec).Validate(); err == nil || !strings.Contains(err.Error(), "string or array type") {
+		t.Fatalf("non-string/non-array reference field error = %v", err)
+	}
+}
+
+func TestActiveViewDropsOptionalRecipeThatExceedsTheHelpBudget(t *testing.T) {
 	first := utilitySpec("helpers first")
 	second := utilitySpec("helpers second")
 	target := utilitySpec("items inspect")
 	first.Configurable = true
 	second.Configurable = true
 	target.Configurable = true
+	target.Args = "[--detail <text>]"
+	target.Agent.Inputs = []CommandInput{{
+		Name: "--detail", Source: InputSourceFlag, Required: false,
+		Description: strings.Repeat("d", 1500), AllowedValues: []string{},
+	}}
 	target.HumanRecipes = []HumanHelpRecipe{
 		{Title: "first", Steps: []HumanHelpRecipeStep{{Path: first.Path}, {Path: target.Path}}},
 		{Title: "second", Steps: []HumanHelpRecipeStep{{Path: second.Path}, {Path: target.Path}}},
@@ -91,8 +118,17 @@ func TestActiveViewRejectsARecipeProjectionThatExceedsTheHelpBudget(t *testing.T
 	if err := catalog.Validate(); err != nil {
 		t.Fatalf("full catalog should project only its first two bounded recipes: %v", err)
 	}
-	if _, _, err := catalog.ActiveView([]string{target.Path}); err == nil || !strings.Contains(err.Error(), "exact help exceeds") {
-		t.Fatalf("active oversized recipe validation error = %v", err)
+	view, _, err := catalog.ActiveView([]string{target.Path})
+	if err != nil {
+		t.Fatalf("active view should drop its optional oversized example: %v", err)
+	}
+	activeTarget, found := view.Lookup(target.Path)
+	if !found {
+		t.Fatal("active view lacks target command")
+	}
+	output := string(renderCommandHelp(activeTarget, view.Commands()))
+	if len(output) > maxExactHelpBytes || !helpHasCompleteInputDescription(output, target.Agent.Inputs[0]) || strings.Contains(output, "third") {
+		t.Fatalf("active help bytes=%d, incomplete description=%t, retained oversized example=%t:\n%s", len(output), !helpHasCompleteInputDescription(output, target.Agent.Inputs[0]), strings.Contains(output, "third"), output)
 	}
 }
 
@@ -255,6 +291,30 @@ func TestCatalogRejectsIncompleteDeclarations(t *testing.T) {
 		if err := catalog.Validate(); err == nil {
 			t.Errorf("invalid catalog %d passed validation", index)
 		}
+	}
+}
+
+func TestCatalogRequiresBoundedTerminalSafeRootSummaryAndKeepsSyntheticCatalogsCompatible(t *testing.T) {
+	valid := utilitySpec("synthetic command")
+	if err := NewCatalog(valid).Validate(); err != nil {
+		t.Fatalf("synthetic catalog with an English summary should remain valid: %v", err)
+	}
+
+	for name, summary := range map[string]string{
+		"missing":         "",
+		"multiline":       "最初の成果\n次の成果",
+		"terminal escape": "\x1b[31m危険な成果\x1b[0m",
+		"bidi control":    "成果\u202eの偽装",
+		"over byte bound": strings.Repeat("あ", maxRootHelpSummaryBytes/len("あ")+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			command := utilitySpec("items show")
+			command.Summary = summary
+			err := NewCatalog(command).Validate()
+			if err == nil {
+				t.Fatal("invalid root summary passed catalog validation")
+			}
+		})
 	}
 }
 
@@ -885,6 +945,53 @@ func TestMutationContractFailsClosedAndDeepCopies(t *testing.T) {
 	}
 }
 
+func TestMutationPreflightInputsRequireDistinctBoundOpaqueReferences(t *testing.T) {
+	send, ok := DefaultCatalog().Lookup("messages send")
+	if !ok {
+		t.Fatal("messages send is absent")
+	}
+	if err := validateAgentContract(send); err != nil {
+		t.Fatalf("declared send preflight references are invalid: %v", err)
+	}
+	tests := map[string]func(*CommandSpec){
+		"unknown input": func(spec *CommandSpec) {
+			spec.Agent.Mutation.PreflightInputs = []string{"--missing"}
+		},
+		"target overlap": func(spec *CommandSpec) {
+			spec.Agent.Mutation.PreflightInputs = []string{"--room"}
+		},
+		"non-reference input": func(spec *CommandSpec) {
+			spec.Agent.Mutation.PreflightInputs = []string{"--body"}
+		},
+		"duplicate input": func(spec *CommandSpec) {
+			spec.Agent.Mutation.PreflightInputs = []string{"--to", "--to"}
+		},
+		"non-CLI source": func(spec *CommandSpec) {
+			for index := range spec.Agent.Inputs {
+				if spec.Agent.Inputs[index].Name == "--reply-to" {
+					spec.Agent.Inputs[index].Source = InputSourceConfiguration
+				}
+			}
+		},
+	}
+	for name, mutate := range tests {
+		t.Run(name, func(t *testing.T) {
+			invalid := cloneCommandSpec(send)
+			mutate(&invalid)
+			if err := validateAgentContract(invalid); err == nil {
+				t.Fatal("invalid mutation preflight declaration passed validation")
+			}
+		})
+	}
+	encoded, err := json.Marshal(send.Agent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(encoded, []byte(`"preflight_inputs":["--to","--reply-to"]`)) {
+		t.Fatalf("mutation JSON lost ordered preflight roles: %s", encoded)
+	}
+}
+
 func TestMutationContractRequiresInvokerFailureSurface(t *testing.T) {
 	spec := utilitySpec("items update")
 	spec.Effect = operation.EffectWrite
@@ -1007,6 +1114,14 @@ func TestFixedTargetMutationsRequireExactUnboundTargetAndCompleteImpact(t *testi
 		},
 		"target ID binding": func(spec *CommandSpec) {
 			spec.Agent.Mutation.TargetIDInput = "--id"
+		},
+		"preflight reference inputs": func(spec *CommandSpec) {
+			spec.Args = "--reference <reference>"
+			spec.Agent.Inputs = []CommandInput{{
+				Name: "--reference", Source: InputSourceFlag, Required: true,
+				Description: "Unrelated preflight reference.", AllowedValues: []string{}, ReferenceKind: "account",
+			}}
+			spec.Agent.Mutation.PreflightInputs = []string{"--reference"}
 		},
 		"mismatched target kind": func(spec *CommandSpec) {
 			spec.Agent.Mutation.TargetKind = "other-setting"

@@ -169,9 +169,14 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 		}
 		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
 	})
-	t.Run("application symlink", func(t *testing.T) {
+	t.Run("application symlink load and save leave target unchanged", func(t *testing.T) {
 		base := t.TempDir()
 		target := t.TempDir()
+		targetConfig := filepath.Join(target, configurationFile)
+		before := []byte("{\"schema_version\":1,\"enabled_commands\":[\"rooms list\"]}\n")
+		if err := os.WriteFile(targetConfig, before, 0o600); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.Symlink(target, filepath.Join(base, applicationDirectory)); err != nil {
 			t.Fatal(err)
 		}
@@ -180,6 +185,16 @@ func TestFileStoreRejectsUnsafeFilesystemObjects(t *testing.T) {
 			t.Fatalf("Load application symlink error = %v", err)
 		}
 		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
+
+		err = NewFileStoreAt(base).Save(context.Background(), commandselection.Profile{})
+		if !errors.Is(err, ErrUnsafe) || errors.Is(err, ErrInvalid) {
+			t.Fatalf("Save application symlink error = %v", err)
+		}
+		assertSafeConfigFault(t, err, fault.KindUnavailable, "command_selection_unsafe")
+		after, readErr := os.ReadFile(targetConfig)
+		if readErr != nil || string(after) != string(before) {
+			t.Fatalf("application symlink target changed: contents=%q err=%v", after, readErr)
+		}
 	})
 	t.Run("file symlink is not replaced", func(t *testing.T) {
 		base := t.TempDir()

@@ -100,8 +100,10 @@ func PlanMessageDelivery(result chatwork.Result, outputItems int) (MessageDelive
 	if err != nil {
 		return MessageDelivery{}, fmt.Errorf("message delivery relation reset: %w", err)
 	}
+	RemoveHiddenMessageQuoteCandidateSequences(deliveredMessages)
 
 	deliveredTargets := planDeliveryRelationTargets(result, deliveredMessages)
+	RemoveHiddenMessageQuoteCandidateSequencesFromTargets(deliveredTargets, deliveredMessages)
 	markDeliveryResolvedReplies(result.MessageRoom, deliveredMessages, deliveredTargets)
 
 	startIndex := 1

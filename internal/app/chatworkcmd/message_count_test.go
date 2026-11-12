@@ -262,7 +262,7 @@ func TestExecuteRejectsProviderWindowAboveCoverageBeforeLocalCount(t *testing.T)
 	}}
 	request := chatwork.Request{
 		Task: chatwork.TaskMessagesList, Room: room,
-		MessageFilter: chatwork.MessageFilter{Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1},
+		MessageFilter: chatwork.MessageFilter{Contains: []string{"not present"}, Context: chatwork.MessageContextNone, StartIndex: 1, Count: 1},
 	}
 
 	result, err := New(port).Execute(context.Background(), testBinding(t), request)

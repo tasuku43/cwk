@@ -3,8 +3,11 @@ package chatworkcmd
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/cwk/internal/domain/authn"
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
@@ -406,5 +409,72 @@ func TestExecuteSuppressesResultWhenPortIgnoresCancellation(t *testing.T) {
 	result, err := New(port).Execute(ctx, testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList})
 	if err == nil || result.Task != "" || port.calls != 1 {
 		t.Fatalf("result = %+v, err = %v, calls = %d", result, err, port.calls)
+	}
+}
+
+func TestReadDeadlineKeepsCancellationContractWithTimeoutMessage(t *testing.T) {
+	deadline, cancelDeadline := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelDeadline()
+	port := &fakePort{}
+	_, err := New(port).Execute(deadline, testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList})
+	assertChatworkReadFault(t, err, fault.KindCanceled, "operation_canceled", true)
+	if !strings.Contains(err.Error(), "時間内") || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("deadline error = %v, want safe timeout message without changing public cancellation code/cause", err)
+	}
+	if port.calls != 0 {
+		t.Fatalf("read deadline port calls = %d, want zero before port", port.calls)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = New(&fakePort{}).Execute(canceled, testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList})
+	assertChatworkReadFault(t, err, fault.KindCanceled, "operation_canceled", true)
+	if strings.Contains(err.Error(), "時間内") {
+		t.Fatalf("caller cancellation was presented as timeout: %v", err)
+	}
+}
+
+func TestReadPortDeadlineSentinelIsUnavailable(t *testing.T) {
+	_, err := New(&fakePort{err: fmt.Errorf("wrapped deadline: %w", context.DeadlineExceeded)}).Execute(
+		context.Background(), testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList},
+	)
+	assertChatworkReadFault(t, err, fault.KindCanceled, "operation_canceled", true)
+	if !strings.Contains(err.Error(), "時間内") || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wrapped deadline error = %v, want timeout wording without cause", err)
+	}
+
+	_, err = New(&fakePort{err: context.Canceled}).Execute(
+		context.Background(), testBinding(t), chatwork.Request{Task: chatwork.TaskRoomsList},
+	)
+	assertChatworkReadFault(t, err, fault.KindCanceled, "operation_canceled", true)
+	if strings.Contains(err.Error(), "時間内") {
+		t.Fatalf("caller cancellation was presented as timeout: %v", err)
+	}
+}
+
+func assertChatworkReadFault(t *testing.T, err error, kind fault.Kind, code string, retryable bool) {
+	t.Helper()
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Kind != kind || structured.Code != code || structured.Retryable != retryable {
+		t.Fatalf("read error = %#v, want kind=%s code=%s retryable=%t", err, kind, code, retryable)
+	}
+}
+
+func TestExecutePassesCanceledMutationToInfrastructurePhaseClassifier(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	port := &fakePort{err: fault.New(
+		fault.KindCanceled,
+		"chatwork_mutation_not_dispatched",
+		"キャンセルされたため、変更要求は Chatwork への送信前に停止しました",
+		true,
+	)}
+	room := relationshipReference(t, chatwork.ReferenceRoom, "42")
+	request := chatwork.Request{Task: chatwork.TaskMessagesSend, Room: room, Body: "message"}
+	_, err := New(port).Execute(ctx, testBinding(t), request)
+	var structured *fault.Error
+	if !errors.As(err, &structured) || structured.Code != "chatwork_mutation_not_dispatched" ||
+		!structured.Retryable || port.calls != 1 {
+		t.Fatalf("error = %#v, calls = %d; want infra classification after exactly one port call", err, port.calls)
 	}
 }

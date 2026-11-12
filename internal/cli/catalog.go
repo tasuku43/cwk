@@ -218,11 +218,12 @@ type CommandError struct {
 // MutationContract connects a mutating command's public inputs to the target
 // and generic impact facts consumed by the project-specific policy gate.
 type MutationContract struct {
-	TargetKind    string           `json:"target_kind"`
-	TargetInputs  []string         `json:"target_inputs"`
-	ParentInput   string           `json:"parent_input,omitempty"`
-	TargetIDInput string           `json:"target_id_input,omitempty"`
-	Impact        operation.Impact `json:"impact"`
+	TargetKind      string           `json:"target_kind"`
+	TargetInputs    []string         `json:"target_inputs"`
+	ParentInput     string           `json:"parent_input,omitempty"`
+	TargetIDInput   string           `json:"target_id_input,omitempty"`
+	PreflightInputs []string         `json:"preflight_inputs,omitempty"`
+	Impact          operation.Impact `json:"impact"`
 }
 
 // FixedTargetScopeToolLocal is the only supported ownership scope for a fixed
@@ -249,15 +250,16 @@ func (m MutationContract) MarshalJSON() ([]byte, error) {
 		Destructive  string `json:"destructive"`
 	}
 	type mutationDocument struct {
-		TargetKind    string         `json:"target_kind"`
-		TargetInputs  []string       `json:"target_inputs"`
-		ParentInput   string         `json:"parent_input,omitempty"`
-		TargetIDInput string         `json:"target_id_input,omitempty"`
-		Impact        impactDocument `json:"impact"`
+		TargetKind      string         `json:"target_kind"`
+		TargetInputs    []string       `json:"target_inputs"`
+		ParentInput     string         `json:"parent_input,omitempty"`
+		TargetIDInput   string         `json:"target_id_input,omitempty"`
+		PreflightInputs []string       `json:"preflight_inputs,omitempty"`
+		Impact          impactDocument `json:"impact"`
 	}
 	return json.Marshal(mutationDocument{
 		TargetKind: m.TargetKind, TargetInputs: m.TargetInputs,
-		ParentInput: m.ParentInput, TargetIDInput: m.TargetIDInput,
+		ParentInput: m.ParentInput, TargetIDInput: m.TargetIDInput, PreflightInputs: m.PreflightInputs,
 		Impact: impactDocument{
 			Cardinality: m.Impact.Cardinality.String(), Notification: m.Impact.Notification.String(),
 			AccessChange: m.Impact.AccessChange.String(), Destructive: m.Impact.Destructive.String(),
@@ -459,6 +461,7 @@ func DefaultCatalog() Catalog {
 	}
 	commands = append(commands, configCommandSpecs()...)
 	commands = append(commands, chatworkCommandSpecs()...)
+	commands = append(commands, messageLinkCommandSpec())
 	return NewCatalog(commands...)
 }
 
@@ -501,6 +504,9 @@ func (c Catalog) Validate() error {
 		}
 		if err := validateContractText("command summary", command.Summary); err != nil {
 			return fmt.Errorf("catalog command %q has an invalid summary", command.Path)
+		}
+		if len(command.Summary) > maxRootHelpSummaryBytes {
+			return fmt.Errorf("catalog command %q root help summary exceeds %d encoded bytes", command.Path, maxRootHelpSummaryBytes)
 		}
 		if !utf8.ValidString(command.Args) || strings.TrimSpace(command.Args) != command.Args ||
 			strings.IndexFunc(command.Args, isUnsafeContractRune) >= 0 {
@@ -868,8 +874,8 @@ func validateAgentContract(command CommandSpec) error {
 			if err := validateReferenceName(field.ReferenceKind); err != nil {
 				return fmt.Errorf("agent output field %q reference kind: %w", field.Name, err)
 			}
-			if field.Type != OutputFieldTypeString {
-				return fmt.Errorf("agent output reference field %q must have string type", field.Name)
+			if field.Type != OutputFieldTypeString && field.Type != OutputFieldTypeArray {
+				return fmt.Errorf("agent output reference field %q must have string or array type", field.Name)
 			}
 		}
 	}
@@ -1024,12 +1030,41 @@ func validateAgentContract(command CommandSpec) error {
 		}
 		seenTargets[name] = struct{}{}
 	}
+	seenPreflightInputs := make(map[string]struct{}, len(mutation.PreflightInputs))
+	for _, name := range mutation.PreflightInputs {
+		if _, exists := seenPreflightInputs[name]; exists {
+			return fmt.Errorf("mutation preflight input %q is declared more than once", name)
+		}
+		input, exists := inputsByName[name]
+		if !exists {
+			return fmt.Errorf("mutation preflight input %q is not a structured input", name)
+		}
+		if input.Source != InputSourceArgument && input.Source != InputSourceFlag {
+			return fmt.Errorf("mutation preflight input %q must be a command argument or flag", name)
+		}
+		if input.ReferenceKind == "" {
+			return fmt.Errorf("mutation preflight input %q must consume an opaque reference", name)
+		}
+		if err := validateReferenceName(input.ReferenceKind); err != nil {
+			return fmt.Errorf("mutation preflight input %q reference kind: %w", name, err)
+		}
+		if _, exists := seenTargets[name]; exists {
+			return fmt.Errorf("mutation preflight input %q must not be included in target_inputs", name)
+		}
+		if name == mutation.ParentInput || name == mutation.TargetIDInput {
+			return fmt.Errorf("mutation preflight input %q must not also bind a target role", name)
+		}
+		seenPreflightInputs[name] = struct{}{}
+	}
 	if err := mutation.Impact.Validate(); err != nil {
 		return fmt.Errorf("mutation impact: %w", err)
 	}
 	if contract.FixedTarget != nil {
 		if mutation.TargetKind != contract.FixedTarget.Kind {
 			return fmt.Errorf("fixed-target mutation target kind must match fixed target kind %q", contract.FixedTarget.Kind)
+		}
+		if len(mutation.PreflightInputs) != 0 {
+			return fmt.Errorf("fixed-target mutation must not declare preflight reference inputs")
 		}
 		if len(mutation.TargetInputs) != 0 {
 			return fmt.Errorf("fixed-target mutation target_inputs must be explicitly empty")
@@ -1798,6 +1833,7 @@ func cloneAgentContract(contract AgentContract) AgentContract {
 	if contract.Mutation != nil {
 		mutation := *contract.Mutation
 		mutation.TargetInputs = cloneSlice(mutation.TargetInputs)
+		mutation.PreflightInputs = cloneSlice(mutation.PreflightInputs)
 		contract.Mutation = &mutation
 	}
 	return contract

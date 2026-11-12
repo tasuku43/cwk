@@ -3,21 +3,22 @@ package chatworkcmd
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/tasuku43/cwk/internal/domain/chatwork"
 )
 
 // assembleMessageWindow resolves one complete bounded source window before
-// selecting newest primary messages. Sender matching forms one OR predicate,
-// period membership forms an AND predicate, StartIndex and Count select the
-// resulting candidates by typed send time without reordering output, and reply
-// context is exactly one hop from the selected anchors.
+// selecting newest primary messages. Body terms and sender references each
+// form an OR predicate; period membership combines with them using AND.
+// StartIndex and Count select candidates by typed send time without reordering
+// output, and reply context is exactly one hop from the selected anchors.
 func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageFilter) ([]chatwork.Message, *chatwork.MessageSelection, error) {
 	resolvedSource, err := ResolveMessageRelations(messages)
 	if err != nil {
 		return nil, nil, err
 	}
-	if len(filter.Senders) == 0 && filter.Period == (chatwork.MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
+	if len(filter.Senders) == 0 && len(filter.Contains) == 0 && filter.Period == (chatwork.MessagePeriod{}) && filter.StartIndex == 0 && filter.Count == 0 {
 		return resolvedSource, nil, nil
 	}
 
@@ -34,6 +35,16 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 		matches := len(senders) == 0
 		if !matches {
 			_, matches = senders[message.Sender.Ref.Value]
+		}
+		if matches && len(filter.Contains) > 0 {
+			bodyMatches := false
+			for _, term := range filter.Contains {
+				if strings.Contains(message.Body, term) {
+					bodyMatches = true
+					break
+				}
+			}
+			matches = bodyMatches
 		}
 		matches = matches && filter.Period.Contains(message.SendTime)
 		if matches {
@@ -95,7 +106,7 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 
 	selected := make([]chatwork.Message, 0, len(resolvedSource))
 	sourceSequences := make([]int, 0, len(resolvedSource))
-	anchorSequences := make([]int, 0, len(filter.Senders))
+	anchorSequences := make([]int, 0, len(filter.Senders)+len(filter.Contains))
 	for index, message := range resolvedSource {
 		if !included[index] {
 			continue
@@ -123,6 +134,7 @@ func assembleMessageWindow(messages []chatwork.Message, filter chatwork.MessageF
 
 	filterCopy := filter
 	filterCopy.Senders = append([]chatwork.Reference(nil), filter.Senders...)
+	filterCopy.Contains = append([]string(nil), filter.Contains...)
 	selection := &chatwork.MessageSelection{
 		Filter:          filterCopy,
 		SourceCount:     len(resolvedSource),

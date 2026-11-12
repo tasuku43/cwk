@@ -53,7 +53,7 @@ func TestTokenEnvironmentFaultsDescribeOnlySupportedSearchSource(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			setTokenEnvironment(t, test.set, test.token)
-			client, err := NewFromEnvironment()
+			client, err := NewFromEnvironment("dev")
 			if client != nil || err == nil {
 				t.Fatalf("client = %#v, err = %v", client, err)
 			}

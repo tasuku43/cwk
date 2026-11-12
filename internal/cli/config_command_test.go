@@ -21,6 +21,7 @@ import (
 	"github.com/tasuku43/cwk/internal/app/configcmd"
 	"github.com/tasuku43/cwk/internal/domain/commandselection"
 	"github.com/tasuku43/cwk/internal/domain/fault"
+	"github.com/tasuku43/cwk/internal/domain/operation"
 	"github.com/tasuku43/cwk/internal/infra/commandconfig"
 	"github.com/tasuku43/cwk/internal/infra/terminalui"
 )
@@ -186,9 +187,9 @@ func TestMissingProfileRequiresConfigAndExplainsTheReducedHelpView(t *testing.T)
 		t.Fatalf("root help exit=%d stderr=%q", code, h.stderr.String())
 	}
 	for _, want := range []string{
-		"config が未設定のため、現在は制御コマンドだけを表示しています。",
+		"config が未設定のため、このcwkで実行できるのは制御コマンドだけです。",
 		"cwk config",
-		"エージェントの選択ミスとトークン消費を抑えられます。",
+		"エージェントの選択ミスとトークン消費も抑えられます。",
 	} {
 		if !strings.Contains(h.stdout.String(), want) {
 			t.Errorf("root help lacks %q:\n%s", want, h.stdout.String())
@@ -196,6 +197,10 @@ func TestMissingProfileRequiresConfigAndExplainsTheReducedHelpView(t *testing.T)
 	}
 	if strings.Contains(h.stdout.String(), "名前空間:") || strings.Contains(h.stdout.String(), "rooms") {
 		t.Fatalf("unconfigured root help leaked Chatwork commands:\n%s", h.stdout.String())
+	}
+	if !strings.Contains(h.stdout.String(), "全体全文検索とリアクション集計はありません。") ||
+		strings.Contains(h.stdout.String(), "代替は 'cwk messages list --help'") {
+		t.Fatalf("unconfigured root help did not preserve the limitation while hiding the unavailable alternative:\n%s", h.stdout.String())
 	}
 
 	h.reset(strings.NewReader(""))
@@ -208,6 +213,7 @@ func TestMissingProfileRequiresConfigAndExplainsTheReducedHelpView(t *testing.T)
 
 	for _, args := range [][]string{
 		{"rooms", "list"},
+		{"rooms"},
 		{"help", "rooms"},
 		{"rooms", "--help"},
 	} {
@@ -304,7 +310,7 @@ func TestConfigIsOneAlwaysOnInteractiveCommandAndLegacyPathsAreGone(t *testing.T
 		t.Fatalf("always-on paths = %v, want %v", got, wantAlways)
 	}
 	for _, command := range catalog.ConfigurableCommands() {
-		if command.chatwork == nil {
+		if command.chatwork == nil && command.Path != "messages resolve-link" {
 			t.Fatalf("non-Chatwork command %q is selectable", command.Path)
 		}
 	}
@@ -379,7 +385,7 @@ func TestConfigTUITogglesInCatalogOrderShowsEffectsAndSavesAfterRestore(t *testi
 	if !strings.HasSuffix(output, wantResult) {
 		t.Errorf("save result suffix = %q, want %q", output, wantResult)
 	}
-	for _, want := range []string{"[read]", "[create]", "[write]", "コマンド表示を保存しました。", "件を表示し、", "件を非表示にしました（"} {
+	for _, want := range []string{"[read]", "[create]", "[write]", "コマンドの実行範囲を保存しました。", "件を有効にし、", "件を無効にしました（"} {
 		if !strings.Contains(output, want) {
 			t.Errorf("output lacks %q:\n%s", want, output)
 		}
@@ -399,14 +405,14 @@ func TestConfigSaveSuccessOutputUsesNaturalJapaneseAndConditionalCleanup(t *test
 	}{
 		{
 			name: "normal save",
-			want: "コマンド表示を保存しました。\n" +
-				"12件を表示し、21件を非表示にしました（22件変更）。\n",
+			want: "コマンドの実行範囲を保存しました。\n" +
+				"12件を有効にし、21件を無効にしました（22件変更）。\n",
 		},
 		{
 			name:    "old settings cleaned",
 			cleaned: 2,
-			want: "コマンド表示を保存しました。\n" +
-				"12件を表示し、21件を非表示にしました（22件変更）。\n" +
+			want: "コマンドの実行範囲を保存しました。\n" +
+				"12件を有効にし、21件を無効にしました（22件変更）。\n" +
 				"古い設定を2件整理しました。\n",
 		},
 	}
@@ -466,7 +472,7 @@ func TestBatchedMoveToggleAndSaveRepaintsEachActionableSelection(t *testing.T) {
 	output := h.stdout.String()
 	identity := choices[1].Path
 	identityIndex := strings.Index(output, identity)
-	savedIndex := strings.Index(output, "コマンド表示を保存しました。")
+	savedIndex := strings.Index(output, "コマンドの実行範囲を保存しました。")
 	if identityIndex < 0 || savedIndex < 0 || identityIndex >= savedIndex {
 		t.Fatalf("batched target %q was not displayed before save:\n%s", identity, output)
 	}
@@ -525,7 +531,7 @@ func TestConfigProcessesTerminalBytesReturnedWithEOF(t *testing.T) {
 	if _, configured, err := h.store.Load(context.Background()); err != nil || !configured {
 		t.Fatalf("Enter returned with EOF was not saved: configured=%v err=%v", configured, err)
 	}
-	if !strings.Contains(h.stdout.String(), "コマンド表示を保存しました。") {
+	if !strings.Contains(h.stdout.String(), "コマンドの実行範囲を保存しました。") {
 		t.Fatalf("result=%q", h.stdout.String())
 	}
 }
@@ -702,6 +708,74 @@ func TestUnsafeProfileKeepsAlwaysOnDiagnosticsAvailableAndRefusesSelector(t *tes
 	}
 }
 
+func TestUnsafeOwnedDirectoryRejectsConfigAndChatworkBeforeSideEffects(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symbolic-link creation requires platform-specific privileges on Windows")
+	}
+	h := newCommandSelectionHarness(t, strings.NewReader("\r"))
+	target := t.TempDir()
+	targetConfig := filepath.Join(target, "command-selection.json")
+	before := []byte("{\"schema_version\":1,\"enabled_commands\":[\"rooms list\"]}\n")
+	if err := os.WriteFile(targetConfig, before, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(h.base, "cwk")); err != nil {
+		t.Fatal(err)
+	}
+	factoryCalls := 0
+	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+		factoryCalls++
+		return nil, nil, errors.New("must not resolve PAT or initialize Chatwork")
+	}
+
+	config, found := DefaultCatalog().Lookup("config")
+	if !found {
+		t.Fatal("default catalog lacks config")
+	}
+	var declared *CommandError
+	for index := range config.Agent.Errors {
+		if config.Agent.Errors[index].Code == "command_selection_unsafe" {
+			declared = &config.Agent.Errors[index]
+			break
+		}
+	}
+	if declared == nil || len(declared.NextActions) != 1 || declared.NextActions[0].Command != "doctor" || declared.NextActions[0].Reason != commandSelectionUnsafeRecoveryReason {
+		t.Fatalf("unsafe selection recovery contract = %+v", declared)
+	}
+
+	if code := runCLI(h.command, []string{"config"}); code != ExitUnavailable {
+		t.Fatalf("unsafe config exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.terminal.opens != 0 || !strings.Contains(h.stderr.String(), "next_action: cwk doctor — "+commandSelectionUnsafeRecoveryReason) {
+		t.Fatalf("unsafe config entered selector or omitted scoped recovery: opens=%d stderr=%q", h.terminal.opens, h.stderr.String())
+	}
+	if strings.Contains(commandSelectionUnsafeRecoveryReason, "シンボリックリンクが検出") || !strings.Contains(commandSelectionUnsafeRecoveryReason, "可能性") {
+		t.Fatalf("unsafe guidance claims a specific detection: %q", commandSelectionUnsafeRecoveryReason)
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitUnavailable {
+		t.Fatalf("unsafe Chatwork invocation exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if h.stdout.Len() != 0 || factoryCalls != 0 || h.terminal.opens != 0 ||
+		!strings.Contains(h.stderr.String(), "code: command_selection_unsafe") ||
+		!strings.Contains(h.stderr.String(), "next_action: cwk doctor — "+commandSelectionUnsafeRecoveryReason) {
+		t.Fatalf("unsafe Chatwork invocation crossed a boundary or omitted recovery: stdout=%q stderr=%q factory_calls=%d terminal_opens=%d", h.stdout.String(), h.stderr.String(), factoryCalls, h.terminal.opens)
+	}
+
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"doctor"}); code != ExitRejected {
+		t.Fatalf("unsafe doctor exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
+	}
+	if !strings.Contains(h.stdout.String(), "command-selection\tfail\tstate=unsafe") {
+		t.Fatalf("doctor lacks unsafe storage state:\n%s", h.stdout.String())
+	}
+	after, err := os.ReadFile(targetConfig)
+	if err != nil || string(after) != string(before) {
+		t.Fatalf("unsafe directory target changed: contents=%q err=%v", after, err)
+	}
+}
+
 type unavailableCommandSelectionStore struct{}
 
 func (unavailableCommandSelectionStore) Load(context.Context) (commandselection.Profile, bool, error) {
@@ -788,7 +862,7 @@ func TestConfigRestoresBeforeSaveAndDoesNotOverwriteSuccessWithLateCancellation(
 	if code := command.RunContext(ctx, []string{"config"}); code != ExitOK {
 		t.Fatalf("exit=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 	}
-	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "コマンド表示を保存しました。") || stderr.Len() != 0 {
+	if ctx.Err() == nil || store.saves != 1 || len(store.saved) != len(DefaultCatalog().ConfigurableCommands()) || !strings.Contains(stdout.String(), "コマンドの実行範囲を保存しました。") || stderr.Len() != 0 {
 		t.Fatalf("save result: canceled=%v saves=%d saved=%d stdout=%q stderr=%q", ctx.Err(), store.saves, len(store.saved), stdout.String(), stderr.String())
 	}
 }
@@ -867,7 +941,7 @@ func TestHiddenSelectionCannotBeToggledOrSavedInAnUnusableTerminal(t *testing.T)
 			if code := runCLI(h.command, []string{"config"}); code != ExitOK {
 				t.Fatalf("exit=%d stdout=%q stderr=%q", code, h.stdout.String(), h.stderr.String())
 			}
-			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), "config は変更されませんでした") || strings.Contains(h.stdout.String(), "コマンド表示を保存しました。") {
+			if !strings.Contains(h.stdout.String(), "端末を拡大") || !strings.Contains(h.stdout.String(), "config は変更されませんでした") || strings.Contains(h.stdout.String(), "コマンドの実行範囲を保存しました。") {
 				t.Fatalf("unusable terminal result:\n%s", h.stdout.String())
 			}
 			if _, configured, err := h.store.Load(context.Background()); err != nil || configured {
@@ -940,7 +1014,7 @@ func TestInvalidViewNoticeMustFitCompletelyBeforeFurtherMutation(t *testing.T) {
 				t.Fatalf("incomplete notice permitted a save: got=%v want=%v", got, before)
 			}
 			output := h.stdout.String()
-			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "コマンド表示を保存しました。") {
+			if !strings.Contains(output, "端末を拡大") || strings.Contains(output, "コマンドの実行範囲を保存しました。") {
 				t.Fatalf("incomplete notice did not fail closed:\n%s", output)
 			}
 		})
@@ -975,24 +1049,27 @@ func TestStaleAndLegacySelectionsAreCombinedAndCleanedOnEnter(t *testing.T) {
 	}
 }
 
-func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testing.T) {
+func TestActiveCommandViewListsOnlyDisabledNamesAndRejectsDisabledExactHelp(t *testing.T) {
 	h := newCommandSelectionHarness(t, strings.NewReader(""))
 	enabled := withoutPrefix(configurableCommandPaths(DefaultCatalog()), "contact-requests ")
 	saveCommandSelection(t, h.store, enabled)
+	factoryCalls := 0
+	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+		factoryCalls++
+		return nil, nil, errors.New("namespace help must not initialize Chatwork")
+	}
 
 	for _, args := range [][]string{
 		{"contact-requests", "list"},
 		{"contact-requests", "list", "--help"},
-		{"contact-requests", "--help"},
-		{"help", "contact-requests"},
-		{"help", "contact-requests", "list", "--format", "agent"},
+		{"help", "contact-requests", "list"},
 	} {
 		h.reset(strings.NewReader(""))
-		if code := runCLI(h.command, args); code == ExitOK {
-			t.Fatalf("hidden invocation %v succeeded: stdout=%q", args, h.stdout.String())
+		if code := runCLI(h.command, args); code != ExitRejected {
+			t.Fatalf("disabled invocation %v exit=%d stderr=%q", args, code, h.stderr.String())
 		}
-		if strings.Contains(h.stdout.String(), "contact-requests") {
-			t.Fatalf("hidden invocation %v leaked path: %q", args, h.stdout.String())
+		if h.stdout.Len() != 0 || !strings.Contains(h.stderr.String(), "code: command_disabled") || !strings.Contains(h.stderr.String(), "contact-requests list") {
+			t.Fatalf("disabled invocation %v stdout=%q stderr=%q", args, h.stdout.String(), h.stderr.String())
 		}
 	}
 
@@ -1000,8 +1077,8 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 	if code := runCLI(h.command, []string{"help"}); code != ExitOK {
 		t.Fatalf("root help exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if strings.Contains(h.stdout.String(), "contact-requests") {
-		t.Fatalf("root help leaked disabled namespace: %s", h.stdout.String())
+	if !strings.Contains(h.stdout.String(), "contact-requests  無効なコマンドのみ") || strings.Contains(h.stdout.String(), "contact-requests list") {
+		t.Fatalf("root help did not expose the disabled-only namespace safely: %s", h.stdout.String())
 	}
 
 	namespaces := make(map[string]struct{})
@@ -1019,13 +1096,27 @@ func TestActiveCommandViewHidesDisabledPathsFromEveryDiscoveryAndRoute(t *testin
 		if code := runCLI(h.command, args); code != ExitOK {
 			t.Fatalf("scoped help %v exit=%d stderr=%q", args, code, h.stderr.String())
 		}
-		if strings.Contains(h.stdout.String(), "contact-requests") {
-			t.Fatalf("scoped help %q leaked disabled path:\n%s", namespace, h.stdout.String())
+		if namespace == "contact-requests" {
+			if !strings.Contains(h.stdout.String(), "無効なコマンド:\n  contact-requests list（無効）") || strings.Contains(h.stdout.String(), "cwk contact-requests list") {
+				t.Fatalf("disabled-only namespace did not expose names without usage:\n%s", h.stdout.String())
+			}
+		} else if strings.Contains(h.stdout.String(), "contact-requests") {
+			t.Fatalf("scoped help %q leaked another disabled namespace:\n%s", namespace, h.stdout.String())
 		}
+	}
+
+	for _, args := range [][]string{{"contact-requests", "--help"}, {"help", "contact-requests"}, {"contact-requests"}} {
+		h.reset(strings.NewReader(""))
+		if code := runCLI(h.command, args); code != ExitOK || !strings.Contains(h.stdout.String(), "contact-requests list（無効）") {
+			t.Fatalf("namespace help %v exit=%d stdout=%q stderr=%q", args, code, h.stdout.String(), h.stderr.String())
+		}
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("namespace help initialized Chatwork %d times", factoryCalls)
 	}
 }
 
-func TestDisabledRouteIsUnknownBeforePATAndSameCLICanReenableIt(t *testing.T) {
+func TestDisabledRouteIsRejectedBeforePATAndSameCLICanReenableIt(t *testing.T) {
 	h := newCommandSelectionHarness(t, strings.NewReader(""))
 	saveCommandSelection(t, h.store, []string{})
 	factoryCalls := 0
@@ -1033,10 +1124,10 @@ func TestDisabledRouteIsUnknownBeforePATAndSameCLICanReenableIt(t *testing.T) {
 		factoryCalls++
 		return nil, nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "A Chatwork API token is required.", false)
 	}
-	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitUsage {
+	if code := runCLI(h.command, []string{"rooms", "list"}); code != ExitRejected {
 		t.Fatalf("disabled route exit=%d stderr=%q", code, h.stderr.String())
 	}
-	if factoryCalls != 0 || !strings.Contains(h.stderr.String(), "code: unknown_command") {
+	if factoryCalls != 0 || !strings.Contains(h.stderr.String(), "code: command_disabled") || !strings.Contains(h.stderr.String(), "cwk config") || !strings.Contains(h.stderr.String(), "ユーザーに") {
 		t.Fatalf("disabled route reached PAT: calls=%d stderr=%q", factoryCalls, h.stderr.String())
 	}
 
@@ -1059,6 +1150,153 @@ func TestDisabledRouteIsUnknownBeforePATAndSameCLICanReenableIt(t *testing.T) {
 	}
 	if factoryCalls != 1 || !strings.Contains(h.stderr.String(), "code: mutation_rejected") {
 		t.Fatalf("reenable bypassed confirmation: calls=%d stderr=%q", factoryCalls, h.stderr.String())
+	}
+}
+
+func TestDisabledCommandsRejectReadCreateWriteAliasesAndExactHelpBeforeDispatch(t *testing.T) {
+	commands := DefaultCatalog().Commands()
+	handlerCalls := make(map[string]int)
+	for index := range commands {
+		path := commands[index].Path
+		switch path {
+		case "rooms list", "messages send", "messages mark-read", "messages show":
+			commands[index].handler = func(context.Context, *CLI, CommandSpec, operation.Intent, []string) int {
+				handlerCalls[path]++
+				return ExitOK
+			}
+		}
+	}
+	catalog := NewCatalog(commands...)
+	if err := catalog.Validate(); err != nil {
+		t.Fatalf("wrapped catalog is invalid: %v", err)
+	}
+	base := t.TempDir()
+	store := commandconfig.NewFileStoreAt(base)
+	saveCommandSelection(t, store, []string{})
+	var stdout, stderr bytes.Buffer
+	command := newCLI(strings.NewReader(""), &stdout, &stderr, catalog, passingInspector("unused"))
+	command.commandSelection = configcmd.New(store)
+	factoryCalls := 0
+	command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+		factoryCalls++
+		return nil, nil, fault.New(fault.KindAuthentication, "chatwork_token_missing", "token missing", false)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		path string
+	}{
+		{name: "read", args: []string{"rooms", "list"}, path: "rooms list"},
+		{name: "create", args: []string{"messages", "send"}, path: "messages send"},
+		{name: "write", args: []string{"messages", "mark-read"}, path: "messages mark-read"},
+		{name: "canonical alias", args: []string{"messages", "get"}, path: "messages show"},
+		{name: "exact scoped help", args: []string{"help", "messages", "show"}, path: "messages show"},
+		{name: "dotted scoped help", args: []string{"help", "messages.show"}, path: "messages show"},
+		{name: "trailing help", args: []string{"messages", "show", "--help"}, path: "messages show"},
+		{name: "alias scoped help", args: []string{"help", "messages", "get"}, path: "messages show"},
+		{name: "alias trailing help", args: []string{"messages", "get", "--help"}, path: "messages show"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			stdout.Reset()
+			stderr.Reset()
+			if code := runCLI(command, test.args); code != ExitRejected {
+				t.Fatalf("exit=%d stderr=%q", code, stderr.String())
+			}
+			for _, want := range []string{"code: command_disabled", test.path, "next_action: cwk config", "ユーザーに"} {
+				if !strings.Contains(stderr.String(), want) {
+					t.Errorf("stderr lacks %q: %s", want, stderr.String())
+				}
+			}
+			if stdout.Len() != 0 {
+				t.Errorf("stdout=%q", stdout.String())
+			}
+		})
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("disabled calls resolved PAT %d times", factoryCalls)
+	}
+	for path, calls := range handlerCalls {
+		if calls != 0 {
+			t.Errorf("disabled calls invoked %q handler %d times", path, calls)
+		}
+	}
+}
+
+func TestDisabledPathsDoNotMisclassifyUnknownOrIncompleteCommands(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	saveCommandSelection(t, h.store, []string{})
+	for _, args := range [][]string{{"unknown"}, {"messages", "search"}, {"rooms", "members"}, {"rooms", "nonsense"}} {
+		h.reset(strings.NewReader(""))
+		if code := runCLI(h.command, args); code != ExitUsage || !strings.Contains(h.stderr.String(), "code: unknown_command") {
+			t.Errorf("invocation %v exit=%d stderr=%q", args, code, h.stderr.String())
+		}
+	}
+}
+
+func TestDisabledCommandJSONFaultIsNonRetryableAndNamesConfigRecovery(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	saveCommandSelection(t, h.store, []string{})
+	if code := runCLI(h.command, []string{"--error-format=json", "files", "upload"}); code != ExitRejected {
+		t.Fatalf("exit=%d stderr=%q", code, h.stderr.String())
+	}
+	var document errorDocument
+	if err := json.Unmarshal(h.stderr.Bytes(), &document); err != nil {
+		t.Fatalf("disabled-command error JSON: %v\n%s", err, h.stderr.String())
+	}
+	if document.Error.Kind != fault.KindRejected || document.Error.Code != "command_disabled" || document.Error.Retryable ||
+		!strings.Contains(document.Error.Message, "files upload") || len(document.Error.NextActions) != 1 ||
+		document.Error.NextActions[0].Command != "config" || !strings.Contains(document.Error.NextActions[0].Reason, "ユーザーに") ||
+		!strings.Contains(document.Error.NextActions[0].Reason, "files upload") {
+		t.Fatalf("disabled-command error JSON=%+v", document.Error)
+	}
+}
+
+func TestMixedNamespaceHelpKeepsDisabledTaskNameSeparateFromActiveDetails(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	enabled := withoutPrefix(configurableCommandPaths(DefaultCatalog()), "files upload")
+	saveCommandSelection(t, h.store, enabled)
+	factoryCalls := 0
+	h.command.chatworkFactory = func(context.Context) (*chatworkcmd.Service, *appauthn.Gate, error) {
+		factoryCalls++
+		return nil, nil, errors.New("namespace help must not initialize Chatwork")
+	}
+	if code := runCLI(h.command, []string{"help", "files"}); code != ExitOK {
+		t.Fatalf("namespace help exit=%d stderr=%q", code, h.stderr.String())
+	}
+	output := h.stdout.String()
+	if !strings.Contains(output, "cwk files list") || !strings.Contains(output, "無効なコマンド:\n  files upload（無効）") {
+		t.Fatalf("namespace help lacks active usage or disabled name:\n%s", output)
+	}
+	if strings.Contains(output, "cwk files upload") || strings.Contains(output, "ファイルをアップロード") {
+		t.Fatalf("namespace help exposed disabled invocation details:\n%s", output)
+	}
+	h.reset(strings.NewReader(""))
+	if code := runCLI(h.command, []string{"files"}); code != ExitOK || h.stdout.String() != output {
+		t.Fatalf("bare namespace help exit=%d stdout=%q want=%q stderr=%q", code, h.stdout.String(), output, h.stderr.String())
+	}
+	if factoryCalls != 0 {
+		t.Fatalf("namespace help initialized Chatwork %d times", factoryCalls)
+	}
+}
+
+func TestDisabledCommandRecoveryToNonTTYConfigReportsTerminalRequirement(t *testing.T) {
+	h := newCommandSelectionHarness(t, strings.NewReader(""))
+	saveCommandSelection(t, h.store, []string{})
+	if code := runCLI(h.command, []string{"files", "upload"}); code != ExitRejected {
+		t.Fatalf("disabled call exit=%d stderr=%q", code, h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "next_action: cwk config") || !strings.Contains(h.stderr.String(), "ユーザーに") {
+		t.Fatalf("disabled recovery does not ask the user to enable the task: %q", h.stderr.String())
+	}
+	h.reset(strings.NewReader(""))
+	h.command.terminal = &fakeConfigTerminalOpener{openErr: terminalui.ErrNotTerminal}
+	if code := runCLI(h.command, []string{"config"}); code != ExitUnavailable {
+		t.Fatalf("non-TTY recovery exit=%d stderr=%q", code, h.stderr.String())
+	}
+	if !strings.Contains(h.stderr.String(), "code: interactive_terminal_required") || !strings.Contains(h.stderr.String(), "cwk help config") {
+		t.Fatalf("non-TTY config recovery=%q", h.stderr.String())
 	}
 }
 

@@ -1,0 +1,8 @@
+messages room-ref=42 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0
+external-text=untrusted escaped
+schema: #sequence message-ref actor sent [reply] [to] [quote] [quote-candidate] [relation-state] [body-truncated=true original-body-bytes=N] "body"
+actors
+  a1 account-ref=7 name="Aki"
+  a2 account-ref=8 name="Bo"
+#1 100 a1 1720000000 to=[a2,account-ref:9] body-truncated=true original-body-bytes=9 "A日"
+#2 101 a2 1720000010 reply=#1 quote=?account-ref:9 "OK"

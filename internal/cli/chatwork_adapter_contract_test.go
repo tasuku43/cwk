@@ -35,7 +35,9 @@ func TestChatworkAdapterContractBindsEveryTypedTask(t *testing.T) {
 		{"members list", chatwork.TaskMembersList, operation.EffectRead, RoleAct},
 		{"members replace", chatwork.TaskMembersReplace, operation.EffectWrite, RoleAct},
 		{"messages list", chatwork.TaskMessagesList, operation.EffectRead, RoleAct},
+		{"messages resources", chatwork.TaskMessagesResources, operation.EffectRead, RoleAct},
 		{"messages send", chatwork.TaskMessagesSend, operation.EffectCreate, RoleAct},
+		{"messages reconcile-send", chatwork.TaskMessagesReconcileSend, operation.EffectRead, RoleDiscover},
 		{"messages mark-read", chatwork.TaskMessagesMarkRead, operation.EffectWrite, RoleAct},
 		{"messages mark-unread", chatwork.TaskMessagesMarkUnread, operation.EffectWrite, RoleAct},
 		{"messages show", chatwork.TaskMessagesShow, operation.EffectRead, RoleAct},
@@ -111,9 +113,11 @@ func TestChatworkCorrectnessCriticalCatalogFields(t *testing.T) {
 		"rooms list":              {"query", "source_count", "candidate_count", "room_ref", "name", "type", "role", "unread", "mentions", "tasks", "complete"},
 		"members find":            {"query", "source_count", "candidate_count", "account_ref", "name", "role", "complete"},
 		"members list":            {"account_ref", "name", "role", "complete"},
-		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relation_state", "relations", "sequence", "actor_alias", "window", "source_limit", "complete", "access_limitation", "unresolved_relations", "unknown_relation_sets", "oldest_reachable_message_ref", "oldest_reachable_send_time", "period_reachability", "relation_fetch_limit", "relation_fetch_attempts", "relation_resolution_targets", "source_count", "candidate_count", "filter_since", "filter_until", "filter_on", "filter_time_zone", "selection_start_index", "selection_count", "items_per_page", "next_start_index", "filter_senders", "filter_context", "anchor_sequences", "max_bytes", "output_complete", "output_items", "output_total_items", "output_next_start_index", "output_next_count"},
-		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "relation_state", "relations", "reply_child_refs", "reply_child_source_sequences", "reply_context_source_count", "reply_context_source_limit", "reply_context_complete", "reply_context_access_limitation", "relation_fetch_limit", "relation_fetch_attempts", "relation_resolution_targets"},
+		"messages list":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "send_time_jst", "relation_state", "relations", "quote_candidates", "body_truncated", "original_body_bytes", "sequence", "actor_alias", "window", "source_limit", "complete", "access_limitation", "unresolved_replies", "unresolved_quotes", "unknown_relation_sets", "oldest_reachable_message_ref", "oldest_reachable_send_time", "period_reachability", "relation_fetch_limit", "relation_fetch_attempts", "relation_resolution_targets", "source_count", "candidate_count", "filter_since", "filter_until", "filter_on", "filter_time_zone", "selection_start_index", "selection_count", "items_per_page", "next_start_index", "filter_senders", "filter_contains", "filter_context", "anchor_sequences", "max_bytes", "output_complete", "output_items", "output_total_items", "output_next_start_index", "output_next_count"},
+		"messages resources":      {"kind", "room_ref", "message_ref", "files_source_count", "files_limit", "files_complete", "files_absence", "files_matched", "file_ref", "tasks_source_count", "tasks_limit", "tasks_complete", "tasks_absence", "tasks_matched", "task_ref"},
+		"messages show":           {"message_ref", "room_ref", "sender_ref", "sender_name", "body", "send_time", "send_time_jst", "relation_state", "relations", "quote_candidates", "reply_child_refs", "reply_child_source_sequences", "reply_context_source_count", "reply_context_source_limit", "reply_context_complete", "reply_context_access_limitation", "around_anchor_state", "around_anchor_source_sequence", "around_requested", "around_before_refs", "around_before_source_sequences", "around_actual_before", "around_after_refs", "around_after_source_sequences", "around_actual_after", "around_source_count", "around_source_limit", "around_complete", "around_access_limitation", "relation_fetch_limit", "relation_fetch_attempts", "relation_resolution_targets"},
 		"messages send":           {"message_ref", "room_ref"},
+		"messages reconcile-send": {"room_ref", "account_ref", "candidate_status", "outcome", "candidate_count", "source_count", "source_limit", "complete", "access_limitation", "uncertainty", "candidate_message_ref", "sender_ref", "sender_name", "send_time"},
 		"room-tasks create":       {"task_ref", "room_ref"},
 		"room-tasks list":         {"task_ref", "room_ref", "account_ref", "message_ref", "body", "status", "limit_time", "limit", "complete"},
 		"files list":              {"file_ref", "room_ref", "account_ref", "message_ref", "name", "size", "limit", "complete"},
@@ -209,6 +213,21 @@ func assertChatworkAuthenticationContract(t *testing.T, spec CommandSpec) {
 
 func assertChatworkCallPolicy(t *testing.T, spec CommandSpec) {
 	t.Helper()
+	if spec.chatwork.Task == chatwork.TaskMessagesResources {
+		for _, sourceTask := range []chatwork.Task{chatwork.TaskFilesList, chatwork.TaskRoomTasksList} {
+			policy, err := chatworkapi.CallPolicy(sourceTask)
+			if err != nil {
+				t.Fatalf("composite source %s has no call policy: %v", sourceTask, err)
+			}
+			if err := policy.Validate(operation.EffectRead); err != nil {
+				t.Errorf("composite source %s call policy: %v", sourceTask, err)
+			}
+			if policy.MaxAttempts != chatworkapi.MaxAttempts || policy.Timeout != chatworkapi.RequestTimeout || policy.Idempotency != apicall.IdempotencySafe {
+				t.Errorf("composite source %s policy = %+v, want one 20-second safe read", sourceTask, policy)
+			}
+		}
+		return
+	}
 	policy, err := chatworkapi.CallPolicy(spec.chatwork.Task)
 	if err != nil {
 		t.Fatalf("adapter has no valid call policy: %v", err)
@@ -298,7 +317,7 @@ func assertChatworkInfraFaultContract(t *testing.T, spec CommandSpec) {
 	read := func(spec CommandSpec) bool { return spec.Effect == operation.EffectRead }
 	upload := func(spec CommandSpec) bool { return spec.chatwork.Task == chatwork.TaskFilesUpload }
 	messageRead := func(spec CommandSpec) bool {
-		return spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow
+		return spec.chatwork.Task == chatwork.TaskMessagesList || spec.chatwork.Task == chatwork.TaskMessagesShow || spec.chatwork.Task == chatwork.TaskMessagesReconcileSend
 	}
 
 	want := []chatworkFaultContract{
@@ -315,6 +334,7 @@ func assertChatworkInfraFaultContract(t *testing.T, spec CommandSpec) {
 		{"invalid_authentication_binding", fault.KindAuthentication, false, all},
 		{"missing_context", fault.KindContract, false, all},
 		{"operation_canceled", fault.KindCanceled, true, all},
+		{"chatwork_mutation_not_dispatched", fault.KindCanceled, true, mutation},
 		{"invalid_chatwork_request", fault.KindInvalidInput, false, all},
 		{"chatwork_request_contract_invalid", fault.KindContract, false, all},
 		{"chatwork_transport_missing", fault.KindContract, false, all},
@@ -335,7 +355,9 @@ func assertChatworkInfraFaultContract(t *testing.T, spec CommandSpec) {
 		{"chatwork_account_verification_failed", fault.KindUnavailable, false, func(spec CommandSpec) bool { return spec.chatwork.Task == chatwork.TaskRoomsCreate }},
 		{"chatwork_mutation_outcome_unknown", fault.KindContract, false, mutation},
 		{"chatwork_message_limitation_invalid", fault.KindContract, false, messageRead},
-		{"chatwork_message_restricted", fault.KindPermission, false, func(spec CommandSpec) bool { return spec.chatwork.Task == chatwork.TaskMessagesShow }},
+		{"chatwork_message_restricted", fault.KindPermission, false, func(spec CommandSpec) bool {
+			return spec.chatwork.Task == chatwork.TaskMessagesShow || spec.chatwork.Task == chatwork.TaskMessagesReconcileSend
+		}},
 		{"chatwork_file_unreadable", fault.KindInvalidInput, false, upload},
 		{"chatwork_file_too_large", fault.KindInvalidInput, false, upload},
 		{"chatwork_file_name_invalid", fault.KindInvalidInput, false, upload},

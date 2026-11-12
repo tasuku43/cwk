@@ -5,15 +5,18 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/tasuku43/cwk/internal/domain/operation"
 )
 
 const (
-	maxExactHelpBytes = 2048
-	maxHelpExamples   = 2
+	maxExactHelpBytes               = 2048
+	maxHelpExamples                 = 2
+	maxRootHelpOutcomesPerNamespace = 3
+	maxRootHelpSummaryBytes         = 192
 )
+
+const staticHelpNotice = "注意: コマンド選択を読み取れないため静的カタログを表示しています。タスク実行前に 'cwk doctor' を実行してください。\n\n"
 
 // helpFormat remains as the parse result shape used by command-selection
 // routing. Text is now the only public help representation.
@@ -28,12 +31,23 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 	}
 
 	commands := c.catalog.Commands()
+	disabledCommands := c.disabledCommandSpecs()
 	exact := false
 	if selector != "" {
 		selector = canonicalHelpSelector(c.catalog, selector)
 		commands, exact = c.catalog.Select(selector)
 		if len(commands) == 0 {
-			return c.failUsage(ctx, "invalid_arguments", fmt.Sprintf("help セレクター %q は不明です。", selector), "help", "ルート help にある正確なコマンドパスまたは名前空間を指定してください。")
+			if selector == "tasks" {
+				message := taskHelpSelectorMessage(c.catalog)
+				if staticHelpFallback(ctx) {
+					message = genericHelpSelectorMessage(selector)
+				}
+				return c.failUsage(ctx, "invalid_arguments", message, "help", "ルートヘルプから現在使える名前空間を確認してください。")
+			}
+			known, knownExact := c.completeCatalog().Select(selector)
+			if knownExact || len(known) == 0 || len(disabledCommandsForNamespace(disabledCommands, selector)) == 0 {
+				return c.failUsage(ctx, "invalid_arguments", fmt.Sprintf("help セレクター %q は不明です。", selector), "help", "ルート help にある正確なコマンドパスまたは名前空間を指定してください。")
+			}
 		}
 	}
 
@@ -47,7 +61,7 @@ func runHelp(ctx context.Context, c *CLI, _ CommandSpec, _ operation.Intent, arg
 	if exact {
 		return c.emit(ctx, renderCommandHelp(commands[0], c.catalog.Commands()))
 	}
-	output := renderNamespaceHelp(selector, commands)
+	output := renderNamespaceHelpWithDisabled(selector, commands, disabledCommands)
 	if staticHelpFallback(ctx) {
 		output = prependStaticHelpNotice(output)
 	}
@@ -65,10 +79,59 @@ func canonicalHelpSelector(catalog Catalog, selector string) string {
 	return selector
 }
 
+const (
+	roomTasksHelpNamespace     = "room-tasks"
+	personalTasksHelpNamespace = "personal-tasks"
+)
+
+func taskNamespaceHelpCandidates() []string {
+	return []string{roomTasksHelpNamespace, personalTasksHelpNamespace}
+}
+
+func taskHelpSelectorMessage(active Catalog) string {
+	namespaces := activeTaskHelpNamespaces(active)
+	switch len(namespaces) {
+	case 1:
+		return fmt.Sprintf("help セレクター \"tasks\" は名前空間ではありません。利用できる候補の詳細は 'cwk help %s' を確認してください。", namespaces[0])
+	case 2:
+		return "help セレクター \"tasks\" は名前空間ではありません。複数のタスク名前空間が使えるため、'cwk help' から選んでください。"
+	default:
+		return genericHelpSelectorMessage("tasks")
+	}
+}
+
+func genericHelpSelectorMessage(selector string) string {
+	return fmt.Sprintf("help セレクター %q は不明です。利用できるコマンドは 'cwk --help' で確認してください。", selector)
+}
+
+func activeTaskHelpNamespaces(catalog Catalog) []string {
+	candidates := taskNamespaceHelpCandidates()
+	activeNamespaces := make([]string, 0, len(candidates))
+	for _, namespace := range candidates {
+		for _, command := range catalog.commands {
+			if strings.HasPrefix(command.Path, namespace+" ") {
+				activeNamespaces = append(activeNamespaces, namespace)
+				break
+			}
+		}
+	}
+	return activeNamespaces
+}
+
+func hasConfigurableTaskHelpNamespace(catalog Catalog) bool {
+	for _, namespace := range taskNamespaceHelpCandidates() {
+		for _, command := range catalog.commands {
+			if command.Configurable && strings.HasPrefix(command.Path, namespace+" ") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func prependStaticHelpNotice(output []byte) []byte {
-	const notice = "注意: コマンド選択を読み取れないため静的カタログを表示しています。タスク実行前に 'cwk doctor' を実行してください。\n\n"
-	result := make([]byte, 0, len(notice)+len(output))
-	result = append(result, notice...)
+	result := make([]byte, 0, len(staticHelpNotice)+len(output))
+	result = append(result, staticHelpNotice...)
 	return append(result, output...)
 }
 
@@ -121,16 +184,21 @@ func (c Catalog) Select(selector string) ([]CommandSpec, bool) {
 
 func (c *CLI) renderRootHelp() []byte {
 	commands := c.catalog.Commands()
-	directCommands, namespaces := rootTextHelpEntries(commands)
+	disabled := c.disabledCommandSpecs()
+	complete := c.completeCatalog().Commands()
+	if len(disabled) == 0 {
+		complete = commands
+	}
+	directCommands, namespaces := rootTextHelpEntriesForView(complete, commands, disabled)
 	unconfigured := c.selectionLoaded && !c.selectionSaved
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	if unconfigured {
 		fmt.Fprintln(&output)
 		fmt.Fprintln(&output, "初回設定:")
-		fmt.Fprintln(&output, "  config が未設定のため、現在は制御コマンドだけを表示しています。")
-		fmt.Fprintf(&output, "  '%s config' で使用するChatworkコマンドを選んでください。\n", ProgramName)
-		fmt.Fprintln(&output, "  必要なコマンドだけを表示することで、エージェントの選択ミスとトークン消費を抑えられます。")
+		fmt.Fprintln(&output, "  config が未設定のため、このcwkで実行できるのは制御コマンドだけです。")
+		fmt.Fprintf(&output, "  '%s config' で実行できるChatworkコマンドを選んでください。\n", ProgramName)
+		fmt.Fprintln(&output, "  必要なコマンドだけを有効にすると、エージェントの選択ミスとトークン消費も抑えられます。")
 	}
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "使い方:")
@@ -141,7 +209,10 @@ func (c *CLI) renderRootHelp() []byte {
 	fmt.Fprintln(&output)
 	fmt.Fprintln(&output, "出力:")
 	fmt.Fprintln(&output, "  Chatwork タスクの成功結果は text です。JSON は --error-format json のエラーと doctor --format json で利用できます。")
-	fmt.Fprintln(&output, "  Chatwork API に全体全文検索とリアクション集計はありません。代替は 'cwk messages list --help' を確認してください。")
+	fmt.Fprintln(&output, "  Chatwork API に全体全文検索とリアクション集計はありません。")
+	if command, found := c.catalog.Lookup("messages list"); found {
+		fmt.Fprintf(&output, "  代替は '%s %s --help' を確認してください。\n", ProgramName, command.Path)
+	}
 	if len(directCommands) > 0 {
 		fmt.Fprintln(&output)
 		output.Write(renderTextHelpIndex("コマンド:", directCommands))
@@ -150,9 +221,22 @@ func (c *CLI) renderRootHelp() []byte {
 		fmt.Fprintln(&output)
 		output.Write(renderNamespaceIndex("名前空間:", namespaces))
 	}
+	resolver, hasResolver := c.catalog.Lookup("messages resolve-link")
+	show, hasShow := c.catalog.Lookup("messages show")
+	if hasResolver {
+		fmt.Fprintln(&output)
+		fmt.Fprintf(&output, "リンクから参照を得る: '%s %s --help'\n", ProgramName, resolver.Path)
+		if !hasShow {
+			fmt.Fprintln(&output, "発言を読むには、人に config で messages show の有効化を依頼してください。")
+		}
+	}
+	if hasShow {
+		fmt.Fprintln(&output)
+		fmt.Fprintf(&output, "参照から発言を読む: '%s %s --help'\n", ProgramName, show.Path)
+	}
 	fmt.Fprintln(&output)
 	if unconfigured {
-		fmt.Fprintf(&output, "初回設定を始めるには '%s config' を実行してください。\n", ProgramName)
+		fmt.Fprintf(&output, "実行範囲の設定を始めるには '%s config' を実行してください。\n", ProgramName)
 		fmt.Fprintf(&output, "設定方法には '%s config --help' を実行してください。\n", ProgramName)
 		return output.Bytes()
 	}
@@ -167,18 +251,42 @@ type textHelpEntry struct {
 }
 
 type textHelpNamespace struct {
-	Name         string
-	CommandCount int
+	Name          string
+	CommandCount  int
+	DisabledCount int
+	OutcomeCount  int
+	Outcomes      []textHelpOutcome
+}
+
+type textHelpOutcome struct {
+	Summary string
+	Path    string
 }
 
 func rootTextHelpEntries(commands []CommandSpec) ([]textHelpEntry, []textHelpNamespace) {
+	return rootTextHelpEntriesForView(commands, commands, nil)
+}
+
+func rootTextHelpEntriesForView(complete, active, disabled []CommandSpec) ([]textHelpEntry, []textHelpNamespace) {
 	directCommands := make([]textHelpEntry, 0)
 	namespaces := make([]textHelpNamespace, 0)
 	namespaceIndexes := make(map[string]int)
-	for _, command := range commands {
+	activeCommands := make(map[string]CommandSpec, len(active))
+	seenOutcomes := make(map[string]map[string]struct{})
+	for _, command := range active {
+		activeCommands[command.Path] = command
 		namespace := commandNamespace(command.Path)
 		if namespace == command.Path {
 			directCommands = append(directCommands, textHelpEntry{Name: command.Path, Summary: command.Summary})
+		}
+	}
+	disabledPaths := make(map[string]struct{}, len(disabled))
+	for _, command := range disabled {
+		disabledPaths[command.Path] = struct{}{}
+	}
+	for _, command := range complete {
+		namespace := commandNamespace(command.Path)
+		if namespace == command.Path {
 			continue
 		}
 		index, exists := namespaceIndexes[namespace]
@@ -187,7 +295,25 @@ func rootTextHelpEntries(commands []CommandSpec) ([]textHelpEntry, []textHelpNam
 			namespaceIndexes[namespace] = index
 			namespaces = append(namespaces, textHelpNamespace{Name: namespace})
 		}
-		namespaces[index].CommandCount++
+		if activeCommand, visible := activeCommands[command.Path]; visible {
+			namespaces[index].CommandCount++
+			if seenOutcomes[namespace] == nil {
+				seenOutcomes[namespace] = make(map[string]struct{})
+			}
+			if _, duplicate := seenOutcomes[namespace][activeCommand.Summary]; duplicate {
+				continue
+			}
+			seenOutcomes[namespace][activeCommand.Summary] = struct{}{}
+			namespaces[index].OutcomeCount++
+			if len(namespaces[index].Outcomes) < maxRootHelpOutcomesPerNamespace {
+				namespaces[index].Outcomes = append(namespaces[index].Outcomes, textHelpOutcome{
+					Summary: activeCommand.Summary,
+					Path:    activeCommand.Path,
+				})
+			}
+		} else if _, hidden := disabledPaths[command.Path]; hidden {
+			namespaces[index].DisabledCount++
+		}
 	}
 	return directCommands, namespaces
 }
@@ -208,17 +334,38 @@ func renderTextHelpIndex(title string, entries []textHelpEntry) []byte {
 }
 
 func renderNamespaceIndex(title string, namespaces []textHelpNamespace) []byte {
-	entries := make([]textHelpEntry, 0, len(namespaces))
+	var output bytes.Buffer
+	fmt.Fprintln(&output, title)
+	width := 0
 	for _, namespace := range namespaces {
-		entries = append(entries, textHelpEntry{
-			Name:    namespace.Name,
-			Summary: fmt.Sprintf("%d コマンド", namespace.CommandCount),
-		})
+		if len(namespace.Name) > width {
+			width = len(namespace.Name)
+		}
 	}
-	return renderTextHelpIndex(title, entries)
+	for _, namespace := range namespaces {
+		summary := fmt.Sprintf("%d コマンド", namespace.CommandCount)
+		switch {
+		case namespace.CommandCount == 0 && namespace.DisabledCount > 0:
+			summary = "無効なコマンドのみ"
+		case namespace.CommandCount == 0:
+			summary = "利用できるコマンドなし"
+		}
+		fmt.Fprintf(&output, "  %-*s  %s\n", width, namespace.Name, summary)
+		for _, outcome := range namespace.Outcomes {
+			fmt.Fprintf(&output, "    - %s: %s %s --help\n", outcome.Summary, ProgramName, outcome.Path)
+		}
+		if remaining := namespace.OutcomeCount - len(namespace.Outcomes); remaining > 0 {
+			fmt.Fprintf(&output, "    - ほか%d件: %s %s --help\n", remaining, ProgramName, namespace.Name)
+		}
+	}
+	return output.Bytes()
 }
 
 func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
+	return renderNamespaceHelpWithDisabled(selector, commands, nil)
+}
+
+func renderNamespaceHelpWithDisabled(selector string, commands, disabled []CommandSpec) []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "Chatwork CLI")
 	fmt.Fprintln(&output)
@@ -234,9 +381,55 @@ func renderNamespaceHelp(selector string, commands []CommandSpec) []byte {
 			fmt.Fprintf(&output, "    必須(いずれか1つ): %s\n", strings.Join(group, " | "))
 		}
 	}
+	disabledCommands := disabledCommandsForNamespace(disabled, selector)
+	if len(disabledCommands) > 0 {
+		fmt.Fprintln(&output)
+		fmt.Fprintln(&output, "無効なコマンド:")
+		for _, command := range disabledCommands {
+			fmt.Fprintf(&output, "  %s（無効）\n", command.Path)
+		}
+	}
 	fmt.Fprintln(&output)
 	fmt.Fprintf(&output, "詳細には、正確なコマンドの末尾に '--help' を付けてください。全体には '%s --help' を実行してください。\n", ProgramName)
 	return output.Bytes()
+}
+
+func (c *CLI) completeCatalog() Catalog {
+	if c != nil && len(c.baseCatalog.commands) > 0 {
+		return c.baseCatalog
+	}
+	if c != nil {
+		return c.catalog
+	}
+	return Catalog{}
+}
+
+func (c *CLI) disabledCommandSpecs() []CommandSpec {
+	if c == nil || !c.selectionLoaded || !c.selectionSaved {
+		return nil
+	}
+	complete := c.completeCatalog()
+	active := make(map[string]struct{}, len(c.catalog.commands))
+	for _, command := range c.catalog.commands {
+		active[command.Path] = struct{}{}
+	}
+	disabled := make([]CommandSpec, 0)
+	for _, command := range complete.ConfigurableCommands() {
+		if _, enabled := active[command.Path]; !enabled {
+			disabled = append(disabled, command)
+		}
+	}
+	return disabled
+}
+
+func disabledCommandsForNamespace(commands []CommandSpec, namespace string) []CommandSpec {
+	disabled := make([]CommandSpec, 0)
+	for _, command := range commands {
+		if strings.HasPrefix(command.Path, namespace+" ") {
+			disabled = append(disabled, command)
+		}
+	}
+	return disabled
 }
 
 func requiredCommandLineInputs(command CommandSpec) []string {
@@ -257,32 +450,22 @@ type commandHelpExample struct {
 
 func renderCommandHelp(command CommandSpec, allCommands []CommandSpec) []byte {
 	examples := commandHelpExamples(command, allCommands)
-	minimum := renderExactCommandHelp(command, examples, 12)
-	if len(minimum) > maxExactHelpBytes {
-		return minimum
-	}
-
-	low, high := 12, 1024
-	best := minimum
-	for low <= high {
-		middle := low + (high-low)/2
-		candidate := renderExactCommandHelp(command, examples, middle)
+	for count := len(examples); count >= 0; count-- {
+		candidate := renderExactCommandHelp(command, examples[:count])
 		if len(candidate) <= maxExactHelpBytes {
-			best = candidate
-			low = middle + 1
-			continue
+			return candidate
 		}
-		high = middle - 1
 	}
-	return best
+	// Return the complete minimum projection when it does not fit so catalog
+	// validation can reject it instead of silently dropping invocation facts.
+	return renderExactCommandHelp(command, nil)
 }
 
-func renderExactCommandHelp(command CommandSpec, examples []commandHelpExample, descriptionLimit int) []byte {
+func renderExactCommandHelp(command CommandSpec, examples []commandHelpExample) []byte {
 	var output bytes.Buffer
 	fmt.Fprintln(&output, "使い方:")
-	fmt.Fprintln(&output, "  "+command.Usage())
+	fmt.Fprintln(&output, " "+command.Usage())
 	if inputs := commandLineHelpInputs(command.Agent.Inputs); len(inputs) > 0 {
-		fmt.Fprintln(&output)
 		fmt.Fprintln(&output, "入力:")
 		for _, input := range inputs {
 			requirement := "任意"
@@ -294,12 +477,12 @@ func renderExactCommandHelp(command CommandSpec, examples []commandHelpExample, 
 			if input.Repeatable {
 				requirement += "・繰り返し可"
 			}
-			fmt.Fprintf(&output, "  %s (%s, %s)  %s\n", input.Name, commandInputType(command, input), requirement, truncateHelpText(input.Description, descriptionLimit))
+			fmt.Fprintf(&output, "%s %s %s: %s\n", input.Name, commandInputType(command, input), requirement, input.Description)
 		}
 	}
 	if len(command.HelpConstraints) > 0 {
 		fmt.Fprintln(&output)
-		fmt.Fprintln(&output, "併用制約:")
+		fmt.Fprintln(&output, "制約:")
 		for _, constraint := range command.HelpConstraints {
 			fmt.Fprintf(&output, "  %s\n", constraint)
 		}
@@ -362,27 +545,12 @@ func commandInputType(command CommandSpec, input CommandInput) string {
 	return "text"
 }
 
-func truncateHelpText(value string, maximum int) string {
-	value = strings.Join(strings.Fields(value), " ")
-	if maximum <= 0 || len(value) <= maximum {
-		return value
-	}
-	if maximum <= len("…") {
-		return "…"
-	}
-	end := maximum - len("…")
-	for end > 0 && !utf8.ValidString(value[:end]) {
-		end--
-	}
-	return strings.TrimSpace(value[:end]) + "…"
-}
-
 func commandHelpExamples(command CommandSpec, allCommands []CommandSpec) []commandHelpExample {
 	recipes := relevantHumanHelpRecipes(allCommands, []CommandSpec{command})
 	examples := make([]commandHelpExample, 0, maxHelpExamples)
 	seen := make(map[string]struct{})
 	for _, recipe := range recipes {
-		for _, step := range recipe.Steps {
+		for stepIndex, step := range recipe.Steps {
 			if step.Path != command.Path {
 				continue
 			}
@@ -390,12 +558,16 @@ func commandHelpExamples(command CommandSpec, allCommands []CommandSpec) []comma
 			if step.Args != "" {
 				invocation += " " + step.Args
 			}
-			key := recipe.Title + "\x00" + invocation
+			title := recipe.Title
+			if len(recipe.Steps) > 1 {
+				title = fmt.Sprintf("%s（手順 %d/%d）", title, stepIndex+1, len(recipe.Steps))
+			}
+			key := title + "\x00" + invocation
 			if _, exists := seen[key]; exists {
 				continue
 			}
 			seen[key] = struct{}{}
-			examples = append(examples, commandHelpExample{Title: recipe.Title, Invocation: invocation})
+			examples = append(examples, commandHelpExample{Title: title, Invocation: invocation})
 			if len(examples) == maxHelpExamples {
 				return examples
 			}

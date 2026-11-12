@@ -154,7 +154,7 @@ func TestActiveViewRejectsInvalidSelectionDocuments(t *testing.T) {
 
 func TestActiveViewRejectsVisibleConsumerWithoutProducer(t *testing.T) {
 	_, _, err := DefaultCatalog().ActiveView([]string{"messages mark-read"})
-	want := `active command "messages mark-read" input "--room" requires reference kind "chatwork-room" but has no visible producer; enable one producer: "personal-tasks list", "contacts list", "rooms list"`
+	want := `active command "messages mark-read" input "--room" requires reference kind "chatwork-room" but has no visible producer; enable one producer: "personal-tasks list", "contacts list", "rooms list", "messages resolve-link"`
 	if err == nil || err.Error() != want {
 		t.Fatalf("ActiveView error = %v, want %q", err, want)
 	}
@@ -162,7 +162,7 @@ func TestActiveViewRejectsVisibleConsumerWithoutProducer(t *testing.T) {
 
 func TestActiveViewRejectsClosedRequiredReferenceCycle(t *testing.T) {
 	_, _, err := DefaultCatalog().ActiveView([]string{"rooms list", "messages show"})
-	want := `active command "messages show" input "--message" requires reachable reference kind "chatwork-message"; enable one producer: "personal-tasks list", "messages list", "messages send", "room-tasks list", "files list"`
+	want := `active command "messages show" input "--message" requires reachable reference kind "chatwork-message"; enable one producer: "personal-tasks list", "messages list", "messages send", "messages reconcile-send", "room-tasks list", "files list", "messages resolve-link"`
 	if err == nil || err.Error() != want {
 		t.Fatalf("ActiveView error = %v, want %q", err, want)
 	}
@@ -180,8 +180,20 @@ func TestActiveViewDoesNotRequireProducerForOptionalReferenceInput(t *testing.T)
 
 func TestActiveViewRejectsRecoveryToDisabledCommand(t *testing.T) {
 	_, _, err := DefaultCatalog().ActiveView([]string{"rooms list", "messages send"})
-	if err == nil || !strings.Contains(err.Error(), `next command "messages list" is not an exact catalog path`) {
+	if err == nil || !strings.Contains(err.Error(), `next command "messages reconcile-send" is not an exact catalog path`) {
 		t.Fatalf("ActiveView error = %v, want disabled recovery rejection", err)
+	}
+}
+
+func TestActiveViewKeepsMessageSendRecoveryPathClosed(t *testing.T) {
+	view, _, err := DefaultCatalog().ActiveView([]string{"rooms list", "messages send", "messages reconcile-send"})
+	if err != nil {
+		t.Fatalf("active send/reconciliation view: %v", err)
+	}
+	for _, path := range []string{"rooms list", "messages send", "messages reconcile-send"} {
+		if _, exists := view.Lookup(path); !exists {
+			t.Errorf("active recovery path %q is missing", path)
+		}
 	}
 }
 

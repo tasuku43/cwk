@@ -98,6 +98,10 @@ func (s *Service) resolveMessageRelations(
 		if err != nil {
 			return nil, nil, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
 		}
+		contextMessages, err = ResolveMessageQuoteCandidates(contextMessages, nil, false, chatwork.MessageAccessNone)
+		if err != nil {
+			return nil, nil, fault.Wrap(fault.KindContract, "chatwork_result_invalid", "Chatwork タスクアダプターが無効な型付き結果を返しました", false, err)
+		}
 		contextMessage := contextMessages[0]
 		outcome.State = chatwork.MessageRelationResolvedByFetch
 		outcome.Message = &contextMessage

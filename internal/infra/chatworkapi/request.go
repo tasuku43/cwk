@@ -120,7 +120,7 @@ func (c *Client) buildRequestContext(ctx context.Context, input chatwork.Request
 		setOptional(form, "members_readonly_ids", joinRefs(input.ReadonlyMembers))
 		return formRequest(http.MethodPut, path, form), nil
 	case chatwork.TaskMessagesList:
-		if len(input.MessageFilter.Senders) != 0 || input.MessageFilter.Period != (chatwork.MessagePeriod{}) || input.MessageFilter.Context != "" || input.MessageFilter.StartIndex != 0 || input.MessageFilter.Count != 0 || input.MessageRelationFetchLimit != 0 {
+		if len(input.MessageFilter.Senders) != 0 || len(input.MessageFilter.Contains) != 0 || input.MessageFilter.Period != (chatwork.MessagePeriod{}) || input.MessageFilter.Context != "" || input.MessageFilter.StartIndex != 0 || input.MessageFilter.Count != 0 || input.MessageRelationFetchLimit != 0 || input.MessageAround != nil {
 			return requestSpec{}, invalidRequest("message selection must be applied before the Chatwork request boundary")
 		}
 		path, err := roomPath("/messages")
@@ -138,6 +138,10 @@ func (c *Client) buildRequestContext(ctx context.Context, input chatwork.Request
 			return requestSpec{}, err
 		}
 		body, err := c.messageBody(ctx, input)
+		if err != nil {
+			return requestSpec{}, err
+		}
+		body, err = expandMessageBody(input, body)
 		if err != nil {
 			return requestSpec{}, err
 		}
@@ -167,9 +171,9 @@ func (c *Client) buildRequestContext(ctx context.Context, input chatwork.Request
 		}
 		return formRequest(http.MethodPut, path, form), nil
 	case chatwork.TaskMessagesShow:
-		if len(input.MessageFilter.Senders) != 0 || input.MessageFilter.Period != (chatwork.MessagePeriod{}) ||
+		if len(input.MessageFilter.Senders) != 0 || len(input.MessageFilter.Contains) != 0 || input.MessageFilter.Period != (chatwork.MessagePeriod{}) ||
 			input.MessageFilter.Context != "" || input.MessageFilter.StartIndex != 0 || input.MessageFilter.Count != 0 ||
-			input.MessageRelationFetchLimit != 0 {
+			input.MessageRelationFetchLimit != 0 || input.MessageAround != nil {
 			return requestSpec{}, invalidRequest("exact message context must be applied before the Chatwork request boundary")
 		}
 		path, err := messagePath()

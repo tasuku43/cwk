@@ -1,9 +1,14 @@
 package cli
 
 import (
+	"os"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"unicode"
+
+	"github.com/tasuku43/cwk/internal/domain/fault"
 )
 
 func TestPublicCatalogNaturalLanguageIsJapanese(t *testing.T) {
@@ -57,6 +62,62 @@ func TestHumanHelpAndFaultMessagesDefaultToJapanese(t *testing.T) {
 		if !strings.Contains(stderr.String(), stable) {
 			t.Fatalf("fault lost stable machine token %q: %q", stable, stderr.String())
 		}
+	}
+}
+
+func TestREADMEExitCodeMappingMatchesRuntime(t *testing.T) {
+	content, err := os.ReadFile("../../README.md")
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	const heading = "## 終了コードとエラー分類"
+	start := strings.Index(string(content), heading)
+	if start < 0 {
+		t.Fatalf("README.md is missing %q", heading)
+	}
+	section := string(content[start+len(heading):])
+	if end := strings.Index(section, "\n## "); end >= 0 {
+		section = section[:end]
+	}
+
+	expected := map[string]int{
+		"成功":                             ExitOK,
+		string(fault.KindInvalidInput):   exitCodeForKind(fault.KindInvalidInput),
+		string(fault.KindInternal):       exitCodeForKind(fault.KindInternal),
+		string(fault.KindAuthentication): exitCodeForKind(fault.KindAuthentication),
+		string(fault.KindPermission):     exitCodeForKind(fault.KindPermission),
+		string(fault.KindNotFound):       exitCodeForKind(fault.KindNotFound),
+		string(fault.KindAmbiguous):      exitCodeForKind(fault.KindAmbiguous),
+		string(fault.KindRateLimited):    exitCodeForKind(fault.KindRateLimited),
+		string(fault.KindUnavailable):    exitCodeForKind(fault.KindUnavailable),
+		string(fault.KindRejected):       exitCodeForKind(fault.KindRejected),
+		string(fault.KindCanceled):       exitCodeForKind(fault.KindCanceled),
+		string(fault.KindUnsupported):    exitCodeForKind(fault.KindUnsupported),
+		string(fault.KindContract):       exitCodeForKind(fault.KindContract),
+	}
+	actual := make(map[string]int)
+	for _, line := range strings.Split(section, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "|") {
+			continue
+		}
+		cells := strings.Split(line, "|")
+		if len(cells) < 3 {
+			continue
+		}
+		kind := strings.Trim(strings.TrimSpace(cells[1]), "`")
+		if kind == "kind` / 状態" || strings.Trim(kind, "-: ") == "" {
+			continue
+		}
+		codeText := strings.Trim(strings.TrimSpace(cells[2]), "`")
+		code, err := strconv.Atoi(codeText)
+		if err != nil {
+			t.Fatalf("README.md exit code for %q is not an integer: %q", kind, codeText)
+		}
+		actual[kind] = code
+	}
+	if !reflect.DeepEqual(actual, expected) {
+		t.Fatalf("README.md exit-code mapping = %v, want runtime mapping %v", actual, expected)
 	}
 }
 

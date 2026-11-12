@@ -24,6 +24,9 @@ func TestEveryTaskUsesTheAuthenticatedTransportPath(t *testing.T) {
 				if got := request.Header.Get("Authorization"); got != "" {
 					t.Errorf("unexpected authorization header = %q", got)
 				}
+				if got := request.Header.Get("User-Agent"); got != "cwk/1.2.3-rc.4" {
+					t.Errorf("User-Agent = %q, want exact release version", got)
+				}
 				w.Header().Set("Content-Type", "application/json")
 				if request.Method == http.MethodGet && request.URL.Path == "/me" && fixture.Task == chatwork.TaskRoomsCreate {
 					_, _ = w.Write([]byte(`{"account_id":1,"room_id":2,"name":"Synthetic"}`))
@@ -36,7 +39,7 @@ func TestEveryTaskUsesTheAuthenticatedTransportPath(t *testing.T) {
 			}))
 			defer server.Close()
 
-			client := newClient(server.URL, syntheticToken, server.Client(), func() (string, error) { return "operation-e2e-binding", nil }, func(string) ([]byte, error) { return []byte("file"), nil })
+			client := newClientWithVersion(server.URL, syntheticToken, server.Client(), func() (string, error) { return "operation-e2e-binding", nil }, func(string) ([]byte, error) { return []byte("file"), nil }, "1.2.3-rc.4")
 			requirement := testRequirement()
 			expectedCalls := int64(1)
 			if fixture.Task == chatwork.TaskRoomsCreate {

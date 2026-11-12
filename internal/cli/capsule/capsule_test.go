@@ -29,7 +29,7 @@ func TestREADMEUsesCurrentMessageProjectionSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const schema = `schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"`
+	const schema = `schema: #sequence message-ref actor sent [reply] [to] [quote] [quote-candidate] [relation-state] "body"`
 	if count := strings.Count(string(readme), schema); count != 1 {
 		t.Fatalf("README current message schema count = %d, want 1", count)
 	}
@@ -60,9 +60,9 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 		t.Fatalf("filtered Render() mismatch\n--- got ---\n%s--- want ---\n%s", got, wantGolden)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=1 unknown-relation-sets=0\n",
+		"messages room-ref=42 count=2 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0\n",
 		"selection source-count=6 senders=[8] context=replies anchors=[#5]\n",
-		`schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] "body"`,
+		`schema: #sequence message-ref actor sent [reply] [to] [quote] [quote-candidate] [relation-state] "body"`,
 		`#2 100 a1 1720000000`,
 		`#5 101 a2 1720000010 reply=#2`,
 	} {
@@ -72,6 +72,9 @@ func TestRenderFilteredMessagesPreservesSourceSequencesAndSelectionProvenance(t 
 	}
 	if strings.Contains(got, "#1 100 ") || strings.Contains(got, "#2 101 ") || strings.Contains(got, " context ") {
 		t.Fatalf("filtered output renumbered records or added per-record selection state:\n%s", got)
+	}
+	if strings.Contains(got, "candidate-count=") {
+		t.Fatalf("sender-only selection changed the existing candidate-count projection:\n%s", got)
 	}
 
 	for _, outputLine := range strings.Split(got, "\n") {
@@ -107,9 +110,37 @@ func TestRenderPeriodSelectionExposesEffectiveHalfOpenBounds(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := "selection source-count=2 since=1720000000 until=1720000011 candidate-count=2 anchors=[#1,#2]\n"
+	want := "selection source-count=2 since=1720000000 until=1720000011 candidate-count=2 context=none anchors=[#1,#2]\n"
 	if !strings.Contains(got, want) {
 		t.Fatalf("period selection output does not contain %q:\n%s", want, got)
+	}
+}
+
+func TestRenderContainsSelectionEscapesExactTermsAndSeparatesAnchorsFromContext(t *testing.T) {
+	result := messageFixture()
+	result.Messages = result.Messages[1:]
+	result.Messages[0].Replies[0].Resolved = false
+	term := "needle\nselection source-count=999\x1b\u2028\\"
+	result.Messages[0].Body = "prefix " + term + " suffix"
+	result.MessageSelection = &chatwork.MessageSelection{
+		Filter: chatwork.MessageFilter{
+			Contains: []string{term, "needle"}, Context: chatwork.MessageContextNone,
+		},
+		SourceCount:     6,
+		CandidateCount:  1,
+		SourceSequences: []int{5},
+		AnchorSequences: []int{5},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, `candidate-count=1 contains=["needle\\nselection source-count=999\\u001B\\u2028\\\\","needle"] context=none anchors=[#5]`) {
+		t.Fatalf("exact body terms were not safely projected with anchor metadata:\n%s", got)
+	}
+	if strings.Count(got, "\nselection source-count=") != 1 || strings.Contains(got, "\x1b") || strings.Contains(got, "\u2028") {
+		t.Fatalf("query text injected output structure or terminal controls:\n%s", got)
 	}
 }
 
@@ -140,7 +171,7 @@ func TestRenderMessageRelationResolutionSeparatesSourceAndFetchedContext(t *test
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"unresolved-relations=0 unknown-relation-sets=0 oldest-reachable-message-ref=101 oldest-reachable-send-time=200\n",
+		"unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0 oldest-reachable-message-ref=101 oldest-reachable-send-time=200\n",
 		"relation-resolution fetch-limit=1 fetch-attempts=1 targets=1\n",
 		"#1 101 a1 200 reply=message-ref:999 \"decision\"\n",
 		"relation-context provenance=fetched message-ref=999 room-ref=42 sender-ref=7 sender-name=untrusted:\"Parent\" send-time=100 relations=none body=untrusted:\"context\"\n",
@@ -172,7 +203,7 @@ func TestRenderFilteredMessagesKeepsEmptySelectionInspectable(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"messages room-ref=42 count=0 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0\n",
+		"messages room-ref=42 count=0 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0\n",
 		"selection source-count=3 senders=[7,8] context=none anchors=[]\n",
 		"actors\n",
 	} {
@@ -224,11 +255,13 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskMembersFind, `member-candidates query="Synthetic" source-count=1 candidate-count=1 complete=true`},
 		{chatwork.TaskMembersList, "members count=1"},
 		{chatwork.TaskMembersReplace, "membership-counts administrators=0 members=0 readonly=0"},
-		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0"},
+		{chatwork.TaskMessagesList, "messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0"},
 		{chatwork.TaskMessagesSend, "created message-ref=100 room-ref=42"},
+		{chatwork.TaskMessagesReconcileSend, "send-reconciliation room_ref=42 account_ref=7 candidate_status=no_candidates_in_window outcome=unknown candidate_count=0 source_count=0 source_limit=100 complete=false access_limitation=none"},
 		{chatwork.TaskMessagesMarkRead, "marked-read unread=0 mentions=0"},
 		{chatwork.TaskMessagesMarkUnread, "marked-unread unread=0 mentions=0"},
 		{chatwork.TaskMessagesShow, "message message-ref=100"},
+		{chatwork.TaskMessagesResources, "message-resources room-ref=42 message-ref=100 kind=all"},
 		{chatwork.TaskMessagesUpdate, "updated message-ref=100"},
 		{chatwork.TaskMessagesDelete, "deleted message-ref=100"},
 		{chatwork.TaskRoomTasksList, "room-tasks count=1"},
@@ -246,8 +279,8 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 		{chatwork.TaskContactRequestsAccept, "accepted account-ref=7 room-ref=42"},
 		{chatwork.TaskContactRequestsReject, "rejected request-ref=500"},
 	}
-	if len(tests) != 34 {
-		t.Fatalf("task route count = %d, want 34", len(tests))
+	if len(tests) != 36 {
+		t.Fatalf("task route count = %d, want 36", len(tests))
 	}
 	for _, test := range tests {
 		t.Run(string(test.task), func(t *testing.T) {
@@ -258,7 +291,11 @@ func TestRenderHasStaticRouteForEveryTask(t *testing.T) {
 			if !strings.Contains(got, test.want) {
 				t.Errorf("output does not contain %q:\n%s", test.want, got)
 			}
-			for _, forbidden := range []string{"cwk-task-projection/", " task=", "coverage ", " kind="} {
+			forbiddenValues := []string{"cwk-task-projection/", " task=", "coverage "}
+			if test.task != chatwork.TaskMessagesResources {
+				forbiddenValues = append(forbiddenValues, " kind=")
+			}
+			for _, forbidden := range forbiddenValues {
 				if strings.Contains(got, forbidden) {
 					t.Errorf("output contains removed presentation metadata %q:\n%s", forbidden, got)
 				}
@@ -299,7 +336,7 @@ func TestRenderMessageListHoistsScopeTrustAndActorsOnce(t *testing.T) {
 	for label, count := range map[string]int{
 		"room-ref=42":                     1,
 		"external-text=untrusted escaped": 1,
-		"schema: #sequence message-ref actor sent [reply] [to] [quote] [relation-state] \"body\"": 1,
+		"schema: #sequence message-ref actor sent [reply] [to] [quote] [quote-candidate] [relation-state] \"body\"": 1,
 		"a1 account-ref=7 name=\"Aki\"": 1,
 		"a2 account-ref=8 name=\"Bo\"":  1,
 	} {
@@ -396,7 +433,7 @@ func TestRenderMessageListCompactsMultipleRepliesWithoutUnknownState(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, `unresolved-relations=0 unknown-relation-sets=0`) ||
+	if !strings.Contains(got, `unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0`) ||
 		!strings.Contains(got, `#3 102 a3 3 reply=[#1,#2] to=[a1,a2] "both"`) ||
 		strings.Contains(got, "relation-state=unknown") {
 		t.Fatalf("multi-reply projection is incomplete:\n%s", got)
@@ -448,7 +485,7 @@ func TestRenderMessageListPreservesMixedResolvedAndUnresolvedReplies(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, `unresolved-relations=1`) || !strings.Contains(got, `#2 101 a2 0 reply=[#1,?999]`) {
+	if !strings.Contains(got, `unresolved-replies=1 unresolved-quotes=0`) || !strings.Contains(got, `#2 101 a2 0 reply=[#1,?999]`) {
 		t.Fatalf("mixed reply states were lost:\n%s", got)
 	}
 }
@@ -465,6 +502,137 @@ func TestRenderMessageListUsesCanonicalUnknownAccountTargets(t *testing.T) {
 	}
 	if !strings.Contains(got, `to=account-ref:99 quote=?account-ref:99`) || strings.Contains(got, "account-ref=99 name=") {
 		t.Fatalf("unknown account target was aliased or lost its canonical identity:\n%s", got)
+	}
+}
+
+func TestRenderMessageListKeepsQuoteCandidatesUnresolvedAndWindowScoped(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesList)
+	message := &result.Messages[0]
+	author := reference(chatwork.ReferenceAccount, "99")
+	first := reference(chatwork.ReferenceMessage, "901")
+	second := reference(chatwork.ReferenceMessage, "902")
+	message.Quotes = []chatwork.Relation{{Kind: "quote", Target: author, ExternalID: "1700000000"}}
+	message.QuoteMatches = []chatwork.MessageQuoteMatch{{
+		State: chatwork.MessageQuoteCandidateAmbiguous,
+		Candidates: []chatwork.MessageQuoteCandidate{
+			{MessageRef: first, Room: result.MessageRoom, Author: author, SendTime: 1700000000, Scope: chatwork.MessageQuoteCandidateSourceWindow},
+			{MessageRef: second, Room: result.MessageRoom, Author: author, SendTime: 1700000000, Scope: chatwork.MessageQuoteCandidateSourceWindow},
+		},
+	}}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0",
+		"quote=?account-ref:99 quote-candidate=ambiguous-window-candidates{scope=source-window,identity=unproven,candidates=[message-ref:901,message-ref:902]}",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("quote output lacks %q:\n%s", want, got)
+		}
+	}
+	if message.Quotes[0].Resolved || strings.Contains(got, "reply=message-ref:901") || strings.Contains(got, "reply=message-ref:902") {
+		t.Fatalf("quote candidates proved or fabricated a reply edge:\n%s", got)
+	}
+}
+
+func TestRenderMessageQuoteCandidateStatesRetainAccessAndUnresolvedCount(t *testing.T) {
+	tests := []struct {
+		name          string
+		state         chatwork.MessageQuoteCandidateState
+		timestamp     string
+		access        chatwork.MessageAccessLimitation
+		candidate     bool
+		wantCount     string
+		wantCandidate string
+	}{
+		{
+			name: "unique observed in partial source", state: chatwork.MessageQuoteCandidateUniqueWindow,
+			timestamp: "1700000000", access: chatwork.MessageAccessPartial, candidate: true,
+			wantCount:     "unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0",
+			wantCandidate: "quote-candidate=unique-window-candidate{scope=source-window,identity=unproven,candidates=message-ref:901}",
+		},
+		{
+			name: "complete source has no match", state: chatwork.MessageQuoteCandidateNoMatch,
+			timestamp: "1700000000", access: chatwork.MessageAccessNone,
+			wantCount:     "unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0",
+			wantCandidate: "quote-candidate=no-window-candidate{scope=source-window,identity=unproven}",
+		},
+		{
+			name: "missing timestamp", state: chatwork.MessageQuoteCandidateMissingTime,
+			access:        chatwork.MessageAccessNone,
+			wantCount:     "unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0",
+			wantCandidate: "quote-candidate=missing-timestamp{scope=source-window,identity=unproven}",
+		},
+		{
+			name: "partial zero match stays unknown", state: chatwork.MessageQuoteCandidateUnknown,
+			timestamp: "1700000000", access: chatwork.MessageAccessPartial,
+			wantCount:     "unresolved-replies=0 unresolved-quotes=1 unknown-relation-sets=0",
+			wantCandidate: "quote-candidate=unknown{scope=source-window,identity=unproven}",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result := resultForTask(chatwork.TaskMessagesList)
+			result.MessageAccess = test.access
+			message := &result.Messages[0]
+			author := reference(chatwork.ReferenceAccount, "99")
+			message.Quotes = []chatwork.Relation{{Kind: "quote", Target: author, ExternalID: test.timestamp}}
+			match := chatwork.MessageQuoteMatch{State: test.state, Candidates: []chatwork.MessageQuoteCandidate{}}
+			if test.candidate {
+				match.Candidates = []chatwork.MessageQuoteCandidate{{
+					MessageRef: reference(chatwork.ReferenceMessage, "901"), Room: result.MessageRoom,
+					Author: author, SendTime: 1700000000, Scope: chatwork.MessageQuoteCandidateSourceWindow,
+				}}
+			}
+			message.QuoteMatches = []chatwork.MessageQuoteMatch{match}
+			got, err := Render(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(got, test.wantCount) || !strings.Contains(got, test.wantCandidate) {
+				t.Fatalf("quote state output lost count/access/scope facts:\n%s", got)
+			}
+			access := "access-limitation=none"
+			if test.access == chatwork.MessageAccessPartial {
+				access = "access-limitation=partial"
+			}
+			if !strings.Contains(got, access) {
+				t.Fatalf("quote state output hid source access limitation %q:\n%s", access, got)
+			}
+			if !strings.Contains(got, "quote=?account-ref:99") || message.Quotes[0].Resolved {
+				t.Fatalf("candidate state resolved its quote:\n%s", got)
+			}
+		})
+	}
+}
+
+func TestRenderMessageQuoteCandidateIncludesOnlySourceSequenceThatCanBeReferenced(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesList)
+	candidateMessage := result.Messages[0]
+	candidateMessage.Ref = reference(chatwork.ReferenceMessage, "901")
+	candidateMessage.Sender.Ref = reference(chatwork.ReferenceAccount, "99")
+	candidateMessage.SendTime = 1700000000
+	candidateMessage.Quotes = nil
+	candidateMessage.QuoteMatches = nil
+	result.Messages = append(result.Messages, candidateMessage)
+	result.Messages[0].Quotes = []chatwork.Relation{{Kind: "quote", Target: reference(chatwork.ReferenceAccount, "99"), ExternalID: "1700000000"}}
+	result.Messages[0].QuoteMatches = []chatwork.MessageQuoteMatch{{
+		State: chatwork.MessageQuoteCandidateUniqueWindow,
+		Candidates: []chatwork.MessageQuoteCandidate{{
+			MessageRef: reference(chatwork.ReferenceMessage, "901"), Room: result.MessageRoom,
+			Author: reference(chatwork.ReferenceAccount, "99"), SendTime: 1700000000, Sequence: 2,
+			Scope: chatwork.MessageQuoteCandidateSourceWindow,
+		}},
+	}}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "message-ref:901@#2") {
+		t.Fatalf("candidate source sequence was lost:\n%s", got)
 	}
 }
 
@@ -598,6 +766,41 @@ func TestRenderMessagesShowKeepsAnchorBeforeTypedRelationContext(t *testing.T) {
 		strings.Index(got, anchor) > strings.Index(got, replyContext) || strings.Index(got, replyContext) > strings.Index(got, childContext) ||
 		strings.Index(got, childContext) > strings.Index(got, resolution) || strings.Index(got, resolution) > strings.Index(got, context) {
 		t.Fatalf("exact message context order is wrong:\n%s", got)
+	}
+}
+
+func TestRenderMessagesShowWithoutAroundPreservesCyclicRelationContextBytes(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesShow)
+	anchor := result.Messages[0]
+	child := anchor
+	child.Ref = reference(chatwork.ReferenceMessage, "101")
+	child.Body = "child"
+	child.Replies = []chatwork.Relation{{
+		Kind: "reply", Target: anchor.Ref, ExternalID: anchor.Room.Value, Resolved: true,
+	}}
+	result.Messages[0].Replies = []chatwork.Relation{{
+		Kind: "reply", Target: child.Ref, ExternalID: anchor.Room.Value, Resolved: true,
+	}}
+	result.MessageShowContext = &chatwork.MessageShowContext{
+		Anchor: anchor.Ref, Children: []chatwork.Message{child}, SourceSequences: []int{1}, SourceCount: 1,
+		Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}, Access: chatwork.MessageAccessNone,
+	}
+	result.MessageRelationResolution = &chatwork.MessageRelationResolution{
+		FetchLimit: 5, FetchAttempts: 1,
+		Targets: []chatwork.MessageRelationTarget{{Target: child.Ref, State: chatwork.MessageRelationResolvedByFetch, Message: &child}},
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const want = "message message-ref=100 room-ref=42 sender-ref=7 sender-name=untrusted:\"Synthetic Account\" send-time=0 relations=[reply{state=resolved,target-ref=101}] body=untrusted:\"\"\n" +
+		"reply-context anchor-ref=100 count=1 window=recent source-count=1 source-limit=100 complete=false access-limitation=none\n" +
+		"reply-child source-sequence=#1 message-ref=101 room-ref=42 sender-ref=7 sender-name=untrusted:\"Synthetic Account\" send-time=0 relations=[reply{state=resolved,target-ref=100}] body=untrusted:\"child\"\n" +
+		"relation-resolution fetch-limit=5 fetch-attempts=1 targets=1\n" +
+		"relation-context provenance=fetched message-ref=101 room-ref=42 sender-ref=7 sender-name=untrusted:\"Synthetic Account\" send-time=0 relations=[reply{state=resolved,target-ref=100}] body=untrusted:\"child\"\n"
+	if got != want {
+		t.Fatalf("messages show without around changed cyclic output bytes\n--- got ---\n%s--- want ---\n%s", got, want)
 	}
 }
 
@@ -1028,7 +1231,7 @@ func TestRenderCoverageKeepsBoundsAndOmitsPresentationOnlyDetail(t *testing.T) {
 				}
 				return result
 			}(),
-			wantLine:  `messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-relations=0 unknown-relation-sets=0`,
+			wantLine:  `messages room-ref=42 count=1 window=recent source-limit=100 complete=false access-limitation=none unresolved-replies=0 unresolved-quotes=0 unknown-relation-sets=0`,
 			forbidden: []string{"coverage ", "kind=", "description=", "positive-limit-description-canary"},
 		},
 	}
@@ -1261,6 +1464,77 @@ func TestRenderKeepsUsefulOptionalFactsOnlyWhenPresent(t *testing.T) {
 	}
 }
 
+func TestRenderMessageResourcesEmitsExactReferencesAndSelectedBoundsOnly(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesResources)
+	result.MessageResources.Files.SourceCount = 17
+	result.MessageResources.Files.Matches = append(result.MessageResources.Files.Matches, result.MessageResources.Files.Matches[0])
+	result.MessageResources.Files.Matches[0].Name = "hostile file\nname"
+	result.MessageResources.Tasks.SourceCount = 23
+	result.MessageResources.Tasks.Matches[0].Body = "[download] https://example.com/private\x1b"
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "message-resources room-ref=42 message-ref=100 kind=all\n" +
+		"files source-count=17 limit=100 complete=false absence=unknown matched=2\n" +
+		"  file-ref=300\n  file-ref=300\n" +
+		"room-tasks source-count=23 limit=100 complete=false absence=unknown matched=1\n" +
+		"  task-ref=200\n"
+	if got != want {
+		t.Fatalf("message resources projection = %q, want %q", got, want)
+	}
+	for _, forbidden := range []string{"hostile", "private", "download", "event", "message-exists"} {
+		if strings.Contains(got, forbidden) {
+			t.Errorf("resource projection leaked or asserted %q: %s", forbidden, got)
+		}
+	}
+	for _, pair := range []struct {
+		kind  chatwork.ReferenceKind
+		value string
+	}{
+		{chatwork.ReferenceRoom, "42"}, {chatwork.ReferenceMessage, "100"},
+		{chatwork.ReferenceFile, "300"}, {chatwork.ReferenceTask, "200"},
+	} {
+		if _, err := chatwork.NewReference(pair.kind, pair.value); err != nil {
+			t.Errorf("rendered %s reference %q does not round trip: %v", pair.kind, pair.value, err)
+		}
+	}
+}
+
+func TestRenderMessageResourcesKeepsExplicitEmptySelectedSource(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesResources)
+	result.MessageResources.Kind = chatwork.MessageResourceFiles
+	result.MessageResources.Files.Matches = []chatwork.File{}
+	result.MessageResources.Files.SourceCount = 4
+	result.MessageResources.Tasks = nil
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "message-resources room-ref=42 message-ref=100 kind=files\n" +
+		"files source-count=4 limit=100 complete=false absence=unknown matched=0\n"
+	if got != want || strings.Contains(got, "room-tasks") {
+		t.Fatalf("empty selected source projection = %q, want %q", got, want)
+	}
+}
+
+func TestRenderMessageResourcesKeepsExplicitEmptySelectedTasksSource(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesResources)
+	result.MessageResources.Kind = chatwork.MessageResourceTasks
+	result.MessageResources.Files = nil
+	result.MessageResources.Tasks.Matches = []chatwork.WorkTask{}
+	result.MessageResources.Tasks.SourceCount = 0
+	output, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "message-resources room-ref=42 message-ref=100 kind=tasks\n" +
+		"room-tasks source-count=0 limit=100 complete=false absence=unknown matched=0\n"
+	if output != want {
+		t.Fatalf("output = %q, want %q", output, want)
+	}
+}
+
 func TestRenderNamesMessageWindowWithoutProviderCoverageKind(t *testing.T) {
 	result := resultForTask(chatwork.TaskMessagesList)
 	result.Coverage.Kind = "differential_window"
@@ -1315,6 +1589,8 @@ func resultForTask(task chatwork.Task) chatwork.Result {
 	switch task {
 	case chatwork.TaskPersonalTasksList, chatwork.TaskRoomTasksList, chatwork.TaskFilesList, chatwork.TaskContactRequestsList:
 		result.Coverage = chatwork.Coverage{Kind: "provider_window", Limit: 100, Complete: false}
+	case chatwork.TaskMessagesResources:
+		result.Coverage = chatwork.Coverage{}
 	case chatwork.TaskMessagesList:
 		result.Coverage = chatwork.Coverage{Kind: "recent-window", Limit: 100, Complete: false}
 	case chatwork.TaskContactsList, chatwork.TaskRoomsList, chatwork.TaskMembersFind, chatwork.TaskMembersList:
@@ -1347,8 +1623,25 @@ func resultForTask(task chatwork.Task) chatwork.Result {
 	case chatwork.TaskMessagesList:
 		result.MessageRoom = room
 		result.Messages = []chatwork.Message{message}
+	case chatwork.TaskMessagesReconcileSend:
+		result.MessageRoom = room
+		result.Coverage = chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}
+		result.MessageSendReconciliation = &chatwork.MessageSendReconciliation{
+			Room: room, Account: message.Sender.Ref, Outcome: "unknown", Status: chatwork.MessageSendNoCandidatesWindow,
+			Candidates: []chatwork.MessageSendCandidate{},
+		}
 	case chatwork.TaskMessagesShow:
 		result.Messages = []chatwork.Message{message}
+	case chatwork.TaskMessagesResources:
+		result.MessageResources = &chatwork.MessageResources{
+			Room: room, Message: message.Ref, Kind: chatwork.MessageResourceAll,
+			Files: &chatwork.FileMessageResourceSource{
+				SourceCount: 1, Coverage: chatwork.Coverage{Kind: "provider_window", Limit: 100, Complete: false}, Absence: chatwork.MessageResourceAbsenceUnknown, Matches: []chatwork.File{file},
+			},
+			Tasks: &chatwork.RoomTaskMessageResourceSource{
+				SourceCount: 1, Coverage: chatwork.Coverage{Kind: "provider_window", Limit: 100, Complete: false}, Absence: chatwork.MessageResourceAbsenceUnknown, Matches: []chatwork.WorkTask{workTask},
+			},
+		}
 	case chatwork.TaskMessagesSend:
 		result.CreatedInRoom = &chatwork.RoomScopedCreation{Refs: []chatwork.Reference{message.Ref}, ParentRoom: room}
 	case chatwork.TaskMessagesMarkRead, chatwork.TaskMessagesMarkUnread:
@@ -1406,4 +1699,98 @@ func messageFixture() chatwork.Result {
 
 func reference(kind chatwork.ReferenceKind, value string) chatwork.Reference {
 	return chatwork.Reference{Kind: kind, Value: value}
+}
+
+func TestRenderMessagesShowAroundMergesReplyChildrenWithoutDuplicateMessages(t *testing.T) {
+	result := resultForTask(chatwork.TaskMessagesShow)
+	anchor := result.Messages[0]
+	anchor.Replies = []chatwork.Relation{{Kind: "reply", Target: reference(chatwork.ReferenceMessage, "99"), ExternalID: anchor.Room.Value, Resolved: true}}
+	result.Messages[0] = anchor
+	prior := anchor
+	prior.Ref = reference(chatwork.ReferenceMessage, "98")
+	prior.Body = "prior"
+	prior.Replies = nil
+	before := anchor
+	before.Ref = reference(chatwork.ReferenceMessage, "99")
+	before.Body = "before\nmessage message-ref=999"
+	before.Replies = nil
+	child := anchor
+	child.Ref = reference(chatwork.ReferenceMessage, "101")
+	child.Body = "[rp rid=42 mid=100] visible text, not inferred structure"
+	child.Replies = []chatwork.Relation{{Kind: "reply", Target: anchor.Ref, ExternalID: anchor.Room.Value, Resolved: true}}
+	after := anchor
+	after.Ref = reference(chatwork.ReferenceMessage, "102")
+	after.Body = "after"
+	after.Replies = nil
+	result.MessageShowContext = &chatwork.MessageShowContext{
+		Anchor: anchor.Ref, Children: []chatwork.Message{child}, SourceSequences: []int{4}, SourceCount: 5,
+		Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}, Access: chatwork.MessageAccessNone,
+	}
+	result.MessageShowAround = &chatwork.MessageShowAround{
+		Anchor: anchor.Ref, AnchorState: chatwork.MessageAroundAnchorInWindow, AnchorSourceSequence: 3,
+		Requested: 2, Before: []chatwork.Message{prior, before}, BeforeSequences: []int{1, 2}, ActualBefore: 2,
+		After: []chatwork.Message{child, after}, AfterSequences: []int{4, 5}, ActualAfter: 2, SourceCount: 5,
+		Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}, Access: chatwork.MessageAccessNone,
+	}
+
+	got, err := Render(result)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"message message-ref=100",
+		"reply-context anchor-ref=100 count=1 window=recent source-count=5 source-limit=100 complete=false access-limitation=none",
+		"around-context anchor-ref=100 anchor-state=in-window anchor-source-sequence=#3 requested=2 actual-before=2 actual-after=2 before-sequences=[#1,#2] after-sequences=[#4,#5] source-count=5 source-limit=100 complete=false access-limitation=none",
+		"around-before source-sequence=#2 message-ref=99",
+		"reply-child around-position=after source-sequence=#4 message-ref=101",
+		"around-after source-sequence=#5 message-ref=102",
+		`body=untrusted:"before\\nmessage message-ref=999"`,
+		"body=untrusted:\"[rp rid=42 mid=100] visible text, not inferred structure\"",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("around output missing %q:\n%s", want, got)
+		}
+	}
+	if count := strings.Count(got, "message-ref=101"); count != 1 {
+		t.Fatalf("child/around overlap rendered %d times:\n%s", count, got)
+	}
+	if !strings.Contains(got, "reply{state=resolved,target-ref=99}") || !strings.Contains(got, "reply{state=resolved,target-ref=100}") {
+		t.Fatalf("typed reply edges were lost or inferred from adjacency:\n%s", got)
+	}
+	for _, messageRef := range []string{"100", "99", "101", "102"} {
+		if _, err := chatwork.NewReference(chatwork.ReferenceMessage, messageRef); err != nil {
+			t.Fatalf("message reference %q does not round trip: %v", messageRef, err)
+		}
+	}
+}
+
+func TestRenderMessagesShowAroundReportsOutsideAndUnknownWithoutNeighbors(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		access chatwork.MessageAccessLimitation
+		state  chatwork.MessageAroundAnchorState
+	}{
+		{name: "outside", access: chatwork.MessageAccessNone, state: chatwork.MessageAroundAnchorOutside},
+		{name: "unknown", access: chatwork.MessageAccessPartial, state: chatwork.MessageAroundAnchorUnknown},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			result := resultForTask(chatwork.TaskMessagesShow)
+			result.MessageShowAround = &chatwork.MessageShowAround{
+				Anchor: result.Messages[0].Ref, AnchorState: test.state, Requested: 2,
+				Before: []chatwork.Message{}, BeforeSequences: []int{}, After: []chatwork.Message{}, AfterSequences: []int{},
+				SourceCount: 0, Coverage: chatwork.Coverage{Kind: "latest_window", Limit: 100, Complete: false}, Access: test.access,
+			}
+			if test.access == chatwork.MessageAccessPartial {
+				result.MessageShowAround.SourceCount = 1
+			}
+			got, err := Render(result)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !strings.Contains(got, "anchor-state="+string(test.state)+" requested=2 actual-before=0 actual-after=0") ||
+				strings.Contains(got, "around-before ") || strings.Contains(got, "around-after ") {
+				t.Fatalf("absent around result disclosed neighbors:\n%s", got)
+			}
+		})
+	}
 }

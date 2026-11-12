@@ -22,7 +22,11 @@ const maxChatworkOutputBytes = 16 * 1024 * 1024
 // catalog. The catalog limits the accepted argv surface; this function only
 // maps those declared values into the provider-independent request union.
 func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operation.Intent, args []string) int {
-	arguments, deprecatedFlags, err := parseChatworkInvocationArguments(command, args)
+	activeCatalog := Catalog{}
+	if c != nil {
+		activeCatalog = c.catalog
+	}
+	arguments, deprecatedFlags, err := parseChatworkInvocationArgumentsInView(command, args, activeCatalog)
 	if err != nil {
 		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
 	}
@@ -37,6 +41,12 @@ func runChatwork(ctx context.Context, c *CLI, command CommandSpec, intent operat
 	request, err := buildChatworkRequest(command, requestArguments, now)
 	if err != nil {
 		return c.failUsage(ctx, "invalid_arguments", err.Error()+"; 使い方: "+command.Usage(), "help "+command.Path, "宣言されているコマンド入力を修正してください。")
+	}
+	// Validate all typed references before reading a possibly interactive body
+	// source. The body value "-" is a valid temporary placeholder here; the
+	// resolved stdin bytes are validated again immediately after the read.
+	if err := request.Validate(); err != nil {
+		return c.failUsage(ctx, "invalid_arguments", invalidChatworkRequestMessage(command, arguments)+"; 使い方: "+command.Usage(), "help "+command.Path, "名前を示した入力の値と併用条件を修正してください。")
 	}
 	if err := resolveChatworkMessageStdin(ctx, c, &request); err != nil {
 		return c.fail(ctx, err)
@@ -158,6 +168,10 @@ func parseChatworkArguments(command CommandSpec, args []string) (chatworkArgumen
 }
 
 func parseChatworkInvocationArguments(command CommandSpec, args []string) (chatworkArguments, []deprecatedFlagUse, error) {
+	return parseChatworkInvocationArgumentsInView(command, args, Catalog{})
+}
+
+func parseChatworkInvocationArgumentsInView(command CommandSpec, args []string, active Catalog) (chatworkArguments, []deprecatedFlagUse, error) {
 	declared := make(map[string]CommandInput, len(command.Agent.Inputs))
 	aliases := make(map[string]string)
 	candidates := make([]string, 0, len(command.Agent.Inputs))
@@ -190,8 +204,8 @@ func parseChatworkInvocationArguments(command CommandSpec, args []string) (chatw
 		if !ok {
 			canonical, aliasOK := aliases[name]
 			if !aliasOK {
-				if command.Path == "members list" && name == "--query" {
-					return nil, nil, fmt.Errorf("members list は --query に対応していません。cwk members find --room <room-id> --query <text> を使ってください")
+				if guidance := unsupportedChatworkFlagGuidance(command, name, active); guidance != "" {
+					return nil, nil, fmt.Errorf("%s", guidance)
 				}
 				return nil, nil, unknownChatworkFlagError(name, candidates, aliases)
 			}
@@ -253,6 +267,38 @@ func parseChatworkInvocationArguments(command CommandSpec, args []string) (chatw
 		}
 	}
 	return parsed, deprecatedFlags, nil
+}
+
+func unsupportedChatworkFlagGuidance(command CommandSpec, name string, active Catalog) string {
+	for _, input := range command.Agent.Inputs {
+		if input.Name == name {
+			return ""
+		}
+	}
+	if name == "--format" {
+		return "このコマンドは --format に対応していません。Chatwork タスクの成功結果は text です。エラーを JSON で受け取るには、コマンドの前に --error-format json を指定してください。"
+	}
+	switch {
+	case command.Path == "messages list" && name == "--around":
+		if _, visible := active.Lookup("messages show"); visible {
+			return "messages list は --around に対応していません。完全一致メッセージの周辺指定は 'cwk help messages show' を確認してください。"
+		}
+		return "messages list は --around に対応していません。利用できる入力は 'cwk help messages list' で確認してください。"
+	case command.Path == "messages list" && name == "--message":
+		if _, visible := active.Lookup("messages show"); visible {
+			return "messages list は --message に対応していません。完全一致メッセージの指定は 'cwk help messages show' を確認してください。"
+		}
+		return "messages list は --message に対応していません。利用できる入力は 'cwk help messages list' で確認してください。"
+	case command.Path == "messages list" && name == "--query":
+		return "messages list は --query に対応していません。--contains は取得済みの最大100件をローカル照合します（既定範囲は recent、API検索なし）。詳しくは 'cwk help messages list' を確認してください。"
+	case command.Path == "members list" && name == "--query":
+		if _, visible := active.Lookup("members find"); visible {
+			return "members list は --query に対応していません。表示名の候補検索は 'cwk help members find' を確認してください。"
+		}
+		return "members list は --query に対応していません。利用できる入力は 'cwk help members list' で確認してください。"
+	default:
+		return ""
+	}
 }
 
 func optionalChatworkFlagValue(command CommandSpec, name string) bool {
@@ -325,6 +371,10 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 				request.Request = refs[0]
 			case "--account":
 				request.Account = refs[0]
+			case "--to":
+				request.MessageRecipients = refs
+			case "--reply-to":
+				request.MessageReplyTarget = &chatwork.MessageReplyTarget{Message: refs[0]}
 			case "--sender":
 				request.MessageFilter.Senders = refs
 			case "--assigned-by":
@@ -340,6 +390,13 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 			default:
 				return chatwork.Request{}, fmt.Errorf("Chatwork 参照のバインドには対応していません")
 			}
+			continue
+		}
+		if name == "--contains" {
+			if request.Task != chatwork.TaskMessagesList {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --contains に対応していません")
+			}
+			request.MessageFilter.Contains = append(request.MessageFilter.Contains, values...)
 			continue
 		}
 
@@ -364,7 +421,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 		case "--body":
 			request.Body = value
 		case "--body-file":
-			if request.Task != chatwork.TaskMessagesSend && request.Task != chatwork.TaskMessagesUpdate {
+			if request.Task != chatwork.TaskMessagesSend && request.Task != chatwork.TaskMessagesReconcileSend && request.Task != chatwork.TaskMessagesUpdate {
 				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --body-file に対応していません")
 			}
 			request.BodyFile = value
@@ -373,9 +430,9 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 		case "--limit":
 			switch request.Task {
 			case chatwork.TaskRoomTasksCreate:
-				limit, err := strconv.ParseInt(value, 10, 64)
-				if err != nil || limit <= 0 {
-					return chatwork.Request{}, fmt.Errorf("--limit は正の Unix 時刻で指定してください")
+				limit, err := parseRoomTaskDeadline(value)
+				if err != nil {
+					return chatwork.Request{}, err
 				}
 				request.Limit = limit
 			default:
@@ -411,6 +468,15 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 				return chatwork.Request{}, fmt.Errorf("--resolve-relations は 0 から %d までの整数で指定してください", chatwork.MaxMessageRelationFetches)
 			}
 			request.MessageRelationFetchLimit = limit
+		case "--around":
+			if request.Task != chatwork.TaskMessagesShow {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --around に対応していません")
+			}
+			count, err := strconv.Atoi(value)
+			if err != nil || count < 0 || count > chatwork.MaxMessageAroundCount {
+				return chatwork.Request{}, fmt.Errorf("--around は 0 から %d までの整数で指定してください", chatwork.MaxMessageAroundCount)
+			}
+			request.MessageAround = &chatwork.MessageAroundRequest{Count: count}
 		case "--limit-type":
 			request.LimitType = value
 		case "--window":
@@ -431,6 +497,11 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 			request.FilePath = value
 		case "--message":
 			request.FileMessage = value
+		case "--kind":
+			if request.Task != chatwork.TaskMessagesResources {
+				return chatwork.Request{}, fmt.Errorf("この Chatwork タスクでは --kind に対応していません")
+			}
+			request.MessageResourcesKind = chatwork.MessageResourceKind(value)
 		case "--invite-code", "--code":
 			request.InviteCode = value
 		case "--regenerate-code":
@@ -459,11 +530,11 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 		request.MessageFilter.Period = period
 	}
 	if request.Task == chatwork.TaskMessagesList {
-		selectionActive := len(request.MessageFilter.Senders) > 0 || request.MessageFilter.Period != (chatwork.MessagePeriod{}) ||
+		selectionActive := len(request.MessageFilter.Senders) > 0 || len(request.MessageFilter.Contains) > 0 || request.MessageFilter.Period != (chatwork.MessagePeriod{}) ||
 			request.MessageFilter.StartIndex > 0 || request.MessageFilter.Count > 0
 		_, contextSpecified := arguments["--context"]
 		if contextSpecified && !selectionActive {
-			return chatwork.Request{}, fmt.Errorf("--context は単独で指定できません。--sender、--on/--since/--until、--start-index、--count のいずれかと併用してください")
+			return chatwork.Request{}, fmt.Errorf("--context は単独で指定できません。--sender、--contains、--on/--since/--until、--start-index、--count のいずれかと併用してください")
 		}
 		if selectionActive && request.MessageFilter.Context == "" {
 			request.MessageFilter.Context = chatwork.MessageContextReplies
@@ -482,7 +553,7 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 			return chatwork.Request{}, fmt.Errorf("--context none は正の --resolve-relations と併用できません。返信関係を取得する場合は --context replies を使ってください")
 		}
 	}
-	if request.Task == chatwork.TaskMessagesSend || request.Task == chatwork.TaskMessagesUpdate {
+	if request.Task == chatwork.TaskMessagesSend || request.Task == chatwork.TaskMessagesReconcileSend || request.Task == chatwork.TaskMessagesUpdate {
 		_, bodySet := arguments["--body"]
 		_, bodyFileSet := arguments["--body-file"]
 		if bodySet == bodyFileSet {
@@ -493,6 +564,19 @@ func buildChatworkRequest(command CommandSpec, arguments chatworkArguments, now 
 }
 
 func invalidChatworkRequestMessage(command CommandSpec, arguments chatworkArguments) string {
+	if command.chatwork != nil && (command.chatwork.Task == chatwork.TaskMessagesSend || command.chatwork.Task == chatwork.TaskMessagesReconcileSend) {
+		recipients := arguments["--to"]
+		if len(recipients) > chatwork.MaxMessageRecipients {
+			return fmt.Sprintf("--to は最大 %d 個の宛先を指定できます", chatwork.MaxMessageRecipients)
+		}
+		seen := make(map[string]struct{}, len(recipients))
+		for _, recipient := range recipients {
+			if _, exists := seen[recipient]; exists {
+				return "--to に同じ宛先参照を重複して指定できません"
+			}
+			seen[recipient] = struct{}{}
+		}
+	}
 	names := make([]string, 0, len(arguments))
 	for _, input := range command.Agent.Inputs {
 		if len(arguments[input.Name]) > 0 {
@@ -506,7 +590,7 @@ func invalidChatworkRequestMessage(command CommandSpec, arguments chatworkArgume
 }
 
 func resolveChatworkMessageStdin(ctx context.Context, c *CLI, request *chatwork.Request) error {
-	if request == nil || (request.Task != chatwork.TaskMessagesSend && request.Task != chatwork.TaskMessagesUpdate) || request.BodyFile != "" {
+	if request == nil || (request.Task != chatwork.TaskMessagesSend && request.Task != chatwork.TaskMessagesReconcileSend && request.Task != chatwork.TaskMessagesUpdate) || request.BodyFile != "" {
 		return nil
 	}
 	if request.Body != "-" {
@@ -619,11 +703,32 @@ func buildChatworkExecutionRequest(command CommandSpec, base operation.Intent, a
 		ExpectedTarget:  intent.Target,
 		ExpectedImpact:  mutation.Impact,
 	}
+	for _, name := range mutation.PreflightInputs {
+		var input CommandInput
+		for _, candidate := range command.Agent.Inputs {
+			if candidate.Name == name {
+				input = candidate
+				break
+			}
+		}
+		kind := operation.PreflightRef{Input: name, Kind: input.ReferenceKind}
+		for _, value := range arguments[name] {
+			ref, err := chatwork.NewReference(chatwork.ReferenceKind(input.ReferenceKind), value)
+			if err != nil {
+				return execution.Request{}, fmt.Errorf("%s には正規参照が必要です", name)
+			}
+			bound := kind
+			bound.Value = ref.Value
+			intent.PreflightRefs = append(intent.PreflightRefs, bound)
+		}
+	}
+	request.Intent = intent
+	request.ExpectedPreflightRefs = append([]operation.PreflightRef(nil), intent.PreflightRefs...)
 	return request, nil
 }
 
 func chatworkBooleanFlag(name string) bool {
-	return name == "--self-unread" || name == "--create-download-url" || name == "--regenerate-code"
+	return name == "--self-unread" || name == "--create-download-url" || name == "--regenerate-code" || name == "--jst"
 }
 
 func containsExact(values []string, wanted string) bool {
@@ -640,7 +745,8 @@ func unclassifiedMutationServiceError(err error) bool {
 	if !ok {
 		return err != nil
 	}
-	return public.Code == "unclassified_chatwork_error" || public.Code == "operation_canceled"
+	return public.Code == "unclassified_chatwork_error" || public.Code == "operation_canceled" ||
+		public.Code == "chatwork_result_mismatch" || public.Code == "chatwork_result_invalid"
 }
 
 func operationCanceledServiceError(err error) bool {

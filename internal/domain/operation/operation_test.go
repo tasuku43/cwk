@@ -185,3 +185,57 @@ func TestIntentJSONUsesStableSemanticEnumNames(t *testing.T) {
 		}
 	}
 }
+
+func TestIntentPreservesOrderedPreflightReferencesWithoutChangingMutationTarget(t *testing.T) {
+	intent := Intent{
+		Command: "messages send",
+		Effect:  EffectCreate,
+		Target:  TargetRef{Kind: "chatwork-message", ParentID: "42"},
+		Impact:  declaredSingleImpact(),
+		PreflightRefs: []PreflightRef{
+			{Input: "--to", Kind: "account", Value: "9"},
+			{Input: "--to", Kind: "account", Value: "3"},
+			{Input: "--reply-to", Kind: "message", Value: "101"},
+		},
+	}
+	if err := intent.Validate(); err != nil {
+		t.Fatalf("valid typed intent: %v", err)
+	}
+	if got := intent.Target; got != (TargetRef{Kind: "chatwork-message", ParentID: "42"}) {
+		t.Fatalf("preflight refs changed mutation parent target: %+v", got)
+	}
+
+	cloned := intent
+	cloned.PreflightRefs = append([]PreflightRef(nil), intent.PreflightRefs...)
+	if !intent.Equal(cloned) {
+		t.Fatal("equal ordered intents did not compare equal")
+	}
+	cloned.PreflightRefs[0], cloned.PreflightRefs[1] = cloned.PreflightRefs[1], cloned.PreflightRefs[0]
+	if intent.Equal(cloned) {
+		t.Fatal("preflight reference order was ignored")
+	}
+
+	for name, ref := range map[string]PreflightRef{
+		"missing input": {Kind: "account", Value: "9"},
+		"invalid input": {Input: "to", Kind: "account", Value: "9"},
+		"missing kind":  {Input: "--to", Value: "9"},
+		"invalid value": {Input: "--to", Kind: "account", Value: "9\n"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			invalid := intent
+			invalid.PreflightRefs = []PreflightRef{ref}
+			if err := invalid.Validate(); err == nil {
+				t.Fatal("invalid preflight reference passed intent validation")
+			}
+		})
+	}
+	duplicate := intent
+	duplicate.PreflightRefs = []PreflightRef{{Input: "--to", Kind: "account", Value: "9"}, {Input: "--to", Kind: "account", Value: "9"}}
+	if err := duplicate.Validate(); err == nil {
+		t.Fatal("duplicate preflight reference passed intent validation")
+	}
+	read := Intent{Command: "messages list", Effect: EffectRead, PreflightRefs: intent.PreflightRefs}
+	if err := read.Validate(); err == nil {
+		t.Fatal("read intent with mutation preflight refs passed validation")
+	}
+}

@@ -100,14 +100,15 @@ func (credential requestCredential) authorize(request *http.Request) error {
 // and the bounded provider transport. Token-bearing values never leave this
 // package.
 type Client struct {
-	mu       sync.RWMutex
-	records  map[authn.BindingID]credentialRecord
-	source   requestCredential
-	baseURL  string
-	http     httpDoer
-	now      func() time.Time
-	newID    func() (string, error)
-	readFile func(string) ([]byte, error)
+	mu        sync.RWMutex
+	records   map[authn.BindingID]credentialRecord
+	source    requestCredential
+	baseURL   string
+	userAgent string
+	http      httpDoer
+	now       func() time.Time
+	newID     func() (string, error)
+	readFile  func(string) ([]byte, error)
 	// Message bodies have a smaller read ceiling than uploads and keep the
 	// caller context through their infrastructure-owned filesystem boundary.
 	readBodyFile func(context.Context, string) ([]byte, error)
@@ -115,7 +116,7 @@ type Client struct {
 
 // NewFromEnvironment constructs the production adapter. The token is read
 // once and the destination cannot be overridden by argv or environment.
-func NewFromEnvironment() (*Client, error) {
+func NewFromEnvironment(version string) (*Client, error) {
 	token := os.Getenv(TokenEnvironment)
 	if token == "" {
 		return nil, tokenAuthenticationFault(tokenMissingCode)
@@ -123,7 +124,7 @@ func NewFromEnvironment() (*Client, error) {
 	if err := validateToken(token); err != nil {
 		return nil, tokenAuthenticationFault(tokenInvalidCode)
 	}
-	client := newClient(ProductionBaseURL, token, productionHTTPClient(), randomBindingID, boundedReadFile)
+	client := newClientWithVersion(ProductionBaseURL, token, productionHTTPClient(), randomBindingID, boundedReadFile, version)
 	client.readBodyFile = boundedReadMessageBodyFile
 	return client, nil
 }
@@ -243,18 +244,25 @@ func (c *Client) removeBinding(binding authn.BindingID) {
 }
 
 func newClient(baseURL, token string, httpClient httpDoer, newID func() (string, error), readFile func(string) ([]byte, error)) *Client {
-	return newClientWithCredential(baseURL, requestCredential{method: authn.MethodPAT, secret: token}, httpClient, newID, readFile)
+	return newClientWithVersion(baseURL, token, httpClient, newID, readFile, "dev")
+}
+
+func newClientWithVersion(baseURL, token string, httpClient httpDoer, newID func() (string, error), readFile func(string) ([]byte, error), version string) *Client {
+	client := newClientWithCredential(baseURL, requestCredential{method: authn.MethodPAT, secret: token}, httpClient, newID, readFile)
+	client.userAgent = chatworkUserAgent(version)
+	return client
 }
 
 func newClientWithCredential(baseURL string, credential requestCredential, httpClient httpDoer, newID func() (string, error), readFile func(string) ([]byte, error)) *Client {
 	client := &Client{
-		records:  make(map[authn.BindingID]credentialRecord),
-		source:   credential,
-		baseURL:  baseURL,
-		http:     httpClient,
-		now:      time.Now,
-		newID:    newID,
-		readFile: readFile,
+		records:   make(map[authn.BindingID]credentialRecord),
+		source:    credential,
+		baseURL:   baseURL,
+		userAgent: chatworkUserAgent("dev"),
+		http:      httpClient,
+		now:       time.Now,
+		newID:     newID,
+		readFile:  readFile,
 	}
 	if readFile != nil {
 		client.readBodyFile = func(ctx context.Context, path string) ([]byte, error) {

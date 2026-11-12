@@ -79,6 +79,12 @@ This prevents application wiring in which authentication validates one record
 but a task port silently uses another. Adapter tests prove that a binding is
 usable only by the client and process-local record that issued it.
 
+Composite `messages send --reply-to` execution remains one authenticated
+action: the application passes the same validated `BindingID` and caller
+context to the exact reply read and the following create call. It does not
+reauthenticate between them or expose a credential-bearing client. Infrastructure
+resolves the same private credential record immediately before each API call.
+
 ## Secret-free contracts
 
 ### Method
@@ -216,6 +222,19 @@ resolves and revalidates that binding immediately before each request. A later
 exact read never receives the PAT, client, or credential-bearing type from the
 application and never turns the binding into reusable authorization state.
 
+`messages show --around N` shares the same bounded recent read and validated
+binding whether or not reply context is requested. The exact anchor read
+happens first; around does not trigger authentication discovery, change the
+selected identity, or consume the independent exact-parent budget.
+
+`messages reconcile-send` uses the same admitted binding and caller context
+for its optional exact reply-target GET, one current-account GET and one
+latest-window list GET, in that order. It validates the body source before
+any read. The current account is not proof of the original send account. The current reply author is used
+only to reconstruct the typed send prefix; a missing or restricted reply
+target remains a read fault. This task has no POST path and always returns an
+unknown send outcome.
+
 The binding is process-local correlation metadata. Do not persist it, cache it
 across sessions, render it, log it, accept it from a user, or use it as proof of
 possession.
@@ -237,7 +256,9 @@ method-selection command. `CWK_AUTH_METHOD` has no product meaning.
 Production sends the token only to `https://api.chatwork.com/v2` in the
 `x-chatworktoken` header. Public base-URL overrides are forbidden. Tests inject
 synthetic tokens and local servers through internal construction and never read
-a developer token or contact live Chatwork.
+a developer token or contact live Chatwork. A separate, explicitly enabled
+scheduled smoke workflow may use a dedicated test-account PAT for a narrow
+read-only live check; see the harness and Japanese contributor guide.
 
 ## Deferred OAuth decision
 

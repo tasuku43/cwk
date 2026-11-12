@@ -55,6 +55,11 @@
     "reason": ""
   },
   {
+    "id": "chatwork.message-resources.inspect",
+    "status": "public",
+    "reason": ""
+  },
+  {
     "id": "chatwork.messages.search",
     "status": "excluded",
     "reason": "The official Chatwork API v2 exposes bounded room-message reads but no global full-text message-search operation; cwk documents room discovery and bounded room-local selection instead."

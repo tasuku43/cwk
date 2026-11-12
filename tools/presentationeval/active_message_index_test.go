@@ -60,7 +60,7 @@ func TestActiveMessageIndexSelectsNewestByTypedTimeAndPreservesProviderOrder(t *
 	}
 	for _, want := range []string{
 		"messages room-ref=3601 count=2 window=recent source-limit=100 complete=false",
-		"selection source-count=6 candidate-count=6 start-index=1 count=2 items-per-page=2 next-start-index=3 anchors=[#1,#3]",
+		"selection source-count=6 candidate-count=6 start-index=1 count=2 items-per-page=2 next-start-index=3 context=none anchors=[#1,#3]",
 		`#1 1201 a1 1702000060 reply=?1202`,
 		`#3 1203 a1 1702000050 "Second-newest primary message."`,
 	} {
