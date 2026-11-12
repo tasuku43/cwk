@@ -9,6 +9,7 @@ export GOFIPS140=off
 export GOFLAGS=
 export GOTOOLCHAIN=local
 export GOWORK=off
+unset GOROOT
 
 if [[ $# -ne 5 ]]; then
   echo "usage: $0 <tag> <revision> <goos> <goarch> <output-dir>" >&2

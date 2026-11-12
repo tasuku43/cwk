@@ -53,7 +53,7 @@ Before publication:
 - Choose and commit an explicit project license.
 - Review dependency and bundled-asset licenses.
 - Decide the inbound contribution policy, such as MIT inbound licensing, DCO, or CLA.
-- Add required notices and attribution. The checked-in project `LICENSE` and `THIRD_PARTY_NOTICES` are reviewed release inputs and accompany every public binary archive; the notice file preserves the pinned Go runtime/standard-library license and patent grant as well as every linked third-party module license.
+- Add required notices and attribution. The checked-in project `LICENSE` and `THIRD_PARTY_NOTICES` are reviewed release inputs and accompany every public binary archive; the notice file uses a version-neutral Go-runtime heading while release checks compare its license and patent-grant contents against the exact Go toolchain selected by `go.mod`, along with every linked third-party module license.
 - Confirm names, logos, and examples do not imply unauthorized endorsement.
 
 This template uses MIT. A derived project may keep MIT, but must record that as a deliberate decision rather than inheriting it silently.
@@ -91,6 +91,16 @@ The base template provides the core technical documents. A derived project must 
 - Do not expose secrets to forked pull requests.
 - Verify dependency integrity, licenses, and known vulnerabilities.
 - Treat automated dependency or schema pull requests as untrusted changes that must pass the same checks.
+
+The weekly Go patch updater is limited to a newer stable patch in the
+major/minor version already selected by `go.mod`. It validates a candidate on
+the default-branch source revision before opening or reusing a pull request
+whose only change is the `go` directive. No update is merged automatically.
+Because the proposal uses `GITHUB_TOKEN`, GitHub may hold its pull-request
+workflows for approval. Pre-creation validation does not represent a
+head-attached CI check; required branch-protection checks must still complete
+through the repository's normal review process. See [Release](06_release.md)
+for the candidate-gate and notice-verification contract.
 
 ## Public release review
 

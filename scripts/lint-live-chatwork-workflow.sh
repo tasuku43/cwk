@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# This credential-bearing workflow has a deliberately closed, reviewed shape.
+# Intentional changes update this contract and its negative tests together.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+workflow=${1:-.github/workflows/live-chatwork.yml}
+[[ -f $workflow && ! -L $workflow ]] || { echo 'live smoke workflow must be a regular file' >&2; exit 1; }
+if ! cmp -s "$workflow" <(cat <<'WORKFLOW'
+name: Live Chatwork read smoke
+
+on:
+  schedule:
+    - cron: "31 5 * * 2"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-chatwork-smoke
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    name: 専用アカウントで読み取りを確認
+    if: github.event_name == 'schedule' && vars.CWK_LIVE_SMOKE_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: production CLIをビルド
+        run: go build -buildvcs=false -trimpath -o "$RUNNER_TEMP/cwk-live-smoke" ./cmd/cwk
+      - name: 読み取りを確認（出力は記録しない）
+        env:
+          CWK_API_TOKEN: ${{ secrets.CWK_LIVE_SMOKE_TOKEN }}
+        run: ./scripts/live-chatwork-smoke.sh "$RUNNER_TEMP/cwk-live-smoke"
+WORKFLOW
+); then
+  echo 'live smoke workflow does not match its reviewed credential boundary' >&2
+  exit 1
+fi

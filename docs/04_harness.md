@@ -151,6 +151,12 @@ The test suite has complementary levels:
   credential input, every requirement admits only `pat`, and a missing or
   invalid token makes zero provider task requests. They also prove that the
   removed `CWK_AUTH_METHOD` value cannot select another path.
+- The opt-in scheduled live smoke workflow is separate from these offline
+  checks. When explicitly enabled and supplied a dedicated test-account PAT,
+  it runs only `account show`, `account status`, and `rooms list` using a
+  temporary selection profile. It suppresses all task stdout and stderr and
+  records only fixed task names and success/failure. This is a narrow live
+  read check, not a provider-wide compatibility test or a source of fixtures.
 - Chatwork authentication-binding tests use synthetic tokens and two isolated
   clients to reject missing, stale, wrong-client, and cross-session bindings;
   no automated test reads a developer credential or contacts live Chatwork.
@@ -439,6 +445,7 @@ Every strong statement should identify its enforcement path.
 | Secret or private-data exclusion | Repository policy, scanner, and synthetic fixtures; real temporary Git fixtures prove untracked Claude-local home paths, invalid Markdown links, and secret canaries stay outside the publishable scan, staged paths return to that scan and fail Claude policy plus ordinary checks, symlink/special-file rejection inside local paths, fail-closed index access, and preservation of other shape invariants |
 | Reproducible generation | Regenerate and require a clean diff |
 | Artifact integrity | Build, inspect, checksum, and install tests |
+| Same-minor Go patch proposals | Offline updater tests cover numeric eligibility, hostile/malformed release data, bounded/network failures, and unchanged unrelated files; release lint fixes workflow jobs, steps, permissions, action revisions, inputs, candidate checks, and `go.mod`-only PR scope; negative fixtures reject extra run/action/env/with steps, permissions, runtime expressions, arbitrary revisions, and proposal-before-validation order; manual review confirms that pre-creation gates do not claim head-attached CI approval |
 | Shared Homebrew tap publication | Release lint validates reviewed annotated-tag notes, exact-tag publication checkout, the workflow and Formula-job field allowlists, every Formula-job step start, and exact checksum/toolchain, render/audit/artifact upload, fresh-runner artifact validation, token, checkout, staging, and PR shapes; confines the App action and each secret to one reviewed workflow-wide occurrence; fixes the stable-only manual recovery input, quoted tag binding, read-only existing-Release verification, exact six-file/checksum handoff, audit-to-publish dependency, public tap repository, requested permissions, read-only audit-job source token, zero source-repository permissions in the token-bearing job, absence of ambient `env`/`defaults`, tagged-source checkout, or checked-out code execution there, exact audited Formula binding/path, non-symbolic destination paths, PR branch/title prefixes, pinned actions, and render/audit-before-write order; negative mutation fixtures prove generated-note substitution, unpinned/reclassified recovery, skipped metadata/checksum validation, alternate/extra fields or steps, external secret/action use, runtime injection, symbolic-path acceptance, same-runner code execution, representative drift, and ignored failures are rejected; the release owner manually confirms the external App installation maximum |
 | Documentation command | Execute or parse the canonical snippet where practical |
 | Japanese default user experience | Whole-catalog natural-language validation, human help/TUI/error snapshots, stable-identifier regression tests, and repository checks for the active Japanese entry documents and GitHub templates |
@@ -468,6 +475,26 @@ Generation is allowed when it reduces hand-maintained duplication without making
 - Generated schema fixtures must retain reviewed provenance and license metadata and an exact manifest digest.
 - Automated updates use pull requests and the same profiles as human changes.
 - A passing generator does not classify a new capability or side effect on behalf of a reviewer.
+
+The Go patch updater reads only the fixed official release index
+`https://go.dev/dl/?mode=json`, validates bounded JSON, and selects only a
+newer stable patch in the major/minor line already selected by `go.mod`. Its
+offline unit tests cover equal, older, newer, and different-minor versions;
+malformed, duplicate, unknown-field, oversized, and trailing JSON; bad
+responses, timeout, and network failure; and proof that unrelated files stay
+unchanged. The scheduled workflow validates a candidate against one immutable
+default-branch SHA under the exact candidate toolchain, then requires the
+`full`, `security`, and `release` profiles before its separate PR-write job.
+The release profile runs the workflow contract linter and negative fixtures,
+which fix the job/step order, permissions, action revisions, inputs, runtime
+environment, candidate checks, and `go.mod`-only staging; added steps,
+untrusted run/action/env/with inputs, arbitrary SHA-shaped revisions, and
+write-before-validation changes must fail.
+
+The workflow's `GITHUB_TOKEN` can cause GitHub to hold pull-request CI for
+approval. Candidate validation is evidence about the generated tree, not an
+attached PR status check. The harness does not claim that this preflight
+satisfies branch protection that requires a check on the PR head.
 
 ## Failure handling
 

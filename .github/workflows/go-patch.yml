@@ -1,0 +1,151 @@
+name: Go patch update
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: go-patch-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: 公式一覧から同一minorのpatch候補を作成
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      changed: ${{ steps.patch.outputs.changed }}
+      candidate: ${{ steps.patch.outputs.candidate }}
+      minor: ${{ steps.patch.outputs.minor }}
+      base_sha: ${{ steps.patch.outputs.base_sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: 固定した既定branch SHAと候補差分を確認
+        id: patch
+        env:
+          BASE_SHA: ${{ github.sha }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          TRIGGER_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          [[ "$TRIGGER_REF" == "refs/heads/$DEFAULT_BRANCH" ]]
+          [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]]
+          candidate="$(go run ./tools/gopatch)"
+          printf 'base_sha=%s\n' "$BASE_SHA" >>"$GITHUB_OUTPUT"
+          if [[ -z "$candidate" ]]; then
+            [[ -z "$(git status --porcelain=v1 --untracked-files=all)" ]]
+            printf 'changed=false\n' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          [[ "$candidate" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$(git status --porcelain=v1 --untracked-files=all)" == " M go.mod" ]]
+          [[ "$(git diff --numstat -- go.mod)" == "$(printf '1\t1\tgo.mod')" ]]
+          [[ "$(go run ./tools/gopatch version)" == "$candidate" ]]
+          minor="$(go run ./tools/gopatch minor)"
+          [[ "$minor" =~ ^[0-9]+\.[0-9]+$ ]]
+          printf 'candidate=%s\nminor=%s\nchanged=true\n' "$candidate" "$minor" >>"$GITHUB_OUTPUT"
+
+  validate:
+    name: 候補Goで必須gateを実行
+    needs: prepare
+    if: needs.prepare.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ needs.prepare.outputs.candidate }}
+          cache: true
+
+      - name: 固定SHAへ候補だけを再構成
+        env:
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          CANDIDATE: ${{ needs.prepare.outputs.candidate }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CANDIDATE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]]
+          go run ./tools/gopatch apply "$CANDIDATE"
+          [[ "$(git status --porcelain=v1 --untracked-files=all)" == " M go.mod" ]]
+          [[ "$(git diff --numstat -- go.mod)" == "$(printf '1\t1\tgo.mod')" ]]
+          [[ "$(go run ./tools/gopatch version)" == "$CANDIDATE" ]]
+
+      - name: 必須gateを候補toolchainで実行
+        run: |
+          ./scripts/check.sh full
+          ./scripts/check.sh security
+          ./scripts/check.sh release
+
+  propose:
+    name: 検証済みGo patchのpull requestを作成・再利用
+    needs: [prepare, validate]
+    if: needs.prepare.outputs.changed == 'true' && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.prepare.outputs.base_sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ needs.prepare.outputs.candidate }}
+          cache: false
+
+      - name: SHAとgo.modだけの候補差分を再検証
+        env:
+          BASE_SHA: ${{ needs.prepare.outputs.base_sha }}
+          CANDIDATE: ${{ needs.prepare.outputs.candidate }}
+          PATCH_MINOR: ${{ needs.prepare.outputs.minor }}
+        run: |
+          set -euo pipefail
+          [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$CANDIDATE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$PATCH_MINOR" =~ ^[0-9]+\.[0-9]+$ ]]
+          [[ "$(git rev-parse HEAD)" == "$BASE_SHA" ]]
+          [[ "$(go run ./tools/gopatch minor)" == "$PATCH_MINOR" ]]
+          go run ./tools/gopatch apply "$CANDIDATE"
+          [[ "$(git status --porcelain=v1 --untracked-files=all)" == " M go.mod" ]]
+          [[ "$(git diff --numstat -- go.mod)" == "$(printf '1\t1\tgo.mod')" ]]
+          [[ "$(go run ./tools/gopatch version)" == "$CANDIDATE" ]]
+
+      - name: 検証済みgo.modだけでpull requestを作成・再利用
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
+        with:
+          token: ${{ github.token }}
+          add-paths: go.mod
+          base: ${{ github.event.repository.default_branch }}
+          branch: codex/go-patch-${{ needs.prepare.outputs.minor }}
+          delete-branch: false
+          commit-message: "Go ${{ needs.prepare.outputs.candidate }} へ更新"
+          title: "Go ${{ needs.prepare.outputs.candidate }} へ更新"
+          body: |
+            公式Goリリース一覧から同一minorの安定patchを検出しました。
+            既定branchの固定SHA上で候補を再構成し、候補の正確なGo toolchainで full・security・release gate を通過してから作成しています。
+            変更対象は `go.mod` の `go` 指令だけです。自動mergeは行いません。
+            `GITHUB_TOKEN` が作成したpull requestのCIは、GitHubの設定により実行承認が必要な場合があります。このworkflowの事前検証はPRに紐づくCI checkを偽装しません。

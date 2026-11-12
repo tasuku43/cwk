@@ -25,6 +25,30 @@ Release checks verify that the displayed values match the tag and source revisio
 
 `task build` is deliberately unversioned and retains the compiled `dev` default. It does not interpolate `git describe`, a tag name, or another repository-controlled string into a shell command. Only `scripts/package-release.sh` injects version and revision metadata, after the shared release-tag validator and full lowercase commit-SHA validation succeed.
 
+## Go toolchain patch updates
+
+`go.mod` selects the minimum supported Go patch, and release checks require
+that exact toolchain. The weekly `Go patch update` workflow reads the official
+Go stable-release list and may select only a numerically newer patch in the
+same major/minor line. It does not advance a major or minor version or accept
+an unstable release. The generated pull request changes only the `go`
+directive in `go.mod`.
+
+The workflow binds candidate discovery, validation, and proposal to the same
+immutable default-branch SHA. It reconstructs the candidate from that source
+and runs `full`, `security`, and `release` with the exact candidate toolchain
+before granting the proposal job its narrow Contents and Pull requests write
+permissions. That job repeats the SHA, version, and single-file-diff checks,
+then creates or reuses a reviewable pull request. It never checks out PR-head
+code or merges automatically.
+
+GitHub may require approval before workflows triggered by the proposal job's
+`GITHUB_TOKEN` pull request run. The candidate gates above establish that the
+generated change passed those profiles; they do not create or impersonate
+head-attached status checks required by branch protection. A maintainer must
+complete any such approval or required check through the repository's normal
+review process.
+
 ## Default platform matrix
 
 The template builds with `CGO_ENABLED=0` for:
@@ -58,7 +82,7 @@ Each tag publishes:
   changes, compatibility, security, and migration impact;
 - prerelease metadata when the tag contains a prerelease suffix.
 
-Archives contain exactly the intended binary, the project `LICENSE`, and the checked-in `THIRD_PARTY_NOTICES` artifact. `scripts/package-release.sh` builds and verifies artifacts; `task release:check` validates the packaging contract, verifies the notice text against the exact pinned Go toolchain license and patent-grant sources plus the reviewed dependency-module licenses, and fails closed if the modules linked by any supported target differ from that reviewed notice manifest.
+Archives contain exactly the intended binary, the project `LICENSE`, and the checked-in `THIRD_PARTY_NOTICES` artifact. Its Go-runtime heading is version-neutral so a same-minor patch proposal can remain a one-line `go.mod` change. `task release:check` still compares the notice contents byte-for-byte with the license and patent-grant files in the exact Go toolchain selected by `go.mod`, along with the reviewed dependency-module licenses, and fails closed if the modules linked by any supported target differ from that reviewed notice manifest.
 
 The packaging command is create-only. It stages and inspects an archive in a temporary directory on the output filesystem, then publishes it with an atomic no-overwrite hard link. It refuses to overwrite an archive that already exists or appears during the build.
 

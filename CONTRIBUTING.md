@@ -13,11 +13,15 @@ Chatwork CLI の改善へのご協力を歓迎します。リポジトリを常�
 
 ## 開発環境
 
-`go.mod` で指定されたバージョンの Go と [Task](https://taskfile.dev/) をインストールし、次を実行します。
+`go.mod` で指定されたバージョン以上の Go と [Task](https://taskfile.dev/) をインストールし、Go コマンドが `PATH` から使える状態で次を実行します。チェックは開始時に Go のバージョンを確認し、不足している場合は必要な版と対処を表示します。
 
 ```sh
 task check:fast
 ```
+
+毎週の Go patch 更新 workflow は、`go.mod` と同じ major/minor の新しい安定 patch がある場合に限り、`go` 指令だけを更新する Pull Request を作成または再利用します。候補は固定した既定 branch の commit 上で再構成し、その Go toolchain で `full`、`security`、`release` gate を通してから提案します。自動 merge は行いません。
+
+`GITHUB_TOKEN` で作られた Pull Request の CI は、GitHub の設定により実行承認が必要な場合があります。事前 gate は PR に紐づく必須 check の代わりにはならないため、branch protection が head 側の check を要求する場合は通常のレビュー手順で完了してください。
 
 リポジトリは Go モジュール `github.com/tasuku43/cwk`、バイナリ `cwk` として実行可能な状態を維持してください。製品名やモジュールIDの変更は、このリポジトリに対する通常のコントリビューションとは別の製品・互換性判断を必要とします。
 
@@ -51,6 +55,12 @@ task public:check
 ```
 
 パッケージング、Formula、バージョンメタデータ、リリース自動化を変更した場合は、`task release:check` も実行してください。
+
+### 実 API の定期確認（任意）
+
+通常のチェックは実アカウントを使いません。別途、専用の Chatwork テストアカウントで読み取りを定期確認する場合は、そのアカウントが閲覧できる情報を限定したうえで、GitHub リポジトリの Actions secret `CWK_LIVE_SMOKE_TOKEN` に API トークンを登録し、Actions variable `CWK_LIVE_SMOKE_ENABLED` を `true` に設定します。シークレットの値は issue、ログ、ファイルに書かないでください。無効に戻すには variable を削除するか `true` 以外にします。
+
+既定ブランチの週次実行で `account show`、`account status`、`rooms list` のみを確認します。結果やエラーの本文は記録せず、各タスクの成功・失敗だけを表示します。これは限られた読み取りの疎通確認であり、全 API の互換性や書き込みを保証するものではありません。variable が有効でなければ実行はスキップされ、有効なのにトークンがない場合は失敗します。スキップは実 API での確認の完了にはなりません。
 
 ## Pull Request
 

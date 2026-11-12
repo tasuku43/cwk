@@ -10,6 +10,7 @@ export GOFIPS140=off
 export GOFLAGS=
 export GOTOOLCHAIN=local
 export GOWORK=off
+unset GOROOT
 
 profile=${1:-}
 
@@ -18,8 +19,85 @@ usage() {
   exit 2
 }
 
+case "$profile" in
+  fast|full|security|release|public) ;;
+  *) usage ;;
+esac
+
+check_go_toolchain() {
+  local required_major='' required_minor='' required_patch='' required_version=''
+  local directive_count=0 line version_output actual_major actual_minor actual_patch actual_version
+  local required_major_number required_minor_number required_patch_number
+  local actual_major_number actual_minor_number actual_patch_number
+
+  if [[ ! -r go.mod ]]; then
+    echo "go.mod から必要な Go バージョンを確認できません。リポジトリのルートで再実行してください。" >&2
+    exit 1
+  fi
+
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^[[:space:]]*go[[:space:]]+([0-9]+)\.([0-9]+)(\.([0-9]+))?([[:space:]]*(//.*)?)$ ]]; then
+      directive_count=$((directive_count + 1))
+      required_major=${BASH_REMATCH[1]}
+      required_minor=${BASH_REMATCH[2]}
+      required_patch=${BASH_REMATCH[4]:-0}
+      required_version="$required_major.$required_minor"
+      if [[ -n ${BASH_REMATCH[4]:-} ]]; then
+        required_version+=".$required_patch"
+      fi
+    fi
+  done < go.mod
+
+  if [[ $directive_count -ne 1 ]]; then
+    echo "go.mod にある必要な Go バージョンを一意に読み取れません。" >&2
+    exit 1
+  fi
+
+  if ! command -v go >/dev/null 2>&1; then
+    echo "このリポジトリのチェックには Go $required_version 以上が必要です（検出: 未検出）。" >&2
+    echo "Go $required_version 以上をインストールし、その go コマンドを PATH に追加してください。" >&2
+    exit 1
+  fi
+
+  if ! version_output=$(go version 2>/dev/null); then
+    echo "このリポジトリのチェックには Go $required_version 以上が必要です（検出: バージョンを確認できません）。" >&2
+    echo "Go $required_version 以上をインストールし、その go コマンドを PATH に追加してください。" >&2
+    exit 1
+  fi
+
+  if [[ ! $version_output =~ (^|[[:space:]])go([0-9]+)\.([0-9]+)(\.([0-9]+))?([[:space:]]|$) ]]; then
+    echo "go version の出力から Go のバージョンを確認できません。" >&2
+    echo "Go $required_version 以上をインストールし、その go コマンドを PATH に追加してください。" >&2
+    exit 1
+  fi
+  actual_major=${BASH_REMATCH[2]}
+  actual_minor=${BASH_REMATCH[3]}
+  actual_patch=${BASH_REMATCH[5]:-0}
+  actual_version="$actual_major.$actual_minor.$actual_patch"
+
+  required_major_number=$((10#$required_major))
+  required_minor_number=$((10#$required_minor))
+  required_patch_number=$((10#$required_patch))
+  actual_major_number=$((10#$actual_major))
+  actual_minor_number=$((10#$actual_minor))
+  actual_patch_number=$((10#$actual_patch))
+
+  if (( actual_major_number < required_major_number )) ||
+     (( actual_major_number == required_major_number && actual_minor_number < required_minor_number )) ||
+     (( actual_major_number == required_major_number && actual_minor_number == required_minor_number && actual_patch_number < required_patch_number )); then
+    echo "このリポジトリのチェックには Go $required_version 以上が必要です（検出: ${actual_version}）。" >&2
+    echo "Go $required_version 以上をインストールし、その go コマンドを PATH に追加してください。" >&2
+    exit 1
+  fi
+}
+
+check_go_toolchain
+
 run_fast() {
   local unformatted
+  scripts/test-check-environment.sh
+  scripts/test-live-chatwork-smoke.sh
+  scripts/test-live-chatwork-workflow.sh
   unformatted=$(gofmt -l .)
   if [[ -n "$unformatted" ]]; then
     echo "gofmt is required for:" >&2
@@ -64,5 +142,4 @@ case "$profile" in
   security) run_security ;;
   release) run_release ;;
   public) run_public ;;
-  *) usage ;;
 esac

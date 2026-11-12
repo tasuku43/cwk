@@ -20,6 +20,8 @@ bash -n \
   scripts/test-release-input-fingerprint.sh \
   scripts/test-audit-formula.sh \
   scripts/test-check-environment.sh \
+  scripts/lint-go-patch-workflow.sh \
+  scripts/test-go-patch-workflow.sh \
   scripts/test-release-workflow.sh \
   scripts/testdata/fake-go-gate-environment.sh \
   scripts/testdata/fake-brew.sh
@@ -102,7 +104,7 @@ grep -qF 'go build -buildvcs=false -trimpath -o bin/' Taskfile.yml || {
 }
 for required in \
   'export GO111MODULE=on' 'export GOENV=off' 'export GOEXPERIMENT=' 'export GOFIPS140=off' \
-  'export GOFLAGS=' 'export GOTOOLCHAIN=local' 'export GOWORK=off'; do
+  'export GOFLAGS=' 'export GOTOOLCHAIN=local' 'export GOWORK=off' 'unset GOROOT'; do
   for go_boundary in scripts/check.sh scripts/package-release.sh; do
     if ! grep -qFx "$required" "$go_boundary"; then
       echo "$go_boundary does not neutralize ambient Go configuration: $required" >&2
@@ -112,6 +114,7 @@ for required in \
 done
 scripts/test-check-environment.sh >/dev/null
 scripts/test-release-workflow.sh >/dev/null
+scripts/test-go-patch-workflow.sh >/dev/null
 
 for forbidden in 'HOMEBREW_GITHUB_API_TOKEN' 'api.github.com/repos/' 'Authorization: Bearer'; do
   if grep -R -F "$forbidden" Formula scripts/render-formula.sh .github/workflows/release.yml >/dev/null 2>&1; then
@@ -133,6 +136,7 @@ ambient_output=$(env \
   GOFLAGS=-definitely-invalid \
   GOTOOLCHAIN=definitely-invalid \
   GOWORK=/definitely/missing/go.work \
+  GOROOT=/definitely/missing/go-root \
   scripts/package-release.sh \
     v0.0.0 0000000000000000000000000000000000000000 plan9 amd64 dist 2>&1) || ambient_status=$?
 if [[ $ambient_status -ne 2 || $ambient_output != *"unsupported release target: plan9/amd64"* ]]; then
@@ -245,7 +249,7 @@ done
 expected_notices=$release_root/expected-third-party-notices
 {
   printf '%s\n\n' 'THIRD-PARTY SOFTWARE NOTICES'
-  printf '%s\n%s\n' 'Go standard library and runtime go1.26.10' '------------------------------------------'
+  printf '%s\n%s\n' 'Go standard library and runtime' '-------------------------------'
   cat -- "$go_license"
   printf '\n'
   printf '%s\n%s\n' 'Go standard library and runtime PATENTS' '---------------------------------------'
