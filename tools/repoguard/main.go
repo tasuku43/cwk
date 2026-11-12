@@ -178,6 +178,22 @@ func checkLicense(root string, config projectconfig.Config, scope string) []issu
 }
 
 func repositoryPaths(root string) ([]string, error) {
+	trackedPaths, err := indexedRepositoryPaths(root)
+	if err != nil {
+		return nil, err
+	}
+	trackedPathSet := make(map[string]struct{}, len(trackedPaths))
+	for _, relative := range trackedPaths {
+		trackedPathSet[relative] = struct{}{}
+	}
+	includeContentPath := func(relative string) bool {
+		if !isClaudePolicyPath(relative) {
+			return true
+		}
+		_, indexed := trackedPathSet[relative]
+		return indexed
+	}
+
 	command := exec.Command("git", "ls-files", "-co", "--exclude-standard", "-z")
 	command.Dir = root
 	output, err := command.Output()
@@ -185,9 +201,12 @@ func repositoryPaths(root string) ([]string, error) {
 		var paths []string
 		for _, raw := range bytes.Split(output, []byte{0}) {
 			if len(raw) != 0 {
-				relative := string(raw)
-				if !filepath.IsLocal(relative) {
+				relative := filepath.ToSlash(string(raw))
+				if !filepath.IsLocal(filepath.FromSlash(relative)) {
 					return nil, fmt.Errorf("git returned a non-local path %q", relative)
+				}
+				if !includeContentPath(relative) {
+					continue
 				}
 				if _, statErr := os.Lstat(filepath.Join(root, filepath.FromSlash(relative))); os.IsNotExist(statErr) {
 					continue
@@ -215,7 +234,10 @@ func repositoryPaths(root string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		paths = append(paths, filepath.ToSlash(relative))
+		relative = filepath.ToSlash(relative)
+		if includeContentPath(relative) {
+			paths = append(paths, relative)
+		}
 		return nil
 	})
 	sort.Strings(paths)
@@ -289,8 +311,17 @@ func checkAgentHarness(root string) []issue {
 }
 
 func checkFilesystemShape(root string, config projectconfig.Config) ([]issue, error) {
+	trackedPaths, err := indexedRepositoryPaths(root)
+	if err != nil {
+		return nil, err
+	}
 	var issues []issue
-	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+	for _, relative := range trackedPaths {
+		if isClaudePolicyPath(relative) {
+			issues = append(issues, issue{Path: relative, Message: "Claude-specific policy paths are outside this Codex-only template"})
+		}
+	}
+	err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -304,12 +335,6 @@ func checkFilesystemShape(root string, config projectconfig.Config) ([]issue, er
 		relative = filepath.ToSlash(relative)
 		if entry.IsDir() && (entry.Name() == ".git" || entry.Name() == "bin" || entry.Name() == "dist") {
 			return filepath.SkipDir
-		}
-		if strings.EqualFold(entry.Name(), ".claude") {
-			issues = append(issues, issue{Path: relative, Message: "Claude-specific harness paths are outside this Codex-only template"})
-			if entry.IsDir() {
-				return filepath.SkipDir
-			}
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			issues = append(issues, issue{Path: relative, Message: "symbolic links are not allowed in the public working tree"})
@@ -327,12 +352,42 @@ func checkFilesystemShape(root string, config projectconfig.Config) ([]issue, er
 	return issues, err
 }
 
+func indexedRepositoryPaths(root string) ([]string, error) {
+	command := exec.Command("git", "ls-files", "--cached", "-z")
+	command.Dir = root
+	output, err := command.Output()
+	if err != nil {
+		return nil, fmt.Errorf("read Git index for repository checks: %w", err)
+	}
+	if len(output) != 0 && output[len(output)-1] != 0 {
+		return nil, fmt.Errorf("Git returned an unterminated path list for repository shape check")
+	}
+	var paths []string
+	for _, raw := range bytes.Split(output, []byte{0}) {
+		if len(raw) == 0 {
+			continue
+		}
+		relative := string(raw)
+		if !filepath.IsLocal(filepath.FromSlash(relative)) {
+			return nil, fmt.Errorf("Git index returned a non-local path %q for repository shape check", relative)
+		}
+		paths = append(paths, filepath.ToSlash(relative))
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+func isClaudePolicyPath(relative string) bool {
+	for _, component := range strings.Split(filepath.ToSlash(relative), "/") {
+		if strings.EqualFold(component, ".claude") {
+			return true
+		}
+	}
+	return strings.EqualFold(pathpkg.Base(filepath.ToSlash(relative)), "CLAUDE.md")
+}
+
 func checkWorkingTreeArtifact(path string, config projectconfig.Config) []issue {
 	lower := strings.ToLower(path)
-	base := strings.ToLower(filepath.Base(path))
-	if strings.EqualFold(base, "claude.md") {
-		return []issue{{Path: path, Message: "Claude-specific instructions are outside this Codex-only template"}}
-	}
 	if strings.HasSuffix(lower, ".bootstrap.tmp") || strings.HasSuffix(lower, ".bootstrap.orig") {
 		return []issue{{Path: path, Message: "interrupted bootstrap residue must not be published"}}
 	}

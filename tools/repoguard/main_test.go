@@ -237,11 +237,13 @@ func TestCheckTextAllowsDocumentedExamplesAndReleasePlaceholders(t *testing.T) {
 	}
 }
 
-func TestCheckFilesystemShapeRejectsClaudePolicyAndRootBuildArtifacts(t *testing.T) {
+func TestCheckFilesystemShapeAllowsLocalClaudeAndStillRejectsRootBuildArtifacts(t *testing.T) {
 	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
 	if err := os.MkdirAll(filepath.Join(root, ".claude", "hooks"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeRepositoryFixture(t, root, "CLAUDE.md", "local user instructions\n")
 	if err := os.WriteFile(filepath.Join(root, "cwk"), []byte("binary fixture\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -250,19 +252,195 @@ func TestCheckFilesystemShapeRejectsClaudePolicyAndRootBuildArtifacts(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(issues) != 2 {
+	if len(issues) != 1 {
 		t.Fatalf("issues = %#v", issues)
 	}
-	messages := issues[0].Message + "\n" + issues[1].Message
-	for _, expected := range []string{"Claude-specific", "root build artifact"} {
-		if !strings.Contains(messages, expected) {
-			t.Errorf("issues do not contain %q: %#v", expected, issues)
+	if issues[0].Path != "cwk" || !strings.Contains(issues[0].Message, "root build artifact") {
+		t.Fatalf("root build artifact issue = %#v", issues[0])
+	}
+}
+
+func TestCheckFilesystemShapeAllowsUntrackedClaudePolicyPaths(t *testing.T) {
+	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
+	for _, path := range []string{
+		".claude/settings.json",
+		".ClAuDe/hooks/pre-commit",
+		"CLAUDE.md",
+		"docs/Claude.MD",
+		"nested/deeper/claude.md",
+	} {
+		writeRepositoryFixture(t, root, path, "local fixture\n")
+	}
+
+	issues, err := checkFilesystemShape(root, projectconfig.Config{Project: projectconfig.Project{BinaryName: "cwk"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("untracked local Claude paths became shape issues: %#v", issues)
+	}
+}
+
+func TestInspectAllowsUntrackedClaudeLocalContentOutsidePublishableSet(t *testing.T) {
+	root := t.TempDir()
+	writeRepoguardInspectFixture(t, root)
+	localHome := "/Users" + "/local-config-user/.claude"
+	writeRepositoryFixture(t, root, "CLAUDE.md", "local home: "+localHome+"\n")
+	writeRepositoryFixture(t, root, ".claude/settings.md", "[local note](missing-local-file.md)\n")
+	writeRepositoryFixture(t, root, ".claude/private.json", jsonSecretAssignment("client_secret", "local-secret-canary")+"\n")
+
+	paths, err := repositoryPaths(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range paths {
+		if isClaudePolicyPath(relative) {
+			t.Errorf("untracked local Claude path %q remained in publishable candidates: %v", relative, paths)
 		}
+	}
+
+	issues, err := inspect(root, "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 0 {
+		t.Fatalf("untracked local Claude contents were scanned as publishable: %#v", issues)
+	}
+}
+
+func TestInspectRejectsStagedClaudePathsAndRunsOrdinaryScans(t *testing.T) {
+	root := t.TempDir()
+	writeRepoguardInspectFixture(t, root)
+	paths := []string{"CLAUDE.md", ".claude/settings.md", ".claude/private.json"}
+	localHome := "/Users" + "/local-config-user/.claude"
+	writeRepositoryFixture(t, root, paths[0], "local home: "+localHome+"\n")
+	writeRepositoryFixture(t, root, paths[1], "[local note](missing-local-file.md)\n")
+	writeRepositoryFixture(t, root, paths[2], jsonSecretAssignment("client_secret", "staged-secret-canary")+"\n")
+	gitFixture(t, root, append([]string{"add", "--"}, paths...)...)
+
+	candidates, err := repositoryPaths(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, relative := range paths {
+		if !containsPath(candidates, relative) {
+			t.Errorf("staged Claude path %q was removed from publishable candidates: %v", relative, candidates)
+		}
+	}
+
+	issues, err := inspect(root, "public")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range paths {
+		if !containsIssue(issues, path, "Claude-specific") {
+			t.Errorf("staged Claude path %q lacks shape rejection: %#v", path, issues)
+		}
+	}
+	for _, check := range []struct {
+		path, message string
+	}{
+		{paths[0], "machine-specific home directory path"},
+		{paths[1], "local Markdown link"},
+		{paths[2], "secret-like value assigned in source"},
+	} {
+		if !containsIssue(issues, check.path, check.message) {
+			t.Errorf("staged Claude path %q lacks ordinary scan issue %q: %#v", check.path, check.message, issues)
+		}
+	}
+}
+
+func TestCheckFilesystemShapeRejectsStagedAndTrackedClaudePolicyPaths(t *testing.T) {
+	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
+	paths := []string{
+		".ClAuDe/nested/config\nbackup.json",
+		"docs/nested/claUde.MD",
+	}
+	for _, path := range paths {
+		writeRepositoryFixture(t, root, path, "tracked fixture\n")
+	}
+	gitFixture(t, root, append([]string{"add", "--"}, paths...)...)
+
+	config := projectconfig.Config{Project: projectconfig.Project{BinaryName: "cwk"}}
+	assertRejected := func(state string) {
+		t.Helper()
+		issues, err := checkFilesystemShape(root, config)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := make(map[string]bool)
+		for _, item := range issues {
+			if strings.Contains(item.Message, "Claude-specific") {
+				found[item.Path] = true
+			}
+		}
+		if len(found) != len(paths) {
+			t.Fatalf("%s Claude-policy issues = %#v", state, issues)
+		}
+		for _, path := range paths {
+			if !found[path] {
+				t.Errorf("%s index path %q was not rejected: %#v", state, path, issues)
+			}
+		}
+	}
+
+	assertRejected("staged")
+	gitFixture(t, root, "-c", "user.name=Fixture", "-c", "user.email=fixture@example.com", "commit", "--quiet", "-m", "fixture")
+	assertRejected("committed")
+}
+
+func TestCheckFilesystemShapeRejectsSymlinksInsideUntrackedClaudeDirectory(t *testing.T) {
+	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
+	target := filepath.Join(root, "target.txt")
+	if err := os.WriteFile(target, []byte("target\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localClaude := filepath.Join(root, ".claude")
+	if err := os.Mkdir(localClaude, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(localClaude, "linked.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symbolic links are unavailable: %v", err)
+	}
+
+	issues, err := checkFilesystemShape(root, projectconfig.Config{Project: projectconfig.Project{BinaryName: "cwk"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(issues) != 1 || issues[0].Path != filepath.ToSlash(filepath.Join(".claude", "linked.txt")) || !strings.Contains(issues[0].Message, "symbolic links") {
+		t.Fatalf("local Claude symbolic-link issues = %#v", issues)
+	}
+}
+
+func TestCheckFilesystemShapeFailsClosedWhenGitIndexCannotBeRead(t *testing.T) {
+	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
+	t.Setenv("PATH", t.TempDir())
+
+	paths, pathErr := repositoryPaths(root)
+	if pathErr == nil {
+		t.Fatalf("repositoryPaths() = %v, nil; want unavailable Git-index error", paths)
+	}
+	if !strings.Contains(pathErr.Error(), "Git index") || !strings.Contains(pathErr.Error(), "git") {
+		t.Fatalf("repositoryPaths() error = %v, want fail-closed Git-index error", pathErr)
+	}
+
+	issues, err := checkFilesystemShape(root, projectconfig.Config{Project: projectconfig.Project{BinaryName: "cwk"}})
+	if err == nil {
+		t.Fatalf("checkFilesystemShape() = %#v, nil; want unavailable Git-index error", issues)
+	}
+	if !strings.Contains(err.Error(), "Git index") || !strings.Contains(err.Error(), "git") {
+		t.Fatalf("checkFilesystemShape() error = %v, want fail-closed Git-index error", err)
 	}
 }
 
 func TestCheckFilesystemShapeDoesNotTreatIgnoredLocalFilesAsPublishable(t *testing.T) {
 	root := t.TempDir()
+	initGitRepositoryFixture(t, root)
 	for _, name := range []string{".env", ".DS_Store"} {
 		if err := os.WriteFile(filepath.Join(root, name), []byte("local-only\n"), 0o600); err != nil {
 			t.Fatal(err)
@@ -291,16 +469,6 @@ func TestCheckAgentHarnessRequiresRepositorySkills(t *testing.T) {
 	}
 	if issues := checkAgentHarness(root); len(issues) != 1 || !strings.Contains(issues[0].Message, "required Codex harness file") {
 		t.Fatalf("missing skill issues = %#v", issues)
-	}
-}
-
-func TestCheckPathRejectsParallelAgentPolicyFiles(t *testing.T) {
-	config := projectconfig.Config{Project: projectconfig.Project{BinaryName: "cwk"}}
-	for _, path := range []string{"CLAUDE.md", "docs/Claude.md"} {
-		issues := checkWorkingTreeArtifact(path, config)
-		if len(issues) != 1 || !strings.Contains(issues[0].Message, "Claude-specific") {
-			t.Errorf("checkPath(%q) = %#v", path, issues)
-		}
 	}
 }
 
@@ -373,6 +541,59 @@ func writeRepositoryFixture(t *testing.T, root, relative, contents string) {
 	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func initGitRepositoryFixture(t *testing.T, root string) {
+	t.Helper()
+	gitFixture(t, root, "init", "--quiet")
+}
+
+func gitFixture(t *testing.T, root string, args ...string) {
+	t.Helper()
+	command := exec.Command("git", args...)
+	command.Dir = root
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, output)
+	}
+}
+
+func writeRepoguardInspectFixture(t *testing.T, root string) {
+	t.Helper()
+	initGitRepositoryFixture(t, root)
+	if err := os.MkdirAll(filepath.Join(root, ".harness"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := projectconfig.Config{
+		SchemaVersion: projectconfig.SchemaVersion,
+		Profile:       "template",
+		Project:       projectconfig.Defaults,
+		PublicGuard: projectconfig.PublicGuard{
+			DenylistFile: ".harness/denylist.txt",
+		},
+	}
+	if err := projectconfig.Write(root, config); err != nil {
+		t.Fatal(err)
+	}
+	writeRepositoryFixture(t, root, ".harness/denylist.txt", "# empty synthetic fixture\n")
+	writeRepositoryFixture(t, root, ".agents/skills/add-capability/SKILL.md", "# Fixture skill\n")
+}
+
+func containsPath(paths []string, want string) bool {
+	for _, path := range paths {
+		if path == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsIssue(issues []issue, path, message string) bool {
+	for _, item := range issues {
+		if item.Path == path && strings.Contains(item.Message, message) {
+			return true
+		}
+	}
+	return false
 }
 
 func jsonSecretAssignment(name, value string) string {
