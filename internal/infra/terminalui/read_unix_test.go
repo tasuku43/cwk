@@ -5,10 +5,48 @@ package terminalui
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"testing"
 	"time"
 )
+
+func TestReadTerminalReportsEOFWhenInputCloses(t *testing.T) {
+	input, output, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer input.Close()
+	if err := output.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	n, err := readTerminal(ctx, int(input.Fd()), make([]byte, 8))
+	if n != 0 || !errors.Is(err, io.EOF) {
+		t.Fatalf("closed input = (%d, %v), want EOF", n, err)
+	}
+}
+
+func TestReadTerminalRejectsInvalidDescriptor(t *testing.T) {
+	if _, err := readTerminal(context.Background(), -1, make([]byte, 1)); err == nil {
+		t.Fatal("negative descriptor accepted")
+	}
+	input, output, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer output.Close()
+	fd := int(input.Fd())
+	if err := input.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if _, err := readTerminal(ctx, fd, make([]byte, 1)); err == nil || errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("closed descriptor error = %v, want immediate invalid descriptor", err)
+	}
+}
 
 func TestSessionReadReturnsAlreadyReadyInput(t *testing.T) {
 	input, output, err := os.Pipe()
