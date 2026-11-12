@@ -1,0 +1,3 @@
+# Context
+
+Feedback item 4 requests matching the user's recent posts. The current reviewed `messages reconcile-send` intentionally returns matching posts from all authors and keeps outcome unknown. This is safe but requires the agent to discard other authors externally. Exact provider body equality is not proof that an invocation created any candidate; zero matches is not proof of non-delivery. Chatwork's existing `account show` maps `GET /me` to a typed account reference, and a validated binding is already carried unchanged through authenticated task ports. The proposed change adds one internal read and filters using its returned exact account reference; it must not assume the same token/account as an earlier failed invocation without evidence.

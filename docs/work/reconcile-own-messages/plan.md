@@ -1,0 +1,9 @@
+# Plan
+
+Review a compatibility decision before changing code: revise the current all-author outcome to exact current-account candidates and report the current canonical account reference. Bound the sequence to body validation and optional reply read, then one identity read and one latest-window message read under the same context and authentication binding; no POST and no retries. Account retrieval is an explicit internal read owned by the enabled reconciliation task, not a second CLI dispatch or selection expansion. Document its additional provider call and failure behavior. Do not change the `unknown` result or imply that the original invocation used the current account. Preserve source window metadata over all fetched messages.
+
+Add domain invariants binding each candidate sender to the reported account; add app/adapter/CLI tests for same-body different-author messages, missing/invalid identity, binding and context, provider error, body cleanup, no writes, bounded calls, and unchanged references. Update catalog, rendering, Japanese help, user docs, theses, architecture, security, API and harness/skill contracts. Obtain a new Luna review for the decision, then implement personally and obtain a separate new Luna review; run focused tests and task check. No real account or network is required for these tests.
+
+Design review confirmed the breaking semantic change and requires same-binding optional reply → identity → window order, `/me` failure preventing the window read, and matching updates to catalog, output, golden fixtures and readiness evidence. Existing `get-me` upstream operation remains the sole registry entry.
+
+The catalog output declares an always-present `account_ref` even for zero matches; each candidate `sender_ref` must equal it. Domain, renderer, golden and readiness checks must enforce this independently.
